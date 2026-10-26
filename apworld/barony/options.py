@@ -205,6 +205,18 @@ class MusicShuffle(Choice):
     default = option_off
 
 
+class MusicSeed(Choice):
+    """
+    For Music Shuffle.
+    Locked: each floor always plays the same music, set by the seed.
+    Always Random: every time a song starts, it's a random one.
+    """
+    display_name = "Music Seed"
+    option_locked = 0
+    option_always_random = 1
+    default = option_locked
+
+
 class DifficultyScaling(DefaultOnToggle):
     """
     Monsters are scaled to how deep you actually are, not to where they normally live.
@@ -345,6 +357,7 @@ class BaronyOptions(PerGameCommonOptions):
     enemy_pool: EnemyPool
     enemy_seed: EnemySeed
     music_shuffle: MusicShuffle
+    music_seed: MusicSeed
     difficulty_scaling: DifficultyScaling
     difficulty: Difficulty
     lives: Lives
@@ -363,7 +376,7 @@ option_groups = [
         Goal, FloorCheckInterval, LevelChecks, KillChecks, KillCheckInterval, BestiaryChecks,
         ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),
-    OptionGroup("Dungeon", [StairKeys, FloorShuffle, EnemyRandomizer, EnemyPool, EnemySeed, MusicShuffle, DifficultyScaling, Difficulty]),
+    OptionGroup("Dungeon", [StairKeys, FloorShuffle, EnemyRandomizer, EnemyPool, EnemySeed, MusicShuffle, MusicSeed, DifficultyScaling, Difficulty]),
     OptionGroup("Lives & Death", [Lives, ExtraLivesInPool, DeathPenalty, BossDeath, FloorRestart, BaronyDeathLink]),
     OptionGroup("Traps & Players", [TrapChance, EnabledTraps, Players]),
 ]

@@ -1,4 +1,4 @@
-From 540d78510d01a5894e024a4c145955f7761598b4 Mon Sep 17 00:00:00 2001
+From 72426bdea82ab59e391b090a7cab6c32da02703a Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -9,7 +9,7 @@ Subject: [PATCH] Archipelago client hooks
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 1652 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 1657 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |   82 ++
  src/archipelago_ids.hpp           |   95 ++
  src/engine/audio/sound_game.cpp   |    2 +
@@ -22,7 +22,7 @@ Subject: [PATCH] Archipelago client hooks
  src/light.cpp                     |    3 +
  src/maps.cpp                      |    8 +
  src/monster_minotaur.cpp          |    3 +-
- 18 files changed, 1931 insertions(+), 2 deletions(-)
+ 18 files changed, 1936 insertions(+), 2 deletions(-)
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
  create mode 100644 src/archipelago_ids.hpp
@@ -171,10 +171,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..c786489
+index 0000000..2609754
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,1652 @@
+@@ -0,0 +1,1657 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -265,6 +265,7 @@ index 0000000..c786489
 +		int enemy_pool = 0;           // 0 near your depth, 1 anywhere
 +		int enemy_seed = 0;           // 0 locked to the seed, 1 re-rolled every time a floor loads
 +		int music_shuffle = 0;        // 0 off, 1 biome music, 2 all music
++		int music_seed = 0;           // 0 locked per floor, 1 random every time a song starts
 +		int players = 1;
 +	};
 +
@@ -534,6 +535,7 @@ index 0000000..c786489
 +		registerSlotInt("enemy_pool", &SlotOptions::enemy_pool);
 +		registerSlotInt("enemy_seed", &SlotOptions::enemy_seed);
 +		registerSlotInt("music_shuffle", &SlotOptions::music_shuffle);
++		registerSlotInt("music_seed", &SlotOptions::music_seed);
 +		registerSlotInt("players", &SlotOptions::players);
 +
 +		AP_Start();
@@ -1707,7 +1709,10 @@ index 0000000..c786489
 +	{
 +		choices.insert(choices.end(), std::begin(SPECIAL_NAMES), std::end(SPECIAL_NAMES));
 +	}
-+	Uint32 key = (Uint32)g_slot.floor_shuffle_seed ^ (Uint32)(currentlevel * 2246822519u);
++	// Locked: a floor always plays the same music. Random: the game only reads this name when
++	// a song starts, so picking fresh each time gives a random song every time one starts.
++	Uint32 key = g_slot.music_seed == 1 ? local_rng.getU32()
++		: (Uint32)g_slot.floor_shuffle_seed ^ (Uint32)(currentlevel * 2246822519u);
 +	const char* pick = choices[key % choices.size()];
 +	memcpy(saved, map.name, sizeof(saved));
 +	snprintf(map.name, sizeof(map.name), "%s", pick);

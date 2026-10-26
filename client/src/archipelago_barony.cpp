@@ -88,6 +88,7 @@ namespace
 		int enemy_pool = 0;           // 0 near your depth, 1 anywhere
 		int enemy_seed = 0;           // 0 locked to the seed, 1 re-rolled every time a floor loads
 		int music_shuffle = 0;        // 0 off, 1 biome music, 2 all music
+		int music_seed = 0;           // 0 locked per floor, 1 random every time a song starts
 		int players = 1;
 	};
 
@@ -357,6 +358,7 @@ namespace
 		registerSlotInt("enemy_pool", &SlotOptions::enemy_pool);
 		registerSlotInt("enemy_seed", &SlotOptions::enemy_seed);
 		registerSlotInt("music_shuffle", &SlotOptions::music_shuffle);
+		registerSlotInt("music_seed", &SlotOptions::music_seed);
 		registerSlotInt("players", &SlotOptions::players);
 
 		AP_Start();
@@ -1530,7 +1532,10 @@ MusicOverride::MusicOverride()
 	{
 		choices.insert(choices.end(), std::begin(SPECIAL_NAMES), std::end(SPECIAL_NAMES));
 	}
-	Uint32 key = (Uint32)g_slot.floor_shuffle_seed ^ (Uint32)(currentlevel * 2246822519u);
+	// Locked: a floor always plays the same music. Random: the game only reads this name when
+	// a song starts, so picking fresh each time gives a random song every time one starts.
+	Uint32 key = g_slot.music_seed == 1 ? local_rng.getU32()
+		: (Uint32)g_slot.floor_shuffle_seed ^ (Uint32)(currentlevel * 2246822519u);
 	const char* pick = choices[key % choices.size()];
 	memcpy(saved, map.name, sizeof(saved));
 	snprintf(map.name, sizeof(map.name), "%s", pick);
