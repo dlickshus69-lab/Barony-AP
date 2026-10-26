@@ -1,4 +1,4 @@
-From cbf353702f40b90dad4af2f6ca2419b0586791f0 Mon Sep 17 00:00:00 2001
+From 540d78510d01a5894e024a4c145955f7761598b4 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -9,7 +9,7 @@ Subject: [PATCH] Archipelago client hooks
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 1632 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 1652 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |   82 ++
  src/archipelago_ids.hpp           |   95 ++
  src/engine/audio/sound_game.cpp   |    2 +
@@ -22,7 +22,7 @@ Subject: [PATCH] Archipelago client hooks
  src/light.cpp                     |    3 +
  src/maps.cpp                      |    8 +
  src/monster_minotaur.cpp          |    3 +-
- 18 files changed, 1911 insertions(+), 2 deletions(-)
+ 18 files changed, 1931 insertions(+), 2 deletions(-)
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
  create mode 100644 src/archipelago_ids.hpp
@@ -171,10 +171,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..15b24e9
+index 0000000..c786489
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,1632 @@
+@@ -0,0 +1,1652 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -263,6 +263,7 @@ index 0000000..15b24e9
 +		int floor_restart = 0;        // 0 new layout, 1 same layout
 +		int enemy_randomizer = 0;     // 0 off, 1 per floor, 2 every spawn
 +		int enemy_pool = 0;           // 0 near your depth, 1 anywhere
++		int enemy_seed = 0;           // 0 locked to the seed, 1 re-rolled every time a floor loads
 +		int music_shuffle = 0;        // 0 off, 1 biome music, 2 all music
 +		int players = 1;
 +	};
@@ -309,6 +310,7 @@ index 0000000..15b24e9
 +	size_t g_floorLineMapSource = 0;
 +	bool g_dyingFromDeathLink = false;
 +	bool g_restartPending = false;              // floor reload requested, waiting for it to finish
++	Uint32 g_floorLoads = 0;                    // counts floor generations, for re-rolled enemies
 +
 +	// Death screen: a life was lost, waiting for the player to press confirm.
 +	bool g_deathScreen = false;
@@ -530,6 +532,7 @@ index 0000000..15b24e9
 +		registerSlotInt("floor_restart", &SlotOptions::floor_restart);
 +		registerSlotInt("enemy_randomizer", &SlotOptions::enemy_randomizer);
 +		registerSlotInt("enemy_pool", &SlotOptions::enemy_pool);
++		registerSlotInt("enemy_seed", &SlotOptions::enemy_seed);
 +		registerSlotInt("music_shuffle", &SlotOptions::music_shuffle);
 +		registerSlotInt("players", &SlotOptions::players);
 +
@@ -1365,6 +1368,7 @@ index 0000000..15b24e9
 +
 +void onDungeonGenerated()
 +{
++	++g_floorLoads;
 +	g_generatedFloorKey = true;
 +	g_generatedLevel = currentlevel;
 +	g_generatedSecret = secretlevel;
@@ -1621,6 +1625,8 @@ index 0000000..15b24e9
 +namespace
 +{
 +	Uint32 g_enemyTableKey = 0;
++	std::mt19937 g_enemySpawnRng;
++	Uint32 g_enemyTableLoad = 0;
 +	std::map<int, int> g_enemyTable; // vanilla type -> replacement, for this floor
 +
 +	std::vector<int> enemyPool()
@@ -1642,16 +1648,30 @@ index 0000000..15b24e9
 +		|| monsterType == LICH_ICE || monsterType == LICH_FIRE || monsterType == NOTHING ) { return monsterType; }
 +	auto pool = enemyPool();
 +	if ( pool.empty() ) { return monsterType; }
++
++	// Locked: the same floor always gets the same enemies, through deaths, restarts and new runs.
++	// Re-roll: every time a floor loads (including after a lost life) the enemies are rolled again.
++	Uint32 key = (Uint32)g_slot.floor_shuffle_seed ^ (Uint32)(currentlevel * 2654435761u) ^ (secretlevel ? 0x5EC2E7u : 0u);
++	if ( g_slot.enemy_seed == 1 )
++	{
++		key ^= mapseed * 2246822519u ^ (Uint32)(g_floorLoads * 3266489917u);
++	}
++	if ( key != g_enemyTableKey || g_floorLoads != g_enemyTableLoad )
++	{
++		// New floor load: start the floor's sequence from the top, so a locked floor repeats exactly.
++		g_enemyTableKey = key;
++		g_enemyTableLoad = g_floorLoads;
++		g_enemyTable.clear();
++		g_enemySpawnRng.seed(key);
++	}
++
 +	if ( g_slot.enemy_randomizer == 2 )
 +	{
-+		return pool[local_rng.rand() % pool.size()];
++		// Every spawn: each monster is its own roll (from a floor-seeded sequence when locked).
++		return pool[g_enemySpawnRng() % pool.size()];
 +	}
-+	Uint32 key = mapseed ^ (Uint32)(currentlevel * 2654435761u) ^ (Uint32)g_slot.floor_shuffle_seed;
-+	if ( key != g_enemyTableKey )
-+	{
-+		g_enemyTableKey = key;
-+		g_enemyTable.clear();
-+	}
++
++	// Per floor: each kind of monster is swapped for one random kind (it can roll itself).
 +	auto it = g_enemyTable.find(monsterType);
 +	if ( it != g_enemyTable.end() ) { return it->second; }
 +	std::mt19937 rng(key ^ (Uint32)(monsterType * 40503u));
@@ -1687,7 +1707,7 @@ index 0000000..15b24e9
 +	{
 +		choices.insert(choices.end(), std::begin(SPECIAL_NAMES), std::end(SPECIAL_NAMES));
 +	}
-+	Uint32 key = (Uint32)g_slot.floor_shuffle_seed ^ (Uint32)(currentlevel * 2246822519u) ^ mapseed;
++	Uint32 key = (Uint32)g_slot.floor_shuffle_seed ^ (Uint32)(currentlevel * 2246822519u);
 +	const char* pick = choices[key % choices.size()];
 +	memcpy(saved, map.name, sizeof(saved));
 +	snprintf(map.name, sizeof(map.name), "%s", pick);

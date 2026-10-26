@@ -151,9 +151,10 @@ class EnemyRandomizer(Choice):
     """
     Changes which monsters show up.
     Off: normal monsters for each biome.
-    Per Floor: on each floor, every kind of monster is swapped for another kind (all rats become
-    spiders, say), different on every floor.
+    Per Floor: on each floor, every kind of monster is swapped for a random kind (all rats become
+    spiders, say). A kind can roll itself, so some stay the same.
     Every Spawn: every monster is picked at random.
+    See Enemy Seed for whether this changes when you die.
     Bosses, shopkeepers and Minotaurs are never changed. With difficulty scaling on, monsters that
     normally live deeper are weakened to match your floor.
     """
@@ -174,6 +175,19 @@ class EnemyPool(Choice):
     option_near_depth = 0
     option_anywhere = 1
     default = option_near_depth
+
+
+class EnemySeed(Choice):
+    """
+    For the Enemy Randomizer: are a floor's enemies the same every time?
+    Locked: each floor's enemies are set by the seed, so dying, restarting the floor or starting a
+    new run gives you the same enemies on that floor again.
+    Reroll: every time a floor loads, including after you lose a life, its enemies are rolled again.
+    """
+    display_name = "Enemy Seed"
+    option_locked = 0
+    option_reroll = 1
+    default = option_locked
 
 
 class MusicShuffle(Choice):
@@ -329,6 +343,7 @@ class BaronyOptions(PerGameCommonOptions):
     floor_shuffle: FloorShuffle
     enemy_randomizer: EnemyRandomizer
     enemy_pool: EnemyPool
+    enemy_seed: EnemySeed
     music_shuffle: MusicShuffle
     difficulty_scaling: DifficultyScaling
     difficulty: Difficulty
@@ -348,7 +363,7 @@ option_groups = [
         Goal, FloorCheckInterval, LevelChecks, KillChecks, KillCheckInterval, BestiaryChecks,
         ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),
-    OptionGroup("Dungeon", [StairKeys, FloorShuffle, EnemyRandomizer, EnemyPool, MusicShuffle, DifficultyScaling, Difficulty]),
+    OptionGroup("Dungeon", [StairKeys, FloorShuffle, EnemyRandomizer, EnemyPool, EnemySeed, MusicShuffle, DifficultyScaling, Difficulty]),
     OptionGroup("Lives & Death", [Lives, ExtraLivesInPool, DeathPenalty, BossDeath, FloorRestart, BaronyDeathLink]),
     OptionGroup("Traps & Players", [TrapChance, EnabledTraps, Players]),
 ]

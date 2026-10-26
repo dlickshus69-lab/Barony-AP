@@ -300,6 +300,7 @@ class BaronyWorld(World):
             "floor_restart": o.floor_restart.value,
             "enemy_randomizer": o.enemy_randomizer.value,
             "enemy_pool": o.enemy_pool.value,
+            "enemy_seed": o.enemy_seed.value,
             "music_shuffle": o.music_shuffle.value,
             "death_link": int(bool(o.death_link)),
             "players": o.players.value,

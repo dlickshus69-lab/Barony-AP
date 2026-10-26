@@ -86,6 +86,7 @@ namespace
 		int floor_restart = 0;        // 0 new layout, 1 same layout
 		int enemy_randomizer = 0;     // 0 off, 1 per floor, 2 every spawn
 		int enemy_pool = 0;           // 0 near your depth, 1 anywhere
+		int enemy_seed = 0;           // 0 locked to the seed, 1 re-rolled every time a floor loads
 		int music_shuffle = 0;        // 0 off, 1 biome music, 2 all music
 		int players = 1;
 	};
@@ -132,6 +133,7 @@ namespace
 	size_t g_floorLineMapSource = 0;
 	bool g_dyingFromDeathLink = false;
 	bool g_restartPending = false;              // floor reload requested, waiting for it to finish
+	Uint32 g_floorLoads = 0;                    // counts floor generations, for re-rolled enemies
 
 	// Death screen: a life was lost, waiting for the player to press confirm.
 	bool g_deathScreen = false;
@@ -353,6 +355,7 @@ namespace
 		registerSlotInt("floor_restart", &SlotOptions::floor_restart);
 		registerSlotInt("enemy_randomizer", &SlotOptions::enemy_randomizer);
 		registerSlotInt("enemy_pool", &SlotOptions::enemy_pool);
+		registerSlotInt("enemy_seed", &SlotOptions::enemy_seed);
 		registerSlotInt("music_shuffle", &SlotOptions::music_shuffle);
 		registerSlotInt("players", &SlotOptions::players);
 
@@ -1188,6 +1191,7 @@ int remapLevelLine(int levelToLoad, const std::vector<std::string>& levelsList)
 
 void onDungeonGenerated()
 {
+	++g_floorLoads;
 	g_generatedFloorKey = true;
 	g_generatedLevel = currentlevel;
 	g_generatedSecret = secretlevel;
@@ -1444,6 +1448,8 @@ void loadExtraModels()
 namespace
 {
 	Uint32 g_enemyTableKey = 0;
+	std::mt19937 g_enemySpawnRng;
+	Uint32 g_enemyTableLoad = 0;
 	std::map<int, int> g_enemyTable; // vanilla type -> replacement, for this floor
 
 	std::vector<int> enemyPool()
@@ -1465,16 +1471,30 @@ int randomizeMonster(int monsterType)
 		|| monsterType == LICH_ICE || monsterType == LICH_FIRE || monsterType == NOTHING ) { return monsterType; }
 	auto pool = enemyPool();
 	if ( pool.empty() ) { return monsterType; }
+
+	// Locked: the same floor always gets the same enemies, through deaths, restarts and new runs.
+	// Re-roll: every time a floor loads (including after a lost life) the enemies are rolled again.
+	Uint32 key = (Uint32)g_slot.floor_shuffle_seed ^ (Uint32)(currentlevel * 2654435761u) ^ (secretlevel ? 0x5EC2E7u : 0u);
+	if ( g_slot.enemy_seed == 1 )
+	{
+		key ^= mapseed * 2246822519u ^ (Uint32)(g_floorLoads * 3266489917u);
+	}
+	if ( key != g_enemyTableKey || g_floorLoads != g_enemyTableLoad )
+	{
+		// New floor load: start the floor's sequence from the top, so a locked floor repeats exactly.
+		g_enemyTableKey = key;
+		g_enemyTableLoad = g_floorLoads;
+		g_enemyTable.clear();
+		g_enemySpawnRng.seed(key);
+	}
+
 	if ( g_slot.enemy_randomizer == 2 )
 	{
-		return pool[local_rng.rand() % pool.size()];
+		// Every spawn: each monster is its own roll (from a floor-seeded sequence when locked).
+		return pool[g_enemySpawnRng() % pool.size()];
 	}
-	Uint32 key = mapseed ^ (Uint32)(currentlevel * 2654435761u) ^ (Uint32)g_slot.floor_shuffle_seed;
-	if ( key != g_enemyTableKey )
-	{
-		g_enemyTableKey = key;
-		g_enemyTable.clear();
-	}
+
+	// Per floor: each kind of monster is swapped for one random kind (it can roll itself).
 	auto it = g_enemyTable.find(monsterType);
 	if ( it != g_enemyTable.end() ) { return it->second; }
 	std::mt19937 rng(key ^ (Uint32)(monsterType * 40503u));
@@ -1510,7 +1530,7 @@ MusicOverride::MusicOverride()
 	{
 		choices.insert(choices.end(), std::begin(SPECIAL_NAMES), std::end(SPECIAL_NAMES));
 	}
-	Uint32 key = (Uint32)g_slot.floor_shuffle_seed ^ (Uint32)(currentlevel * 2246822519u) ^ mapseed;
+	Uint32 key = (Uint32)g_slot.floor_shuffle_seed ^ (Uint32)(currentlevel * 2246822519u);
 	const char* pick = choices[key % choices.size()];
 	memcpy(saved, map.name, sizeof(saved));
 	snprintf(map.name, sizeof(map.name), "%s", pick);
