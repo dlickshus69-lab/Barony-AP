@@ -1,4 +1,4 @@
-From cd33619d9584bb394e55486adda12015e7cb180f Mon Sep 17 00:00:00 2001
+From afb526c9eff5b0540e5384f9d67dc8f79d48c6be Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -14,9 +14,11 @@ Subject: [PATCH] Archipelago client hooks
  src/archipelago_ids.hpp    |   95 +++
  src/files.cpp              |    6 +
  src/game.cpp               |    3 +
+ src/init_game.cpp          |    6 +
+ src/light.cpp              |    3 +
  src/maps.cpp               |    3 +
  src/monster_minotaur.cpp   |    3 +-
- 12 files changed, 1566 insertions(+), 2 deletions(-)
+ 14 files changed, 1575 insertions(+), 2 deletions(-)
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
  create mode 100644 src/archipelago_ids.hpp
@@ -1734,6 +1736,44 @@ index 7837966..05750c9 100644
  #ifdef NINTENDO
  	(void)nxUpdateCrashMessage();
  #endif
+diff --git a/src/init_game.cpp b/src/init_game.cpp
+index 434719b..fd0398c 100644
+--- a/src/init_game.cpp
++++ b/src/init_game.cpp
+@@ -902,6 +902,9 @@ void loadAchievementData(const char* path) {
+ 		printlog("[JSON]: Error: could not parse %s", path);
+ 		return;
+ 	}
++#ifdef GetObject // Archipelago: windows.h renames this to GetObjectA
++#undef GetObject
++#endif
+ 	const auto& achievements = d["achievements"].GetObject();
+ 
+ 	for (const auto& it : achievements) {
+@@ -943,6 +946,9 @@ void loadAchievementData(const char* path) {
+ 		{
+ 			continue;
+ 		}
++#endif
++#ifdef GetObject // Archipelago: windows.h renames this to GetObjectA
++#undef GetObject
+ #endif
+ 		const auto& ach = it.value.GetObject();
+ 		auto& achData = Compendium_t::achievements[achName];
+diff --git a/src/light.cpp b/src/light.cpp
+index f9102fe..f81e171 100644
+--- a/src/light.cpp
++++ b/src/light.cpp
+@@ -230,6 +230,9 @@ bool loadLights(bool forceLoadBaseDirectory) {
+     
+     const auto& lights = d["lights"];
+     if (lights.IsObject()) {
++#ifdef GetObject // Archipelago: windows.h renames this to GetObjectA
++#undef GetObject
++#endif
+         for (const auto& it : lights.GetObject()) {
+             LightDef def;
+             const auto& name = it.name.GetString();
 diff --git a/src/maps.cpp b/src/maps.cpp
 index 0ae7725..3e2d3af 100644
 --- a/src/maps.cpp
