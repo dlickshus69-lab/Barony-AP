@@ -87,7 +87,7 @@ jobs:
           }
           cmake -S barony -B build -A x64 `
             "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" `
-            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 `
+            "-DCMAKE_POLICY_VERSION_MINIMUM=3.5" `
             -DVCPKG_TARGET_TRIPLET=x64-windows `
             @fmodArgs 2>&1 | Tee-Object -FilePath configure.log
           if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
