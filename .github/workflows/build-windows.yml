@@ -1,0 +1,116 @@
+name: Build Barony AP (Windows)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      BARONY_COMMIT: 962a5ce36d10207beef7d8673876e0cebf8e76e4
+      APCPP_COMMIT: 6df60798d1ee25e81b9778b6a7f48d52818bddaa
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-cache
+      VCPKG_LIBS: sdl2 sdl2-image sdl2-net sdl2-ttf physfs rapidjson libpng zlib glew dirent
+      EDITOR_ENABLED: 0
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore library cache
+        uses: actions/cache@v4
+        with:
+          path: vcpkg-cache
+          key: vcpkg-x64-windows-${{ env.VCPKG_LIBS }}-v1
+          restore-keys: vcpkg-x64-windows-
+
+      - name: Get Barony and APCpp
+        shell: pwsh
+        run: |
+          git init barony
+          cd barony
+          git remote add origin https://github.com/TurningWheel/Barony.git
+          git fetch --depth 1 origin $env:BARONY_COMMIT
+          git checkout -q FETCH_HEAD
+          git apply --whitespace=nowarn ../client/barony-archipelago.patch
+          if ($LASTEXITCODE -ne 0) { throw "patch did not apply" }
+          Copy-Item ../client/src/* src/ -Force
+          git clone -q https://github.com/N00byKing/APCpp.git extern/APCpp
+          cd extern/APCpp
+          git checkout -q $env:APCPP_COMMIT
+          git submodule update --init --recursive --depth 1
+
+      - name: Install libraries
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force vcpkg-cache | Out-Null
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install $env:VCPKG_LIBS.Split(' ') --triplet x64-windows
+          if ($LASTEXITCODE -ne 0) { throw "vcpkg failed" }
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          $fmodArgs = @("-DFMOD_ENABLED=OFF")
+          if (Test-Path "deps/fmod/inc/fmod.hpp") {
+            $fmodArgs = @("-DFMOD_ENABLED=ON",
+              "-DFMOD_INCLUDE_DIR=$((Resolve-Path deps/fmod/inc).Path)",
+              "-DFMOD_LIBRARY=$((Resolve-Path deps/fmod/lib/fmod_vc.lib).Path)")
+            Write-Host "Building with FMOD sound"
+          } else {
+            Write-Host "FMOD files not found: building without sound"
+          }
+          cmake -S barony -B build -A x64 `
+            "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" `
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 `
+            -DVCPKG_TARGET_TRIPLET=x64-windows `
+            @fmodArgs
+          if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
+
+      - name: Build
+        shell: pwsh
+        run: |
+          cmake --build build --config Release --target barony -- /m /v:minimal 2>&1 | Tee-Object -FilePath build.log
+          if ($LASTEXITCODE -ne 0) { throw "build failed" }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $out = "package/BaronyAP"
+          New-Item -ItemType Directory -Force $out | Out-Null
+          Copy-Item build/Release/barony.exe $out
+          Copy-Item build/Release/*.dll $out
+          Copy-Item client/archipelago.cfg $out
+          Copy-Item client/HOW-TO-PLAY.txt $out
+          Compress-Archive -Path "$out/*" -DestinationPath BaronyAP-windows.zip -Force
+          Compress-Archive -Path apworld/barony -DestinationPath barony.zip -Force
+          Move-Item barony.zip barony.apworld -Force
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: BaronyAP-windows
+          path: |
+            BaronyAP-windows.zip
+            barony.apworld
+
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest-build --yes --cleanup-tag 2>$null
+          gh release create latest-build BaronyAP-windows.zip barony.apworld `
+            --title "Latest build" `
+            --notes "Built from $env:GITHUB_SHA. Unzip BaronyAP-windows.zip into your Barony folder; see HOW-TO-PLAY.txt." `
+            --target $env:GITHUB_SHA
+
+      - name: Save build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: ignore

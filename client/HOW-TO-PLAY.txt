@@ -1,0 +1,19 @@
+Barony Archipelago
+
+1. Copy everything in this zip into your Barony folder
+   (Steam: right-click Barony > Manage > Browse local files), replacing barony.exe.
+   Steam > Properties > Installed Files > Verify puts the original game back any time.
+
+2. Open archipelago.cfg in Notepad and fill in:
+     server=   the address from your room page, like archipelago.gg:38281
+     slot=     your name from your YAML
+     password= only if the room has one
+
+3. Start Barony from Steam as usual. The message log says "Archipelago: connected".
+
+Chat commands (type in the in-game chat):
+  /ap_status    connection, Stair Keys, lives, kills, waiting traps
+  /ap_connect host:port slot [password]   connect by hand
+  /ap_say text  chat with the room
+
+This build has no Steam online lobbies or achievements. Single player works normally.
