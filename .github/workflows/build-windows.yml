@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: build-windows
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: windows-latest
@@ -17,6 +21,7 @@ jobs:
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-cache
       VCPKG_LIBS: sdl2 sdl2-image sdl2-net sdl2-ttf physfs rapidjson libpng zlib glew dirent
       EDITOR_ENABLED: 0
+      FMOD_KEY: ${{ secrets.FMOD_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -57,6 +62,16 @@ jobs:
         with:
           path: vcpkg-cache
           key: vcpkg-x64-windows-${{ env.VCPKG_LIBS }}-v1
+
+      # FMOD's files can't be shared publicly, so they're kept locked in deps/fmod.tar.gz.enc.
+      # The FMOD_KEY repository secret unlocks them; without it the game builds without sound.
+      - name: Unlock FMOD (sound)
+        if: env.FMOD_KEY != ''
+        shell: bash
+        run: |
+          mkdir -p deps/fmod
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in deps/fmod.tar.gz.enc -pass env:FMOD_KEY | tar -xz -C deps/fmod
+          ls deps/fmod/inc deps/fmod/lib
 
       - name: Configure
         shell: pwsh
