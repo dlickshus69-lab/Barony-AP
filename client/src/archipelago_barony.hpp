@@ -17,6 +17,7 @@
 
 class Entity;
 class Stat;
+class Item;
 
 namespace AP
 {
@@ -52,6 +53,28 @@ namespace AP
 
 	// game.cpp, after the HUD and main menu are drawn: connection status, lives, death screen.
 	void drawHud();
+
+	// The Archipelago item (floor pickups and shop items) and its own logo model and icon.
+	bool isApItem(const Item* item);
+	int apItemModel();                 // model index, or -1 if the model didn't load
+	const char* apItemIconPath();
+	const char* apItemName(bool withArticle);
+	// init.cpp, right after the game's models load: adds the Archipelago model.
+	void loadExtraModels();
+
+	// maps.cpp, monsterCurve(): Enemy Randomizer. Returns the monster type to spawn instead.
+	int randomizeMonster(int monsterType);
+
+	// sound_game.cpp, handleLevelMusic(): Music Shuffle. While one of these exists, the
+	// floor's name is swapped for the biome whose music should play.
+	struct MusicOverride
+	{
+		MusicOverride();
+		~MusicOverride();
+	private:
+		char saved[32];
+		bool active = false;
+	};
 
 	// Status for the console and the UI.
 	bool isConnected();

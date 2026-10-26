@@ -28,3 +28,10 @@ class TestStairKeys(BaronyTestBase):
         self.assertFalse(self.can_reach_location("Reach Floor 6"))
         self.collect_by_name("Progressive Stair Key")
         self.assertTrue(self.can_reach_location("Reach Floor 20"))
+
+
+class TestRandomizers(BaronyTestBase):
+    options = {
+        "enemy_randomizer": "every_spawn", "enemy_pool": "anywhere", "music_shuffle": "all_music",
+        "bestiary_checks": "all", "floor_restart": "same_layout",
+    }

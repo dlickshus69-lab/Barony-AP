@@ -109,12 +109,18 @@ class BaronyWorld(World):
 
     def _biome_floor_needed(self, natural_floor: int) -> int:
         """
-        For things tied to a biome (monster types, secret areas). With floor shuffle on, the
-        biome could land anywhere, so logic expects them only once the whole dungeon is open.
+        For things tied to a biome (secret areas). With floor shuffle on, the biome could land
+        anywhere, so logic expects them only once the whole dungeon is open.
         """
         if self.options.floor_shuffle.value != self.options.floor_shuffle.option_off:
             return self.goal_floor
         return self._floor_needed(natural_floor)
+
+    def _monster_floor_needed(self, natural_floor: int) -> int:
+        """Bestiary: with the Enemy Randomizer on, a monster type can turn up anywhere or nowhere."""
+        if self.options.enemy_randomizer.value != self.options.enemy_randomizer.option_off:
+            return self.goal_floor
+        return self._biome_floor_needed(natural_floor)
 
     def _planned_locations(self) -> list[tuple[str, int]]:
         """Every location this slot has, paired with the floor needed to reach it."""
@@ -136,7 +142,7 @@ class BaronyWorld(World):
             include_all = o.bestiary_checks.value == o.bestiary_checks.option_all
             for m in data.BESTIARY:
                 if (m.early or include_all) and m.depth < self.goal_floor:
-                    planned.append((data.bestiary_location(m), self._biome_floor_needed(m.depth)))
+                    planned.append((data.bestiary_location(m), self._monster_floor_needed(m.depth)))
 
         ppf = o.pickups_per_floor.value
         for i in range(1, self.pickup_count + 1):
@@ -292,6 +298,9 @@ class BaronyWorld(World):
             "death_penalty": o.death_penalty.value,
             "boss_death": o.boss_death.value,
             "floor_restart": o.floor_restart.value,
+            "enemy_randomizer": o.enemy_randomizer.value,
+            "enemy_pool": o.enemy_pool.value,
+            "music_shuffle": o.music_shuffle.value,
             "death_link": int(bool(o.death_link)),
             "players": o.players.value,
         }

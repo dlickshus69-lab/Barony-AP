@@ -24,6 +24,8 @@
 #include "magic/magic.hpp"
 #include "player.hpp"
 #include "prng.hpp"
+#include "files.hpp"
+#include "init.hpp"
 #include "interface/consolecommand.hpp"
 #include "input.hpp"
 #include "menu.hpp"
@@ -82,6 +84,9 @@ namespace
 		int death_penalty = 0;        // 0 none, 1 gold, 2 gold and xp
 		int boss_death = 0;           // 0 reset, 1 keep damage
 		int floor_restart = 0;        // 0 new layout, 1 same layout
+		int enemy_randomizer = 0;     // 0 off, 1 per floor, 2 every spawn
+		int enemy_pool = 0;           // 0 near your depth, 1 anywhere
+		int music_shuffle = 0;        // 0 off, 1 biome music, 2 all music
 		int players = 1;
 	};
 
@@ -346,6 +351,9 @@ namespace
 		registerSlotInt("death_penalty", &SlotOptions::death_penalty);
 		registerSlotInt("boss_death", &SlotOptions::boss_death);
 		registerSlotInt("floor_restart", &SlotOptions::floor_restart);
+		registerSlotInt("enemy_randomizer", &SlotOptions::enemy_randomizer);
+		registerSlotInt("enemy_pool", &SlotOptions::enemy_pool);
+		registerSlotInt("music_shuffle", &SlotOptions::music_shuffle);
 		registerSlotInt("players", &SlotOptions::players);
 
 		AP_Start();
@@ -1226,12 +1234,16 @@ void onMonsterInit(Entity* my, Stat* myStats)
 		}
 	}
 
-	// Difficulty scaling: weaken monsters from a deeper biome than the current floor.
-	if ( g_slot.floor_shuffle != 0 && g_slot.difficulty_scaling && g_slot.difficulty == 0
+	// Difficulty scaling: weaken monsters that normally live deeper than the current floor.
+	if ( (g_slot.floor_shuffle != 0 || g_slot.enemy_randomizer != 0) && g_slot.difficulty_scaling && g_slot.difficulty == 0
 		&& !secretlevel && !isBoss && myStats->type != MINOTAUR && myStats->type != SHOPKEEPER
 		&& my->monsterAllySummonRank == 0 && !my->monsterAllyGetPlayerLeader() )
 	{
 		int natural = biomeNaturalFloor();
+		for ( auto& m : ap_ids::BESTIARY )
+		{
+			if ( m.monster == myStats->type ) { natural = std::max(natural, m.depth); break; }
+		}
 		if ( natural > currentlevel )
 		{
 			double factor = (currentlevel + 1.0) / (natural + 1.0);
@@ -1384,6 +1396,130 @@ int adjustMinotaurTime(int ticks)
 		return ticks * 2 / 3;
 	}
 	return ticks;
+}
+
+// ---------------------------------------------------------------- Archipelago item look
+namespace
+{
+	int g_apModelIndex = -1;
+	constexpr const char* AP_MODEL_PATH = "models/items/AP_Item.vox";
+}
+
+bool isApItem(const Item* item)
+{
+	return item && item->type == AP_ITEM_TYPE
+		&& (item->appearance == AP_FLOOR_APPEARANCE || item->appearance == AP_SHOP_APPEARANCE);
+}
+
+int apItemModel() { return g_apModelIndex; }
+const char* apItemIconPath() { return "items/images/AP_Item.png"; }
+const char* apItemName(bool withArticle) { return withArticle ? "an Archipelago item" : "Archipelago item"; }
+
+void loadExtraModels()
+{
+	if ( !PHYSFS_getRealDir(AP_MODEL_PATH) )
+	{
+		printlog("[Archipelago] %s not found; the Archipelago item will look like a luckstone.", AP_MODEL_PATH);
+		return;
+	}
+	char path[128];
+	snprintf(path, sizeof(path), "%s", AP_MODEL_PATH);
+	voxel_t* model = loadVoxel(path);
+	if ( !model ) { return; }
+	voxel_t** grown = (voxel_t**)realloc(models, sizeof(voxel_t*) * (nummodels + 1));
+	polymodel_t* grownPoly = (polymodel_t*)realloc(polymodels, sizeof(polymodel_t) * (nummodels + 1));
+	if ( grown ) { models = grown; }
+	if ( grownPoly ) { polymodels = grownPoly; }
+	if ( !grown || !grownPoly ) { return; }
+	int index = (int)nummodels;
+	models[index] = model;
+	memset(&polymodels[index], 0, sizeof(polymodel_t));
+	nummodels += 1;
+	generatePolyModels(index, index + 1, false);
+	g_apModelIndex = index;
+	printlog("[Archipelago] Archipelago item model loaded as model %d.", index);
+}
+
+// ---------------------------------------------------------------- Enemy Randomizer
+namespace
+{
+	Uint32 g_enemyTableKey = 0;
+	std::map<int, int> g_enemyTable; // vanilla type -> replacement, for this floor
+
+	std::vector<int> enemyPool()
+	{
+		std::vector<int> pool;
+		for ( auto& m : ap_ids::BESTIARY )
+		{
+			if ( g_slot.enemy_pool == 0 && m.depth > currentlevel + 10 ) { continue; }
+			pool.push_back(m.monster);
+		}
+		return pool;
+	}
+}
+
+int randomizeMonster(int monsterType)
+{
+	if ( !g_ready || g_slot.enemy_randomizer == 0 || multiplayer == CLIENT ) { return monsterType; }
+	if ( monsterType == SHOPKEEPER || monsterType == MINOTAUR || monsterType == LICH || monsterType == DEVIL
+		|| monsterType == LICH_ICE || monsterType == LICH_FIRE || monsterType == NOTHING ) { return monsterType; }
+	auto pool = enemyPool();
+	if ( pool.empty() ) { return monsterType; }
+	if ( g_slot.enemy_randomizer == 2 )
+	{
+		return pool[local_rng.rand() % pool.size()];
+	}
+	Uint32 key = mapseed ^ (Uint32)(currentlevel * 2654435761u) ^ (Uint32)g_slot.floor_shuffle_seed;
+	if ( key != g_enemyTableKey )
+	{
+		g_enemyTableKey = key;
+		g_enemyTable.clear();
+	}
+	auto it = g_enemyTable.find(monsterType);
+	if ( it != g_enemyTable.end() ) { return it->second; }
+	std::mt19937 rng(key ^ (Uint32)(monsterType * 40503u));
+	int replacement = pool[rng() % pool.size()];
+	g_enemyTable[monsterType] = replacement;
+	return replacement;
+}
+
+// ---------------------------------------------------------------- Music Shuffle
+namespace
+{
+	// Floors whose music can be shuffled, and the names whose music they can borrow.
+	const char* const BIOME_NAMES[] = {
+		"The Mines", "The Swamp", "The Labyrinth", "The Ruins", "Hell", "Caves", "Citadel", "Underworld",
+	};
+	const char* const SPECIAL_NAMES[] = {
+		"Minetown", "The Gnomish Mines", "The Haunted Castle", "Sokoban", "Cockatrice Lair",
+		"Bram's Castle", "The Mystic Library", "The Temple", "Mages Guild",
+	};
+}
+
+MusicOverride::MusicOverride()
+{
+	if ( !g_ready || g_slot.music_shuffle == 0 ) { return; }
+	bool shuffleable = false;
+	for ( const char* b : BIOME_NAMES )
+	{
+		if ( !strncmp(map.name, b, strlen(b)) && strcmp(map.name, "Hell Boss") ) { shuffleable = true; break; }
+	}
+	if ( !shuffleable ) { return; }
+	std::vector<const char*> choices(std::begin(BIOME_NAMES), std::end(BIOME_NAMES));
+	if ( g_slot.music_shuffle == 2 )
+	{
+		choices.insert(choices.end(), std::begin(SPECIAL_NAMES), std::end(SPECIAL_NAMES));
+	}
+	Uint32 key = (Uint32)g_slot.floor_shuffle_seed ^ (Uint32)(currentlevel * 2246822519u) ^ mapseed;
+	const char* pick = choices[key % choices.size()];
+	memcpy(saved, map.name, sizeof(saved));
+	snprintf(map.name, sizeof(map.name), "%s", pick);
+	active = true;
+}
+
+MusicOverride::~MusicOverride()
+{
+	if ( active ) { memcpy(map.name, saved, sizeof(saved)); }
 }
 
 namespace

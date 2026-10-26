@@ -147,11 +147,55 @@ class FloorShuffle(Choice):
     default = option_off
 
 
+class EnemyRandomizer(Choice):
+    """
+    Changes which monsters show up.
+    Off: normal monsters for each biome.
+    Per Floor: on each floor, every kind of monster is swapped for another kind (all rats become
+    spiders, say), different on every floor.
+    Every Spawn: every monster is picked at random.
+    Bosses, shopkeepers and Minotaurs are never changed. With difficulty scaling on, monsters that
+    normally live deeper are weakened to match your floor.
+    """
+    display_name = "Enemy Randomizer"
+    option_off = 0
+    option_per_floor = 1
+    option_every_spawn = 2
+    default = option_off
+
+
+class EnemyPool(Choice):
+    """
+    Which monsters the Enemy Randomizer can pick from.
+    Near Depth: monsters from up to two biomes deeper than where you are.
+    Anywhere: any monster from the whole dungeon, even on floor 1.
+    """
+    display_name = "Enemy Pool"
+    option_near_depth = 0
+    option_anywhere = 1
+    default = option_near_depth
+
+
+class MusicShuffle(Choice):
+    """
+    Changes the music on each floor.
+    Off: normal music.
+    Biome Music: each floor plays the music of a random biome.
+    All Music: also includes the music of special areas, like Minetown, Sokoban and the Temple.
+    Boss fights keep their own music.
+    """
+    display_name = "Music Shuffle"
+    option_off = 0
+    option_biome_music = 1
+    option_all_music = 2
+    default = option_off
+
+
 class DifficultyScaling(DefaultOnToggle):
     """
-    Monsters are scaled to how deep you actually are, not to the biome they come from.
-    A monster from a late biome showing up on floor 2 is weakened so a level 1 character
-    can kill it. Ignored in hard mode.
+    Monsters are scaled to how deep you actually are, not to where they normally live.
+    A monster from a late biome showing up on floor 2 (from Floor Shuffle or the Enemy
+    Randomizer) is weakened so a level 1 character can kill it. Ignored in hard mode.
     """
     display_name = "Difficulty Scaling"
 
@@ -283,6 +327,9 @@ class BaronyOptions(PerGameCommonOptions):
     special_area_checks: SpecialAreaChecks
     stair_keys: StairKeys
     floor_shuffle: FloorShuffle
+    enemy_randomizer: EnemyRandomizer
+    enemy_pool: EnemyPool
+    music_shuffle: MusicShuffle
     difficulty_scaling: DifficultyScaling
     difficulty: Difficulty
     lives: Lives
@@ -301,7 +348,7 @@ option_groups = [
         Goal, FloorCheckInterval, LevelChecks, KillChecks, KillCheckInterval, BestiaryChecks,
         ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),
-    OptionGroup("Dungeon", [StairKeys, FloorShuffle, DifficultyScaling, Difficulty]),
+    OptionGroup("Dungeon", [StairKeys, FloorShuffle, EnemyRandomizer, EnemyPool, MusicShuffle, DifficultyScaling, Difficulty]),
     OptionGroup("Lives & Death", [Lives, ExtraLivesInPool, DeathPenalty, BossDeath, FloorRestart, BaronyDeathLink]),
     OptionGroup("Traps & Players", [TrapChance, EnabledTraps, Players]),
 ]

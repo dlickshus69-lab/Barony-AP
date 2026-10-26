@@ -1,24 +1,28 @@
-From 45e1ce2cd1a785669f509ad044d88a21ef4727b2 Mon Sep 17 00:00:00 2001
+From cbf353702f40b90dad4af2f6ca2419b0586791f0 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
 
 ---
- CMakeLists.txt             |   25 +
- src/CMakeLists.txt         |    1 +
- src/actladder.cpp          |    9 +
- src/actmonster.cpp         |    3 +
- src/actplayer.cpp          |    7 +-
- src/archipelago_barony.cpp | 1496 ++++++++++++++++++++++++++++++++++++
- src/archipelago_barony.hpp |   59 ++
- src/archipelago_ids.hpp    |   95 +++
- src/files.cpp              |    6 +
- src/game.cpp               |    5 +
- src/init_game.cpp          |    6 +
- src/light.cpp              |    3 +
- src/maps.cpp               |    3 +
- src/monster_minotaur.cpp   |    3 +-
- 14 files changed, 1719 insertions(+), 2 deletions(-)
+ CMakeLists.txt                    |   25 +
+ src/CMakeLists.txt                |    1 +
+ src/actladder.cpp                 |    9 +
+ src/actmonster.cpp                |    3 +
+ src/actplayer.cpp                 |    7 +-
+ src/archipelago_barony.cpp        | 1632 +++++++++++++++++++++++++++++
+ src/archipelago_barony.hpp        |   82 ++
+ src/archipelago_ids.hpp           |   95 ++
+ src/engine/audio/sound_game.cpp   |    2 +
+ src/files.cpp                     |    6 +
+ src/game.cpp                      |    5 +
+ src/init.cpp                      |    6 +
+ src/init_game.cpp                 |    6 +
+ src/interface/playerinventory.cpp |    5 +
+ src/items.cpp                     |   15 +
+ src/light.cpp                     |    3 +
+ src/maps.cpp                      |    8 +
+ src/monster_minotaur.cpp          |    3 +-
+ 18 files changed, 1911 insertions(+), 2 deletions(-)
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
  create mode 100644 src/archipelago_ids.hpp
@@ -167,10 +171,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..475e736
+index 0000000..15b24e9
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,1496 @@
+@@ -0,0 +1,1632 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -197,6 +201,8 @@ index 0000000..475e736
 +#include "magic/magic.hpp"
 +#include "player.hpp"
 +#include "prng.hpp"
++#include "files.hpp"
++#include "init.hpp"
 +#include "interface/consolecommand.hpp"
 +#include "input.hpp"
 +#include "menu.hpp"
@@ -255,6 +261,9 @@ index 0000000..475e736
 +		int death_penalty = 0;        // 0 none, 1 gold, 2 gold and xp
 +		int boss_death = 0;           // 0 reset, 1 keep damage
 +		int floor_restart = 0;        // 0 new layout, 1 same layout
++		int enemy_randomizer = 0;     // 0 off, 1 per floor, 2 every spawn
++		int enemy_pool = 0;           // 0 near your depth, 1 anywhere
++		int music_shuffle = 0;        // 0 off, 1 biome music, 2 all music
 +		int players = 1;
 +	};
 +
@@ -519,6 +528,9 @@ index 0000000..475e736
 +		registerSlotInt("death_penalty", &SlotOptions::death_penalty);
 +		registerSlotInt("boss_death", &SlotOptions::boss_death);
 +		registerSlotInt("floor_restart", &SlotOptions::floor_restart);
++		registerSlotInt("enemy_randomizer", &SlotOptions::enemy_randomizer);
++		registerSlotInt("enemy_pool", &SlotOptions::enemy_pool);
++		registerSlotInt("music_shuffle", &SlotOptions::music_shuffle);
 +		registerSlotInt("players", &SlotOptions::players);
 +
 +		AP_Start();
@@ -1399,12 +1411,16 @@ index 0000000..475e736
 +		}
 +	}
 +
-+	// Difficulty scaling: weaken monsters from a deeper biome than the current floor.
-+	if ( g_slot.floor_shuffle != 0 && g_slot.difficulty_scaling && g_slot.difficulty == 0
++	// Difficulty scaling: weaken monsters that normally live deeper than the current floor.
++	if ( (g_slot.floor_shuffle != 0 || g_slot.enemy_randomizer != 0) && g_slot.difficulty_scaling && g_slot.difficulty == 0
 +		&& !secretlevel && !isBoss && myStats->type != MINOTAUR && myStats->type != SHOPKEEPER
 +		&& my->monsterAllySummonRank == 0 && !my->monsterAllyGetPlayerLeader() )
 +	{
 +		int natural = biomeNaturalFloor();
++		for ( auto& m : ap_ids::BESTIARY )
++		{
++			if ( m.monster == myStats->type ) { natural = std::max(natural, m.depth); break; }
++		}
 +		if ( natural > currentlevel )
 +		{
 +			double factor = (currentlevel + 1.0) / (natural + 1.0);
@@ -1559,6 +1575,130 @@ index 0000000..475e736
 +	return ticks;
 +}
 +
++// ---------------------------------------------------------------- Archipelago item look
++namespace
++{
++	int g_apModelIndex = -1;
++	constexpr const char* AP_MODEL_PATH = "models/items/AP_Item.vox";
++}
++
++bool isApItem(const Item* item)
++{
++	return item && item->type == AP_ITEM_TYPE
++		&& (item->appearance == AP_FLOOR_APPEARANCE || item->appearance == AP_SHOP_APPEARANCE);
++}
++
++int apItemModel() { return g_apModelIndex; }
++const char* apItemIconPath() { return "items/images/AP_Item.png"; }
++const char* apItemName(bool withArticle) { return withArticle ? "an Archipelago item" : "Archipelago item"; }
++
++void loadExtraModels()
++{
++	if ( !PHYSFS_getRealDir(AP_MODEL_PATH) )
++	{
++		printlog("[Archipelago] %s not found; the Archipelago item will look like a luckstone.", AP_MODEL_PATH);
++		return;
++	}
++	char path[128];
++	snprintf(path, sizeof(path), "%s", AP_MODEL_PATH);
++	voxel_t* model = loadVoxel(path);
++	if ( !model ) { return; }
++	voxel_t** grown = (voxel_t**)realloc(models, sizeof(voxel_t*) * (nummodels + 1));
++	polymodel_t* grownPoly = (polymodel_t*)realloc(polymodels, sizeof(polymodel_t) * (nummodels + 1));
++	if ( grown ) { models = grown; }
++	if ( grownPoly ) { polymodels = grownPoly; }
++	if ( !grown || !grownPoly ) { return; }
++	int index = (int)nummodels;
++	models[index] = model;
++	memset(&polymodels[index], 0, sizeof(polymodel_t));
++	nummodels += 1;
++	generatePolyModels(index, index + 1, false);
++	g_apModelIndex = index;
++	printlog("[Archipelago] Archipelago item model loaded as model %d.", index);
++}
++
++// ---------------------------------------------------------------- Enemy Randomizer
++namespace
++{
++	Uint32 g_enemyTableKey = 0;
++	std::map<int, int> g_enemyTable; // vanilla type -> replacement, for this floor
++
++	std::vector<int> enemyPool()
++	{
++		std::vector<int> pool;
++		for ( auto& m : ap_ids::BESTIARY )
++		{
++			if ( g_slot.enemy_pool == 0 && m.depth > currentlevel + 10 ) { continue; }
++			pool.push_back(m.monster);
++		}
++		return pool;
++	}
++}
++
++int randomizeMonster(int monsterType)
++{
++	if ( !g_ready || g_slot.enemy_randomizer == 0 || multiplayer == CLIENT ) { return monsterType; }
++	if ( monsterType == SHOPKEEPER || monsterType == MINOTAUR || monsterType == LICH || monsterType == DEVIL
++		|| monsterType == LICH_ICE || monsterType == LICH_FIRE || monsterType == NOTHING ) { return monsterType; }
++	auto pool = enemyPool();
++	if ( pool.empty() ) { return monsterType; }
++	if ( g_slot.enemy_randomizer == 2 )
++	{
++		return pool[local_rng.rand() % pool.size()];
++	}
++	Uint32 key = mapseed ^ (Uint32)(currentlevel * 2654435761u) ^ (Uint32)g_slot.floor_shuffle_seed;
++	if ( key != g_enemyTableKey )
++	{
++		g_enemyTableKey = key;
++		g_enemyTable.clear();
++	}
++	auto it = g_enemyTable.find(monsterType);
++	if ( it != g_enemyTable.end() ) { return it->second; }
++	std::mt19937 rng(key ^ (Uint32)(monsterType * 40503u));
++	int replacement = pool[rng() % pool.size()];
++	g_enemyTable[monsterType] = replacement;
++	return replacement;
++}
++
++// ---------------------------------------------------------------- Music Shuffle
++namespace
++{
++	// Floors whose music can be shuffled, and the names whose music they can borrow.
++	const char* const BIOME_NAMES[] = {
++		"The Mines", "The Swamp", "The Labyrinth", "The Ruins", "Hell", "Caves", "Citadel", "Underworld",
++	};
++	const char* const SPECIAL_NAMES[] = {
++		"Minetown", "The Gnomish Mines", "The Haunted Castle", "Sokoban", "Cockatrice Lair",
++		"Bram's Castle", "The Mystic Library", "The Temple", "Mages Guild",
++	};
++}
++
++MusicOverride::MusicOverride()
++{
++	if ( !g_ready || g_slot.music_shuffle == 0 ) { return; }
++	bool shuffleable = false;
++	for ( const char* b : BIOME_NAMES )
++	{
++		if ( !strncmp(map.name, b, strlen(b)) && strcmp(map.name, "Hell Boss") ) { shuffleable = true; break; }
++	}
++	if ( !shuffleable ) { return; }
++	std::vector<const char*> choices(std::begin(BIOME_NAMES), std::end(BIOME_NAMES));
++	if ( g_slot.music_shuffle == 2 )
++	{
++		choices.insert(choices.end(), std::begin(SPECIAL_NAMES), std::end(SPECIAL_NAMES));
++	}
++	Uint32 key = (Uint32)g_slot.floor_shuffle_seed ^ (Uint32)(currentlevel * 2246822519u) ^ mapseed;
++	const char* pick = choices[key % choices.size()];
++	memcpy(saved, map.name, sizeof(saved));
++	snprintf(map.name, sizeof(map.name), "%s", pick);
++	active = true;
++}
++
++MusicOverride::~MusicOverride()
++{
++	if ( active ) { memcpy(map.name, saved, sizeof(saved)); }
++}
++
 +namespace
 +{
 +	const char* HUD_FONT = "fonts/pixel_maz_multiline.ttf#16#2";
@@ -1669,10 +1809,10 @@ index 0000000..475e736
 +} // namespace AP
 diff --git a/src/archipelago_barony.hpp b/src/archipelago_barony.hpp
 new file mode 100644
-index 0000000..f348f23
+index 0000000..841d85e
 --- /dev/null
 +++ b/src/archipelago_barony.hpp
-@@ -0,0 +1,59 @@
+@@ -0,0 +1,82 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client.
@@ -1692,6 +1832,7 @@ index 0000000..f348f23
 +
 +class Entity;
 +class Stat;
++class Item;
 +
 +namespace AP
 +{
@@ -1727,6 +1868,28 @@ index 0000000..f348f23
 +
 +	// game.cpp, after the HUD and main menu are drawn: connection status, lives, death screen.
 +	void drawHud();
++
++	// The Archipelago item (floor pickups and shop items) and its own logo model and icon.
++	bool isApItem(const Item* item);
++	int apItemModel();                 // model index, or -1 if the model didn't load
++	const char* apItemIconPath();
++	const char* apItemName(bool withArticle);
++	// init.cpp, right after the game's models load: adds the Archipelago model.
++	void loadExtraModels();
++
++	// maps.cpp, monsterCurve(): Enemy Randomizer. Returns the monster type to spawn instead.
++	int randomizeMonster(int monsterType);
++
++	// sound_game.cpp, handleLevelMusic(): Music Shuffle. While one of these exists, the
++	// floor's name is swapped for the biome whose music should play.
++	struct MusicOverride
++	{
++		MusicOverride();
++		~MusicOverride();
++	private:
++		char saved[32];
++		bool active = false;
++	};
 +
 +	// Status for the console and the UI.
 +	bool isConnected();
@@ -1833,6 +1996,26 @@ index 0000000..f0830e8
 +    { 10, "Visit Bram's Castle", "bramscastle", 34 },
 +};
 +} // namespace ap_ids
+diff --git a/src/engine/audio/sound_game.cpp b/src/engine/audio/sound_game.cpp
+index ccbe0af..9e022e3 100644
+--- a/src/engine/audio/sound_game.cpp
++++ b/src/engine/audio/sound_game.cpp
+@@ -12,6 +12,7 @@
+ -------------------------------------------------------------------------------*/
+ 
+ #include "../../main.hpp"
++#include "../../archipelago_barony.hpp"
+ #include "../../game.hpp"
+ #include "../../stat.hpp"
+ #include "sound.hpp"
+@@ -695,6 +696,7 @@ void handleLevelMusic()
+ #ifndef MUSIC
+ 	return;
+ #endif
++	AP::MusicOverride apMusicShuffle; // Archipelago: Music Shuffle
+ 	bool inshop = false;
+ 	if (players[clientnum] && players[clientnum]->entity)
+ 	{
 diff --git a/src/files.cpp b/src/files.cpp
 index 12ae3dd..91a6c9c 100644
 --- a/src/files.cpp
@@ -1894,6 +2077,30 @@ index 7837966..f3c5395 100644
  				Compendium_t::updateTooltip();
  
                  static ConsoleVariable<bool> showConsumeMouseInputs("/debug_consume_mouse", false);
+diff --git a/src/init.cpp b/src/init.cpp
+index 145dd0c..a26c398 100644
+--- a/src/init.cpp
++++ b/src/init.cpp
+@@ -10,6 +10,9 @@
+ -------------------------------------------------------------------------------*/
+ 
+ #include "main.hpp"
++#ifndef EDITOR
++#include "archipelago_barony.hpp"
++#endif
+ 
+ #include <memory>
+ #include <ctime>
+@@ -766,6 +769,9 @@ int initApp(char const * const title, int fullscreen)
+ 		}
+ 		updateLoadingScreen(30);
+ 		generatePolyModels(0, nummodels, false);
++#ifndef EDITOR
++		AP::loadExtraModels(); // Archipelago: the Archipelago item's logo model
++#endif
+ 		FileIO::close(fp);
+ 		updateLoadingScreen(60);
+ 
 diff --git a/src/init_game.cpp b/src/init_game.cpp
 index 434719b..fd0398c 100644
 --- a/src/init_game.cpp
@@ -1918,6 +2125,76 @@ index 434719b..fd0398c 100644
  #endif
  		const auto& ach = it.value.GetObject();
  		auto& achData = Compendium_t::achievements[achName];
+diff --git a/src/interface/playerinventory.cpp b/src/interface/playerinventory.cpp
+index 15a5614..c81c2f2 100644
+--- a/src/interface/playerinventory.cpp
++++ b/src/interface/playerinventory.cpp
+@@ -10,6 +10,7 @@
+ -------------------------------------------------------------------------------*/
+ 
+ #include "../main.hpp"
++#include "../archipelago_barony.hpp"
+ #include "../draw.hpp"
+ #include "../game.hpp"
+ #include "../stat.hpp"
+@@ -2284,6 +2285,10 @@ void select_inventory_slot(int player, int currentx, int currenty, int diffx, in
+ 
+ std::string getItemSpritePath(const int player, Item& item)
+ {
++	if ( AP::isApItem(&item) ) // Archipelago: logo icon
++	{
++		return AP::apItemIconPath();
++	}
+ 	if ( item.type == SPELL_ITEM )
+ 	{
+ 		return ItemTooltips.getSpellIconPath(player, item, -1);
+diff --git a/src/items.cpp b/src/items.cpp
+index 879c6ea..2bd5736 100644
+--- a/src/items.cpp
++++ b/src/items.cpp
+@@ -13,6 +13,7 @@
+ #include "game.hpp"
+ #include "stat.hpp"
+ #include "items.hpp"
++#include "archipelago_barony.hpp"
+ #include "messages.hpp"
+ #include "interface/interface.hpp"
+ #include "magic/magic.hpp"
+@@ -794,6 +795,11 @@ ItemType itemLevelCurve(const Category cat, const int minLevel, const int maxLev
+ char* Item::description() const
+ {
+ 	int c = 0;
++	if ( AP::isApItem(this) ) // Archipelago
++	{
++		snprintf(tempstr, 1024, "%s", AP::apItemName(true));
++		return tempstr;
++	}
+ 
+ 	if ( identified == true )
+ 	{
+@@ -1149,6 +1155,11 @@ Category itemCategory(const Item* const item)
+ 
+ char* Item::getName() const
+ {
++	if ( AP::isApItem(this) ) // Archipelago
++	{
++		snprintf(tempstr, 1024, "%s", AP::apItemName(false));
++		return tempstr;
++	}
+ 	if ( type >= 0 && type < NUMITEMS )
+ 	{
+ 		if ( identified )
+@@ -1273,6 +1284,10 @@ Sint32 itemModel(const Item* const item, bool shortModel, Entity* creature)
+ 	{
+ 		return 0;
+ 	}
++	if ( AP::isApItem(item) && AP::apItemModel() >= 0 ) // Archipelago: logo model
++	{
++		return AP::apItemModel();
++	}
+ 
+ 	if ( creature && creature->behavior == &actMonster )
+ 	{
 diff --git a/src/light.cpp b/src/light.cpp
 index f9102fe..f81e171 100644
 --- a/src/light.cpp
@@ -1933,7 +2210,7 @@ index f9102fe..f81e171 100644
              LightDef def;
              const auto& name = it.name.GetString();
 diff --git a/src/maps.cpp b/src/maps.cpp
-index 0ae7725..3e2d3af 100644
+index 0ae7725..0cd2bc7 100644
 --- a/src/maps.cpp
 +++ b/src/maps.cpp
 @@ -11,6 +11,7 @@
@@ -1944,7 +2221,20 @@ index 0ae7725..3e2d3af 100644
  #include "stat.hpp"
  #include "entity.hpp"
  #include "files.hpp"
-@@ -1396,6 +1397,8 @@ int generateDungeon(char* levelset, Uint32 seed, std::tuple<int, int, int, int>
+@@ -288,7 +289,12 @@ Sint32 doorFrameSprite() {
+ -------------------------------------------------------------------------------*/
+ 
+ static ConsoleVariable<std::string> cvar_monster_curve("/monster_curve", "nothing");
++static int monsterCurveVanilla(int level);
+ int monsterCurve(int level)
++{
++	return AP::randomizeMonster(monsterCurveVanilla(level)); // Archipelago: Enemy Randomizer
++}
++static int monsterCurveVanilla(int level)
+ {
+ 	if ( svFlags & SV_FLAG_CHEATS )
+ 	{
+@@ -1396,6 +1402,8 @@ int generateDungeon(char* levelset, Uint32 seed, std::tuple<int, int, int, int>
  		}
  	}
  
