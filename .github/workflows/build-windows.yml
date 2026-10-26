@@ -107,6 +107,7 @@ jobs:
           Copy-Item build/Release/*.dll $out
           Copy-Item client/archipelago.cfg $out
           Copy-Item client/HOW-TO-PLAY.txt $out
+          Copy-Item client/images $out -Recurse
           Compress-Archive -Path "$out/*" -DestinationPath BaronyAP-windows.zip -Force
           Compress-Archive -Path apworld/barony -DestinationPath barony.zip -Force
           Move-Item barony.zip barony.apworld -Force

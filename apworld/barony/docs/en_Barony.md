@@ -36,6 +36,9 @@ next normal floor instead.
 
 ## How do lives work?
 
-With lives left, dying costs a life and restarts the floor you were on (a new layout). Your
-inventory goes back to what you had when you entered that floor: potions you drank and gear
-that broke come back, and items you found on that floor are lost. Death Link deaths also cost a life.
+With lives left, dying costs a life and shows a death screen. Press confirm to restart the floor
+you were on, with a new layout or the same one (the Floor Restart option). Your inventory goes back
+to what you had when you entered that floor: potions you drank and gear that broke come back, and
+items you found on that floor are lost. Death Link deaths also cost a life.
+
+The top left of the screen shows whether you're connected, and the top right shows your lives.

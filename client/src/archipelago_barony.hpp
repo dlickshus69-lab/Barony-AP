@@ -50,6 +50,9 @@ namespace AP
 	// monster_minotaur.cpp, getMinotaurTimeToArrive(): hard mode brings him sooner.
 	int adjustMinotaurTime(int ticks);
 
+	// game.cpp, after the HUD and main menu are drawn: connection status, lives, death screen.
+	void drawHud();
+
 	// Status for the console and the UI.
 	bool isConnected();
 	std::string statusLine();

@@ -25,6 +25,11 @@
 #include "player.hpp"
 #include "prng.hpp"
 #include "interface/consolecommand.hpp"
+#include "input.hpp"
+#include "menu.hpp"
+#include "ui/Frame.hpp"
+#include "ui/Image.hpp"
+#include "ui/Text.hpp"
 
 #include "Archipelago.h"
 #include "archipelago_barony.hpp"
@@ -76,6 +81,7 @@ namespace
 		int lives = 0;
 		int death_penalty = 0;        // 0 none, 1 gold, 2 gold and xp
 		int boss_death = 0;           // 0 reset, 1 keep damage
+		int floor_restart = 0;        // 0 new layout, 1 same layout
 		int players = 1;
 	};
 
@@ -120,7 +126,14 @@ namespace
 	std::vector<int> g_floorLineMap;           // floor shuffle: levels.txt line per floor
 	size_t g_floorLineMapSource = 0;
 	bool g_dyingFromDeathLink = false;
-	bool g_restartPending = false;
+	bool g_restartPending = false;              // floor reload requested, waiting for it to finish
+
+	// Death screen: a life was lost, waiting for the player to press confirm.
+	bool g_deathScreen = false;
+	int g_deathScreenPlayer = 0;
+	Uint32 g_deathScreenStart = 0;
+	constexpr Uint32 DEATH_SCREEN_MIN_TICKS = TICKS_PER_SECOND * 2;
+	Uint32 g_lastPlayerUid = 0;
 	std::set<Uint32> g_countedDeaths;          // monster uids already counted
 
 	// Inventory as it was when the current floor began; losing a life puts it back.
@@ -332,6 +345,7 @@ namespace
 		registerSlotInt("lives", &SlotOptions::lives);
 		registerSlotInt("death_penalty", &SlotOptions::death_penalty);
 		registerSlotInt("boss_death", &SlotOptions::boss_death);
+		registerSlotInt("floor_restart", &SlotOptions::floor_restart);
 		registerSlotInt("players", &SlotOptions::players);
 
 		AP_Start();
@@ -913,6 +927,38 @@ namespace
 		}
 	}
 
+	void restartFloor()
+	{
+		g_deathScreen = false;
+		int player = g_deathScreenPlayer;
+		Stat* s = stats[player];
+		if ( !s ) { return; }
+
+		// Back to the inventory from the start of the floor.
+		restoreInventory(player);
+
+		// Death penalty. Never costs a level.
+		if ( g_slot.death_penalty >= 1 ) { s->GOLD -= s->GOLD / 4; }
+		if ( g_slot.death_penalty >= 2 ) { s->EXP /= 2; }
+
+		for ( int c = 0; c < NUMEFFECTS; ++c )
+		{
+			s->clearEffect(c);
+			s->EFFECTS_TIMERS[c] = 0;
+		}
+		s->HP = s->MAXHP;
+		s->MP = s->MAXMP;
+		s->HUNGER = std::max(s->HUNGER, 800);
+
+		// Reload this floor: a new layout, or the same one again.
+		g_restartPending = true;
+		skipLevelsOnLoad = -1;
+		forceMapSeed = (g_slot.floor_restart == 1 && mapseed > 0) ? mapseed : ((local_rng.rand() & 0x7FFFFFFF) | 1);
+		loadnextlevel = true;
+		say(COLOR_TRAP, "Life lost. Lives left: %d", g_save.livesLeft);
+		writeSave();
+	}
+
 	void onNewFloor()
 	{
 		sendFloorChecks();
@@ -1011,6 +1057,13 @@ void tick()
 	checkReady();
 	if ( !g_ready ) { return; }
 
+	// The death screen works even while the connection is down.
+	if ( g_deathScreen && inGame() && ticks - g_deathScreenStart >= DEATH_SCREEN_MIN_TICKS
+		&& Input::inputs[clientnum].consumeBinaryToggle("MenuConfirm") )
+	{
+		restartFloor();
+	}
+
 	if ( AP_GetConnectionStatus() == AP_ConnectionStatus::Disconnected )
 	{
 		return; // APCpp reconnects by itself; items wait in the inbox
@@ -1028,14 +1081,19 @@ void tick()
 	syncPermanents();
 	handleDeathLinkIn();
 
-	bool newFloor = currentlevel != g_lastLevel || (int)secretlevel != g_lastSecret || mapseed != g_lastMapSeed;
+	// A floor load makes a new player entity, which also catches a same-layout restart.
+	Uint32 playerUid = players[clientnum]->entity->getUID();
+	bool newFloor = currentlevel != g_lastLevel || (int)secretlevel != g_lastSecret || mapseed != g_lastMapSeed
+		|| playerUid != g_lastPlayerUid;
 	if ( newFloor )
 	{
 		g_lastLevel = currentlevel;
 		g_lastSecret = secretlevel;
 		g_lastMapSeed = mapseed;
+		g_lastPlayerUid = playerUid;
 		onNewFloor();
 	}
+
 
 	if ( ++g_tickCounter % 10 == 0 )
 	{
@@ -1245,9 +1303,9 @@ bool tryConsumeLife(int player)
 	if ( !g_ready || multiplayer == CLIENT || client_disconnected[player] ) { return false; }
 	Stat* s = stats[player];
 	if ( !s ) { return false; }
-	if ( g_restartPending )
+	if ( g_deathScreen || g_restartPending )
 	{
-		s->HP = std::max<Sint32>(1, s->HP); // already restarting this floor
+		s->HP = std::max<Sint32>(1, s->HP); // stay "dead" on the death screen until the restart
 		return true;
 	}
 	if ( g_save.livesLeft <= 0 ) { return false; }
@@ -1272,34 +1330,24 @@ bool tryConsumeLife(int player)
 		}
 	}
 
-	// Back to the inventory from the start of the floor.
-	restoreInventory(player);
-
-	// Death penalty. Never costs a level.
-	if ( g_slot.death_penalty >= 1 ) { s->GOLD -= s->GOLD / 4; }
-	if ( g_slot.death_penalty >= 2 ) { s->EXP /= 2; }
-
-	for ( int c = 0; c < NUMEFFECTS; ++c )
-	{
-		s->clearEffect(c);
-		s->EFFECTS_TIMERS[c] = 0;
-	}
-	s->HP = s->MAXHP;
-	s->MP = s->MAXMP;
-	s->HUNGER = std::max(s->HUNGER, 800);
-
 	if ( !fromDeathLink )
 	{
 		AP_DeathLinkSend("lost a life in the dungeon");
 	}
 
-	// Reload this same floor with a new layout.
-	g_restartPending = true;
-	skipLevelsOnLoad = -1;
-	forceMapSeed = (local_rng.rand() & 0x7FFFFFFF) | 1;
-	loadnextlevel = true;
-
-	say(COLOR_TRAP, "You died... and the dungeon shifts. Lives left: %d", g_save.livesLeft);
+	// Freeze the player and show the death screen; restartFloor() runs on confirm.
+	s->HP = 1;
+	if ( Entity* ent = players[player]->entity )
+	{
+		ent->setEffect(EFF_PARALYZED, true, TICKS_PER_SECOND * 3600, false);
+	}
+	g_deathScreen = true;
+	g_deathScreenPlayer = player;
+	g_deathScreenStart = ticks;
+#ifdef USE_FMOD
+	playMusic(gameovermusic, false, true, false);
+#endif
+	printlog("[Archipelago] Life lost. Lives left: %d", g_save.livesLeft);
 	writeSave();
 	return true;
 }
@@ -1336,6 +1384,97 @@ int adjustMinotaurTime(int ticks)
 		return ticks * 2 / 3;
 	}
 	return ticks;
+}
+
+namespace
+{
+	const char* HUD_FONT = "fonts/pixel_maz_multiline.ttf#16#2";
+	const char* TITLE_FONT = "fonts/pixelmix.ttf#32#2";
+	const char* BIG_FONT = "fonts/pixelmix.ttf#16#2";
+	const Uint32 OUTLINE = makeColor(0, 0, 0, 255);
+
+	SDL_Rect virtualViewport()
+	{
+		return SDL_Rect{ 0, 0, Frame::virtualScreenX, Frame::virtualScreenY };
+	}
+
+	// Draws text; align 0 = left edge at x, 1 = centered on x, 2 = right edge at x. Returns its width.
+	int drawText(const char* str, const char* font, Uint32 color, int x, int y, int align = 0)
+	{
+		Text* t = Text::get(str, font, color, OUTLINE);
+		if ( !t ) { return 0; }
+		int w = (int)t->getWidth();
+		int dx = align == 1 ? x - w / 2 : align == 2 ? x - w : x;
+		t->draw(SDL_Rect{ 0, 0, 0, 0 }, SDL_Rect{ dx, y, 0, 0 }, virtualViewport());
+		return w;
+	}
+
+	void drawImage(const char* path, int x, int y, int w, int h, Uint32 color = 0xFFFFFFFF)
+	{
+		if ( Image* img = Image::get(path) )
+		{
+			img->drawColor(nullptr, SDL_Rect{ x, y, w > 0 ? w : (int)img->getWidth(), h > 0 ? h : (int)img->getHeight() },
+				virtualViewport(), color);
+		}
+	}
+
+	void drawDeathScreen()
+	{
+		const int W = Frame::virtualScreenX, H = Frame::virtualScreenY;
+		Uint32 elapsed = ticks - g_deathScreenStart;
+		Uint8 alpha = (Uint8)std::min<Uint32>(170, elapsed * 6);
+		drawImage("images/system/white.png", 0, 0, W, H, makeColor(40, 0, 0, alpha));
+		drawText("You died!", TITLE_FONT, makeColorRGB(220, 50, 40), W / 2, H / 2 - 70, 1);
+		char buf[96];
+		snprintf(buf, sizeof(buf), "Life lost. Lives left: %d", g_save.livesLeft);
+		drawText(buf, BIG_FONT, makeColorRGB(255, 255, 255), W / 2, H / 2 - 18, 1);
+		if ( elapsed >= DEATH_SCREEN_MIN_TICKS )
+		{
+			const char* what = g_slot.floor_restart == 1 ? "to try this floor again" : "to restart the floor";
+			std::string glyph = Input::inputs[clientnum].getGlyphPathForBinding("MenuConfirm", ticks % 50 < 25);
+			Image* g = glyph.empty() ? nullptr : Image::get(glyph.c_str());
+			Text* t = Text::get((std::string("Press ") + " " + std::string(what)).c_str(), BIG_FONT, makeColorRGB(255, 200, 90), OUTLINE);
+			int gw = g ? (int)g->getWidth() : 0;
+			int tw = t ? (int)t->getWidth() : 0;
+			int left = W / 2 - (tw + gw + 8) / 2;
+			int y = H / 2 + 24;
+			int pw = drawText("Press", BIG_FONT, makeColorRGB(255, 200, 90), left, y);
+			if ( g )
+			{
+				g->draw(nullptr, SDL_Rect{ left + pw + 6, y - ((int)g->getHeight() - 16) / 2, (int)g->getWidth(), (int)g->getHeight() }, virtualViewport());
+			}
+			drawText(what, BIG_FONT, makeColorRGB(255, 200, 90), left + pw + 6 + gw + 6, y);
+		}
+	}
+}
+
+void drawHud()
+{
+	if ( !g_started || nohud ) { return; }
+
+	// Top left: connection status.
+	bool connected = isConnected();
+	bool connecting = !g_ready && AP_GetConnectionStatus() != AP_ConnectionStatus::ConnectionRefused;
+	const char* label = connected ? "Archipelago: Connected" : connecting ? "Archipelago: Connecting..." : "Archipelago: Disconnected";
+	Uint32 color = connected ? makeColorRGB(120, 230, 120) : connecting ? makeColorRGB(240, 210, 90) : makeColorRGB(240, 90, 80);
+	drawImage(connected ? "*images/ui/HUD/Ping_Green.png" : connecting ? "*images/ui/HUD/Ping_Yellow.png" : "*images/ui/HUD/Ping_Red.png",
+		10, 10, 18, 18);
+	drawText(label, HUD_FONT, color, 34, 10);
+
+	// Top right: lives.
+	if ( g_ready && inGame() && (g_slot.lives > 0 || g_save.livesLeft > 0) )
+	{
+		char buf[16];
+		snprintf(buf, sizeof(buf), "x %d", g_save.livesLeft);
+		const int right = Frame::virtualScreenX - 12;
+		int w = drawText(buf, BIG_FONT, makeColorRGB(255, 255, 255), right, 10, 2);
+		drawImage("*images/ui/Archipelago/AP_Life.png", right - w - 32, 6, 26, 24);
+	}
+
+	if ( g_deathScreen && inGame() )
+	{
+		drawDeathScreen();
+	}
 }
 
 bool isConnected()

@@ -291,6 +291,7 @@ class BaronyWorld(World):
             "lives": o.lives.value,
             "death_penalty": o.death_penalty.value,
             "boss_death": o.boss_death.value,
+            "floor_restart": o.floor_restart.value,
             "death_link": int(bool(o.death_link)),
             "players": o.players.value,
         }

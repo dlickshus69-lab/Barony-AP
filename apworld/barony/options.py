@@ -171,9 +171,9 @@ class Difficulty(Choice):
 # ---------------------------------------------------------------- lives & death
 class Lives(Range):
     """
-    Extra lives at the start of every run. When you die with a life left, you lose the life
-    and the floor restarts (a newly generated version of it). You keep your character, and your
-    inventory goes back to what you carried when you entered that floor.
+    Extra lives at the start of every run. When you die with a life left, you lose the life,
+    see a death screen, and press confirm to restart the floor (see Floor Restart). You keep your
+    character, and your inventory goes back to what you carried when you entered that floor.
     0 = normal permadeath.
     """
     display_name = "Starting Lives"
@@ -216,6 +216,18 @@ class BossDeath(Choice):
     option_reset = 0
     option_keep_damage = 1
     default = option_reset
+
+
+class FloorRestart(Choice):
+    """
+    When you lose a life, you see a death screen, then press confirm to restart the floor.
+    New Layout: the floor is generated fresh, with a different layout.
+    Same Layout: you get the exact same floor again.
+    """
+    display_name = "Floor Restart"
+    option_new_layout = 0
+    option_same_layout = 1
+    default = option_new_layout
 
 
 class BaronyDeathLink(DeathLink):
@@ -277,6 +289,7 @@ class BaronyOptions(PerGameCommonOptions):
     extra_lives_in_pool: ExtraLivesInPool
     death_penalty: DeathPenalty
     boss_death: BossDeath
+    floor_restart: FloorRestart
     death_link: BaronyDeathLink
     trap_chance: TrapChance
     enabled_traps: EnabledTraps
@@ -289,6 +302,6 @@ option_groups = [
         ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),
     OptionGroup("Dungeon", [StairKeys, FloorShuffle, DifficultyScaling, Difficulty]),
-    OptionGroup("Lives & Death", [Lives, ExtraLivesInPool, DeathPenalty, BossDeath, BaronyDeathLink]),
+    OptionGroup("Lives & Death", [Lives, ExtraLivesInPool, DeathPenalty, BossDeath, FloorRestart, BaronyDeathLink]),
     OptionGroup("Traps & Players", [TrapChance, EnabledTraps, Players]),
 ]
