@@ -922,6 +922,28 @@ namespace
 			std::wstring slot = widen(g_state.values["slot"]);
 			text(dc, 14, y, L"Connected as " + slot, GOOD, g_bodyFont);
 			y += 26;
+			{
+				// Playtime for this seed: only time in the dungeon counts (not menus, not paused).
+				auto hms = [](long t) {
+					wchar_t b[32];
+					if ( t < 0 ) { t = 0; }
+					swprintf(b, 32, L"%ld:%02ld:%02ld", t / 3600, (t / 60) % 60, t % 60);
+					return std::wstring(b);
+				};
+				long play = atol(g_state.values["playtime"].c_str());
+				long done = g_state.values.count("finished") ? atol(g_state.values["finished"].c_str()) : -1;
+				if ( done >= 0 )
+				{
+					text(dc, 14, y, L"Seed beaten in " + hms(done), GOLD, g_bodyFont);
+					y += 24;
+					text(dc, 14, y, L"Playtime " + hms(play), DIM, g_bodyFont);
+				}
+				else
+				{
+					text(dc, 14, y, L"Playtime " + hms(play), TEXT, g_bodyFont);
+				}
+				y += 26;
+			}
 
 			if ( num("ingame") )
 			{

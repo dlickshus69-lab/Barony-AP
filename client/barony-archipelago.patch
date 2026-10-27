@@ -1,18 +1,18 @@
-From 96e1930f5719676b6a5ef39f4155c3efc9dd8666 Mon Sep 17 00:00:00 2001
+From 2af69b6ef700d9e251edf4334c8b7b4832c5d44e Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
 
 ---
  CMakeLists.txt                    |   32 +
- src/BaronyAPTracker.cpp           | 1475 ++++++++++
+ src/BaronyAPTracker.cpp           | 1497 ++++++++++
  src/CMakeLists.txt                |    1 +
  src/actchest.cpp                  |    7 +
  src/actgeneral.cpp                |    2 +
  src/actladder.cpp                 |   25 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 4362 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 4382 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |  125 +
  src/archipelago_ids.hpp           |  244 ++
  src/charclass.cpp                 |    4 +
@@ -31,7 +31,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   10 +
  src/ui/MainMenu.cpp               |    5 +-
- 27 files changed, 6485 insertions(+), 4 deletions(-)
+ 27 files changed, 6527 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -82,10 +82,10 @@ index 4e9ed8f..b417834 100644
      # Only for MinGW...
 diff --git a/src/BaronyAPTracker.cpp b/src/BaronyAPTracker.cpp
 new file mode 100644
-index 0000000..c1231ef
+index 0000000..735a9e2
 --- /dev/null
 +++ b/src/BaronyAPTracker.cpp
-@@ -0,0 +1,1475 @@
+@@ -0,0 +1,1497 @@
 +// Barony Archipelago tracker window.
 +//
 +// Barony (the Archipelago build) starts this with the game, and writes
@@ -1010,6 +1010,28 @@ index 0000000..c1231ef
 +			std::wstring slot = widen(g_state.values["slot"]);
 +			text(dc, 14, y, L"Connected as " + slot, GOOD, g_bodyFont);
 +			y += 26;
++			{
++				// Playtime for this seed: only time in the dungeon counts (not menus, not paused).
++				auto hms = [](long t) {
++					wchar_t b[32];
++					if ( t < 0 ) { t = 0; }
++					swprintf(b, 32, L"%ld:%02ld:%02ld", t / 3600, (t / 60) % 60, t % 60);
++					return std::wstring(b);
++				};
++				long play = atol(g_state.values["playtime"].c_str());
++				long done = g_state.values.count("finished") ? atol(g_state.values["finished"].c_str()) : -1;
++				if ( done >= 0 )
++				{
++					text(dc, 14, y, L"Seed beaten in " + hms(done), GOLD, g_bodyFont);
++					y += 24;
++					text(dc, 14, y, L"Playtime " + hms(play), DIM, g_bodyFont);
++				}
++				else
++				{
++					text(dc, 14, y, L"Playtime " + hms(play), TEXT, g_bodyFont);
++				}
++				y += 26;
++			}
 +
 +			if ( num("ingame") )
 +			{
@@ -1752,10 +1774,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..4b54e2e
+index 0000000..36358dd
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,4362 @@
+@@ -0,0 +1,4382 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -1901,6 +1923,8 @@ index 0000000..4b54e2e
 +		int darknessQueue = 0;
 +		int goalBossesKilled = 0;     // bit per goal boss
 +		bool goalSent = false;
++		long playSeconds = 0;         // time spent in the dungeon for this seed (not the menus, not paused)
++		long finishSeconds = -1;      // playtime when the goal was completed (-1 = not yet)
 +		std::string rushSeq;          // Boss Rush: this run's maps in order ("boss,hamlet,hellboss")
 +		int rushPhase = 0;            // Boss Rush: how far along rushSeq this run is (1 = the first)
 +		int rushLevel = 0;            // Boss Rush: the floor number the current phase was loaded at
@@ -2141,6 +2165,7 @@ index 0000000..4b54e2e
 +		out << "darknessQueue=" << g_save.darknessQueue << "\n";
 +		out << "goalBossesKilled=" << g_save.goalBossesKilled << "\n";
 +		out << "goalSent=" << (g_save.goalSent ? 1 : 0) << "\n";
++		out << "playSeconds=" << g_save.playSeconds << "\nfinishSeconds=" << g_save.finishSeconds << "\n";
 +		out << "carryPickups=" << g_carryPickups << "\nfloorUnfound=" << g_floorApUnfound << "\n";
 +		out << "rushSeq=" << g_save.rushSeq << "\nrushPhase=" << g_save.rushPhase << "\nrushLevel=" << g_save.rushLevel
 +			<< "\nrushRunKey=" << g_save.rushRunKey << "\n";
@@ -2174,6 +2199,8 @@ index 0000000..4b54e2e
 +			else if ( key == "darknessQueue" ) { g_save.darknessQueue = (int)value; }
 +			else if ( key == "goalBossesKilled" ) { g_save.goalBossesKilled = (int)value; }
 +			else if ( key == "goalSent" ) { g_save.goalSent = value != 0; }
++			else if ( key == "playSeconds" ) { g_save.playSeconds = (long)value; }
++			else if ( key == "finishSeconds" ) { g_save.finishSeconds = (long)value; }
 +			else if ( key == "rushPhase" ) { g_save.rushPhase = (int)value; }
 +			else if ( key == "carryPickups" ) { g_carryPickups = (int)value; }
 +			else if ( key == "floorUnfound" ) { g_floorApUnfound = (int)value; }
@@ -4294,6 +4321,7 @@ index 0000000..4b54e2e
 +		out << "lives=" << g_save.livesLeft << "\n";
 +		out << "pickups_left=" << uncheckedCount(ap_ids::PICKUP_OFFSET, g_slot.archipelago_pickups) << "\n";
 +		out << "deaths_total=" << totalDeaths() << "\n";
++		out << "playtime=" << g_save.playSeconds << "\nfinished=" << g_save.finishSeconds << "\n";
 +		out << "minotaur=" << g_minotaurSecs << "\n";
 +		out << "floorkey=" << (!g_floorNeedsKey ? 2 : g_floorKeyFound ? 1 : 0) << "\n";
 +		out << "keycompass=" << g_keyCompass << "\n";
@@ -4710,6 +4738,19 @@ index 0000000..4b54e2e
 +	if ( !g_started ) { return; }
 +	checkReady();
 +	if ( !g_ready ) { return; }
++	// Playtime: counts only while you're in the dungeon and the game isn't paused (menus don't count).
++	{
++		static Uint32 playTicks = 0;
++		if ( inGame() && !gamePaused && !loading )
++		{
++			if ( ++playTicks >= (Uint32)TICKS_PER_SECOND )
++			{
++				playTicks = 0;
++				++g_save.playSeconds;
++				if ( g_save.playSeconds % 30 == 0 ) { writeSave(); }
++			}
++		}
++	}
 +	if ( g_resendChecks && AP_GetConnectionStatus() == AP_ConnectionStatus::Authenticated )
 +	{
 +		g_resendChecks = false;
@@ -5101,6 +5142,7 @@ index 0000000..4b54e2e
 +		if ( (g_save.goalBossesKilled & goalMask) == goalMask && !g_save.goalSent )
 +		{
 +			g_save.goalSent = true;
++			if ( g_save.finishSeconds < 0 ) { g_save.finishSeconds = g_save.playSeconds; }
 +			AP_StoryComplete();
 +			say(COLOR_AP, "Goal complete! Your world is done.");
 +		}

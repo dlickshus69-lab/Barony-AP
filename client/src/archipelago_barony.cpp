@@ -143,6 +143,8 @@ namespace
 		int darknessQueue = 0;
 		int goalBossesKilled = 0;     // bit per goal boss
 		bool goalSent = false;
+		long playSeconds = 0;         // time spent in the dungeon for this seed (not the menus, not paused)
+		long finishSeconds = -1;      // playtime when the goal was completed (-1 = not yet)
 		std::string rushSeq;          // Boss Rush: this run's maps in order ("boss,hamlet,hellboss")
 		int rushPhase = 0;            // Boss Rush: how far along rushSeq this run is (1 = the first)
 		int rushLevel = 0;            // Boss Rush: the floor number the current phase was loaded at
@@ -383,6 +385,7 @@ namespace
 		out << "darknessQueue=" << g_save.darknessQueue << "\n";
 		out << "goalBossesKilled=" << g_save.goalBossesKilled << "\n";
 		out << "goalSent=" << (g_save.goalSent ? 1 : 0) << "\n";
+		out << "playSeconds=" << g_save.playSeconds << "\nfinishSeconds=" << g_save.finishSeconds << "\n";
 		out << "carryPickups=" << g_carryPickups << "\nfloorUnfound=" << g_floorApUnfound << "\n";
 		out << "rushSeq=" << g_save.rushSeq << "\nrushPhase=" << g_save.rushPhase << "\nrushLevel=" << g_save.rushLevel
 			<< "\nrushRunKey=" << g_save.rushRunKey << "\n";
@@ -416,6 +419,8 @@ namespace
 			else if ( key == "darknessQueue" ) { g_save.darknessQueue = (int)value; }
 			else if ( key == "goalBossesKilled" ) { g_save.goalBossesKilled = (int)value; }
 			else if ( key == "goalSent" ) { g_save.goalSent = value != 0; }
+			else if ( key == "playSeconds" ) { g_save.playSeconds = (long)value; }
+			else if ( key == "finishSeconds" ) { g_save.finishSeconds = (long)value; }
 			else if ( key == "rushPhase" ) { g_save.rushPhase = (int)value; }
 			else if ( key == "carryPickups" ) { g_carryPickups = (int)value; }
 			else if ( key == "floorUnfound" ) { g_floorApUnfound = (int)value; }
@@ -2536,6 +2541,7 @@ namespace
 		out << "lives=" << g_save.livesLeft << "\n";
 		out << "pickups_left=" << uncheckedCount(ap_ids::PICKUP_OFFSET, g_slot.archipelago_pickups) << "\n";
 		out << "deaths_total=" << totalDeaths() << "\n";
+		out << "playtime=" << g_save.playSeconds << "\nfinished=" << g_save.finishSeconds << "\n";
 		out << "minotaur=" << g_minotaurSecs << "\n";
 		out << "floorkey=" << (!g_floorNeedsKey ? 2 : g_floorKeyFound ? 1 : 0) << "\n";
 		out << "keycompass=" << g_keyCompass << "\n";
@@ -2952,6 +2958,19 @@ void tick()
 	if ( !g_started ) { return; }
 	checkReady();
 	if ( !g_ready ) { return; }
+	// Playtime: counts only while you're in the dungeon and the game isn't paused (menus don't count).
+	{
+		static Uint32 playTicks = 0;
+		if ( inGame() && !gamePaused && !loading )
+		{
+			if ( ++playTicks >= (Uint32)TICKS_PER_SECOND )
+			{
+				playTicks = 0;
+				++g_save.playSeconds;
+				if ( g_save.playSeconds % 30 == 0 ) { writeSave(); }
+			}
+		}
+	}
 	if ( g_resendChecks && AP_GetConnectionStatus() == AP_ConnectionStatus::Authenticated )
 	{
 		g_resendChecks = false;
@@ -3343,6 +3362,7 @@ void onMonsterDeath(Entity* my, Stat* myStats)
 		if ( (g_save.goalBossesKilled & goalMask) == goalMask && !g_save.goalSent )
 		{
 			g_save.goalSent = true;
+			if ( g_save.finishSeconds < 0 ) { g_save.finishSeconds = g_save.playSeconds; }
 			AP_StoryComplete();
 			say(COLOR_AP, "Goal complete! Your world is done.");
 		}
