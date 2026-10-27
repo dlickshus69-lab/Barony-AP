@@ -1,4 +1,4 @@
-From 0da5714fc288cf919048ddc33dd1acf267fb11da Mon Sep 17 00:00:00 2001
+From f567e57905fb5daab7af81147a852760e65424c7 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -11,7 +11,7 @@ Subject: [PATCH] Archipelago client hooks
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 1730 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 1740 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |   86 ++
  src/archipelago_ids.hpp           |   95 ++
  src/engine/audio/sound_game.cpp   |    2 +
@@ -24,7 +24,7 @@ Subject: [PATCH] Archipelago client hooks
  src/light.cpp                     |    3 +
  src/maps.cpp                      |    8 +
  src/monster_minotaur.cpp          |    3 +-
- 20 files changed, 2022 insertions(+), 2 deletions(-)
+ 20 files changed, 2032 insertions(+), 2 deletions(-)
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
  create mode 100644 src/archipelago_ids.hpp
@@ -219,10 +219,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..7b752ff
+index 0000000..02c48c7
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,1730 @@
+@@ -0,0 +1,1740 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -370,6 +370,7 @@ index 0000000..7b752ff
 +	bool g_savedGodmode = false;
 +	bool g_confirmWasDown = true;               // edge detection: needs a fresh press
 +	void endDeathScreen();
++	int apItemsLyingAround();
 +	std::set<Uint32> g_countedDeaths;          // monster uids already counted
 +
 +	// Inventory as it was when the current floor began; losing a life puts it back.
@@ -1074,6 +1075,8 @@ index 0000000..7b752ff
 +			int y = local_rng.rand() % map.height;
 +			int index = y * MAPLAYERS + x * MAPLAYERS * map.height;
 +			if ( !map.tiles[index] ) { continue; }                    // no floor
++			int floorTile = map.tiles[index];
++			if ( (swimmingtiles && swimmingtiles[floorTile]) || (lavatiles && lavatiles[floorTile]) ) { continue; } // water, lava
 +			if ( map.tiles[OBSTACLELAYER + index] ) { continue; }     // wall
 +			if ( shoparea && shoparea[y + x * map.height] ) { continue; }
 +			if ( checkObstacle((x << 4) + 8, (y << 4) + 8, nullptr, nullptr) ) { continue; }
@@ -1090,8 +1093,15 @@ index 0000000..7b752ff
 +
 +	void spawnFloorPickups()
 +	{
-+		if ( g_slot.archipelago_pickups <= 0 || !currentFloorIsNormalGenerated() ) { return; }
-+		int toPlace = std::min(g_slot.pickups_per_floor, uncheckedCount(ap_ids::PICKUP_OFFSET, g_slot.archipelago_pickups));
++		if ( g_slot.archipelago_pickups <= 0 ) { return; }
++		// Every dungeon floor gets them, generated or hand-made; not boss arenas or the town.
++		static const char* const SKIP[] = { "Boss", "Hell Boss", "Sanctum", "Hamlet", "Tutorial" };
++		for ( const char* name : SKIP )
++		{
++			if ( !strncmp(map.name, name, strlen(name)) ) { return; }
++		}
++		int toPlace = std::min(g_slot.pickups_per_floor,
++			uncheckedCount(ap_ids::PICKUP_OFFSET, g_slot.archipelago_pickups) - apItemsLyingAround());
 +		for ( int i = 0; i < toPlace; ++i )
 +		{
 +			int x, y;

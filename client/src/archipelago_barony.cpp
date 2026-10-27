@@ -145,6 +145,7 @@ namespace
 	bool g_savedGodmode = false;
 	bool g_confirmWasDown = true;               // edge detection: needs a fresh press
 	void endDeathScreen();
+	int apItemsLyingAround();
 	std::set<Uint32> g_countedDeaths;          // monster uids already counted
 
 	// Inventory as it was when the current floor began; losing a life puts it back.
@@ -849,6 +850,8 @@ namespace
 			int y = local_rng.rand() % map.height;
 			int index = y * MAPLAYERS + x * MAPLAYERS * map.height;
 			if ( !map.tiles[index] ) { continue; }                    // no floor
+			int floorTile = map.tiles[index];
+			if ( (swimmingtiles && swimmingtiles[floorTile]) || (lavatiles && lavatiles[floorTile]) ) { continue; } // water, lava
 			if ( map.tiles[OBSTACLELAYER + index] ) { continue; }     // wall
 			if ( shoparea && shoparea[y + x * map.height] ) { continue; }
 			if ( checkObstacle((x << 4) + 8, (y << 4) + 8, nullptr, nullptr) ) { continue; }
@@ -865,8 +868,15 @@ namespace
 
 	void spawnFloorPickups()
 	{
-		if ( g_slot.archipelago_pickups <= 0 || !currentFloorIsNormalGenerated() ) { return; }
-		int toPlace = std::min(g_slot.pickups_per_floor, uncheckedCount(ap_ids::PICKUP_OFFSET, g_slot.archipelago_pickups));
+		if ( g_slot.archipelago_pickups <= 0 ) { return; }
+		// Every dungeon floor gets them, generated or hand-made; not boss arenas or the town.
+		static const char* const SKIP[] = { "Boss", "Hell Boss", "Sanctum", "Hamlet", "Tutorial" };
+		for ( const char* name : SKIP )
+		{
+			if ( !strncmp(map.name, name, strlen(name)) ) { return; }
+		}
+		int toPlace = std::min(g_slot.pickups_per_floor,
+			uncheckedCount(ap_ids::PICKUP_OFFSET, g_slot.archipelago_pickups) - apItemsLyingAround());
 		for ( int i = 0; i < toPlace; ++i )
 		{
 			int x, y;
