@@ -134,7 +134,7 @@ SPECIAL_AREAS = [
 # ---------------------------------------------------------------------------------------
 FLOOR_OFFSET = 0          # + floor (1..35)
 LEVEL_OFFSET = 100        # + character level (2..30)
-KILL_OFFSET = 200         # + k (1..50), the k-th kill milestone
+KILL_OFFSET = 200         # + k (1..50), the k-th Enemy Sanity check
 BESTIARY_OFFSET = 300     # + MonsterInfo.index
 PICKUP_OFFSET = 400       # + i (1..100)
 SHOP_OFFSET = 600         # + j (1..20)
@@ -156,7 +156,7 @@ def level_location(level: int) -> str:
 
 
 def kill_location(k: int) -> str:
-    return f"Kill Milestone {k}"
+    return f"Enemy Sanity {k}"
 
 
 def bestiary_location(m: MonsterInfo) -> str:

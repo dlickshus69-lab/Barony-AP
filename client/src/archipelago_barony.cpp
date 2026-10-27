@@ -70,6 +70,8 @@ namespace
 		int level_checks = 0;
 		int kill_checks = 0;
 		int kill_check_interval = 10;
+		int enemy_sanity = 1;         // 0 off, 1 kill count, 2 marked enemies
+		int enemy_sanity_per_floor = 2;
 		int bestiary_checks = 0;      // 0 off, 1 early, 2 all
 		int archipelago_pickups = 0;
 		int pickups_per_floor = 2;
@@ -347,6 +349,8 @@ namespace
 		registerSlotInt("level_checks", &SlotOptions::level_checks);
 		registerSlotInt("kill_checks", &SlotOptions::kill_checks);
 		registerSlotInt("kill_check_interval", &SlotOptions::kill_check_interval);
+		registerSlotInt("enemy_sanity", &SlotOptions::enemy_sanity);
+		registerSlotInt("enemy_sanity_per_floor", &SlotOptions::enemy_sanity_per_floor);
 		registerSlotInt("bestiary_checks", &SlotOptions::bestiary_checks);
 		registerSlotInt("archipelago_pickups", &SlotOptions::archipelago_pickups);
 		registerSlotInt("pickups_per_floor", &SlotOptions::pickups_per_floor);
@@ -783,8 +787,13 @@ namespace
 		}
 	}
 
+	// Marked enemies (Enemy Sanity: Marked Enemies): their uids, and how many this floor has.
+	std::set<Uint32> g_markedEnemies;
+	int g_markedThisFloor = 0;
+
 	void sendKillChecks()
 	{
+		if ( g_slot.enemy_sanity != 1 ) { return; }
 		int interval = std::max(1, g_slot.kill_check_interval);
 		for ( int k = 1; k <= g_slot.kill_checks; ++k )
 		{
@@ -911,6 +920,7 @@ namespace
 		{
 			say(COLOR_AP, "%d Archipelago item%s on this floor.", toPlace, toPlace == 1 ? " lies" : "s lie");
 		}
+
 	}
 
 	void snapshotInventories()
@@ -1157,9 +1167,15 @@ namespace
 	void onNewFloor()
 	{
 		endDeathScreen();
+		g_markedEnemies.clear();
+		g_markedThisFloor = 0;
 		sendFloorChecks();
 		sendSpecialAreaCheck();
 		spawnFloorPickups();
+		if ( g_slot.enemy_sanity == 2 && uncheckedCount(ap_ids::KILL_OFFSET, g_slot.kill_checks) > 0 )
+		{
+			say(COLOR_AP, "Enemies glowing green are Archipelago checks.");
+		}
 		g_restartPending = false;
 		snapshotInventories();
 		if ( g_slot.checkpoint_interval > 0 && !secretlevel && currentlevel > 0
@@ -1427,6 +1443,17 @@ void onMonsterInit(Entity* my, Stat* myStats)
 	bool isBoss = myStats->type == LICH || myStats->type == DEVIL || myStats->type == LICH_ICE
 		|| myStats->type == LICH_FIRE;
 
+	// Enemy Sanity, Marked Enemies: mark the first few enemies on the floor, while checks remain.
+	if ( g_slot.enemy_sanity == 2 && g_slot.kill_checks > 0 && !isBoss
+		&& myStats->type != MINOTAUR && myStats->type != SHOPKEEPER && myStats->type != NOTHING
+		&& my->monsterAllySummonRank == 0 && !my->monsterAllyGetPlayerLeader() && myStats->leader_uid == 0
+		&& g_markedThisFloor < g_slot.enemy_sanity_per_floor
+		&& (int)g_markedEnemies.size() < uncheckedCount(ap_ids::KILL_OFFSET, g_slot.kill_checks) )
+	{
+		g_markedEnemies.insert(my->getUID());
+		++g_markedThisFloor;
+	}
+
 	// A boss keeps the damage from before a lost life.
 	if ( isBoss && g_slot.boss_death == 1 && g_savedBossFloor == currentlevel )
 	{
@@ -1472,6 +1499,15 @@ void onMonsterDeath(Entity* my, Stat* myStats)
 
 	++g_save.totalKills;
 	sendKillChecks();
+	if ( g_markedEnemies.erase(my->getUID()) )
+	{
+		int index = nextUnchecked(ap_ids::KILL_OFFSET, g_slot.kill_checks);
+		if ( index > 0 )
+		{
+			sendLocation(ap_ids::BASE_ID + ap_ids::KILL_OFFSET + index);
+			say(COLOR_AP, "Marked enemy defeated! (Enemy Sanity %d)", index);
+		}
+	}
 
 	if ( g_slot.bestiary_checks != 0 )
 	{
@@ -1620,6 +1656,13 @@ namespace
 {
 	int g_apModelIndex = -1;
 	constexpr const char* AP_MODEL_PATH = "models/items/AP_Item.vox";
+}
+
+bool isMarkedEnemy(const Entity* entity)
+{
+	if ( !entity || g_markedEnemies.empty() ) { return false; }
+	if ( g_markedEnemies.count(entity->getUID()) ) { return true; }
+	return g_markedEnemies.count(entity->parent) > 0; // body parts belong to their monster
 }
 
 bool isApItem(const Item* item)

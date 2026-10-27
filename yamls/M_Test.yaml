@@ -7,8 +7,10 @@ Barony:
   goal: devil
   floor_check_interval: 1
   level_checks: 15
-  kill_checks: 10
-  kill_check_interval: 10
+  enemy_sanity: kill_count
+  enemy_sanity_checks: 10
+  enemy_sanity_kills_per_check: 10
+  enemy_sanity_per_floor: 2
   bestiary_checks: early
   archipelago_pickups: 20
   pickups_per_floor: 2

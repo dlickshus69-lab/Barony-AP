@@ -1,4 +1,4 @@
-From 8d7f0934c140d1ba8cf10198356a2d7e7a0156bd Mon Sep 17 00:00:00 2001
+From 89f0176246ac035768e7f51dfa9805cb72964b28 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -11,8 +11,8 @@ Subject: [PATCH] Archipelago client hooks
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 1909 +++++++++++++++++++++++++++++
- src/archipelago_barony.hpp        |   90 ++
+ src/archipelago_barony.cpp        | 1952 +++++++++++++++++++++++++++++
+ src/archipelago_barony.hpp        |   93 ++
  src/archipelago_ids.hpp           |   95 ++
  src/engine/audio/sound_game.cpp   |    2 +
  src/files.cpp                     |    6 +
@@ -24,7 +24,8 @@ Subject: [PATCH] Archipelago client hooks
  src/light.cpp                     |    3 +
  src/maps.cpp                      |    8 +
  src/monster_minotaur.cpp          |    3 +-
- 20 files changed, 2206 insertions(+), 2 deletions(-)
+ src/opengl.cpp                    |   10 +
+ 21 files changed, 2262 insertions(+), 2 deletions(-)
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
  create mode 100644 src/archipelago_ids.hpp
@@ -219,10 +220,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..29e6baf
+index 0000000..aff87ff
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,1909 @@
+@@ -0,0 +1,1952 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -295,6 +296,8 @@ index 0000000..29e6baf
 +		int level_checks = 0;
 +		int kill_checks = 0;
 +		int kill_check_interval = 10;
++		int enemy_sanity = 1;         // 0 off, 1 kill count, 2 marked enemies
++		int enemy_sanity_per_floor = 2;
 +		int bestiary_checks = 0;      // 0 off, 1 early, 2 all
 +		int archipelago_pickups = 0;
 +		int pickups_per_floor = 2;
@@ -572,6 +575,8 @@ index 0000000..29e6baf
 +		registerSlotInt("level_checks", &SlotOptions::level_checks);
 +		registerSlotInt("kill_checks", &SlotOptions::kill_checks);
 +		registerSlotInt("kill_check_interval", &SlotOptions::kill_check_interval);
++		registerSlotInt("enemy_sanity", &SlotOptions::enemy_sanity);
++		registerSlotInt("enemy_sanity_per_floor", &SlotOptions::enemy_sanity_per_floor);
 +		registerSlotInt("bestiary_checks", &SlotOptions::bestiary_checks);
 +		registerSlotInt("archipelago_pickups", &SlotOptions::archipelago_pickups);
 +		registerSlotInt("pickups_per_floor", &SlotOptions::pickups_per_floor);
@@ -1008,8 +1013,13 @@ index 0000000..29e6baf
 +		}
 +	}
 +
++	// Marked enemies (Enemy Sanity: Marked Enemies): their uids, and how many this floor has.
++	std::set<Uint32> g_markedEnemies;
++	int g_markedThisFloor = 0;
++
 +	void sendKillChecks()
 +	{
++		if ( g_slot.enemy_sanity != 1 ) { return; }
 +		int interval = std::max(1, g_slot.kill_check_interval);
 +		for ( int k = 1; k <= g_slot.kill_checks; ++k )
 +		{
@@ -1136,6 +1146,7 @@ index 0000000..29e6baf
 +		{
 +			say(COLOR_AP, "%d Archipelago item%s on this floor.", toPlace, toPlace == 1 ? " lies" : "s lie");
 +		}
++
 +	}
 +
 +	void snapshotInventories()
@@ -1382,9 +1393,15 @@ index 0000000..29e6baf
 +	void onNewFloor()
 +	{
 +		endDeathScreen();
++		g_markedEnemies.clear();
++		g_markedThisFloor = 0;
 +		sendFloorChecks();
 +		sendSpecialAreaCheck();
 +		spawnFloorPickups();
++		if ( g_slot.enemy_sanity == 2 && uncheckedCount(ap_ids::KILL_OFFSET, g_slot.kill_checks) > 0 )
++		{
++			say(COLOR_AP, "Enemies glowing green are Archipelago checks.");
++		}
 +		g_restartPending = false;
 +		snapshotInventories();
 +		if ( g_slot.checkpoint_interval > 0 && !secretlevel && currentlevel > 0
@@ -1652,6 +1669,17 @@ index 0000000..29e6baf
 +	bool isBoss = myStats->type == LICH || myStats->type == DEVIL || myStats->type == LICH_ICE
 +		|| myStats->type == LICH_FIRE;
 +
++	// Enemy Sanity, Marked Enemies: mark the first few enemies on the floor, while checks remain.
++	if ( g_slot.enemy_sanity == 2 && g_slot.kill_checks > 0 && !isBoss
++		&& myStats->type != MINOTAUR && myStats->type != SHOPKEEPER && myStats->type != NOTHING
++		&& my->monsterAllySummonRank == 0 && !my->monsterAllyGetPlayerLeader() && myStats->leader_uid == 0
++		&& g_markedThisFloor < g_slot.enemy_sanity_per_floor
++		&& (int)g_markedEnemies.size() < uncheckedCount(ap_ids::KILL_OFFSET, g_slot.kill_checks) )
++	{
++		g_markedEnemies.insert(my->getUID());
++		++g_markedThisFloor;
++	}
++
 +	// A boss keeps the damage from before a lost life.
 +	if ( isBoss && g_slot.boss_death == 1 && g_savedBossFloor == currentlevel )
 +	{
@@ -1697,6 +1725,15 @@ index 0000000..29e6baf
 +
 +	++g_save.totalKills;
 +	sendKillChecks();
++	if ( g_markedEnemies.erase(my->getUID()) )
++	{
++		int index = nextUnchecked(ap_ids::KILL_OFFSET, g_slot.kill_checks);
++		if ( index > 0 )
++		{
++			sendLocation(ap_ids::BASE_ID + ap_ids::KILL_OFFSET + index);
++			say(COLOR_AP, "Marked enemy defeated! (Enemy Sanity %d)", index);
++		}
++	}
 +
 +	if ( g_slot.bestiary_checks != 0 )
 +	{
@@ -1845,6 +1882,13 @@ index 0000000..29e6baf
 +{
 +	int g_apModelIndex = -1;
 +	constexpr const char* AP_MODEL_PATH = "models/items/AP_Item.vox";
++}
++
++bool isMarkedEnemy(const Entity* entity)
++{
++	if ( !entity || g_markedEnemies.empty() ) { return false; }
++	if ( g_markedEnemies.count(entity->getUID()) ) { return true; }
++	return g_markedEnemies.count(entity->parent) > 0; // body parts belong to their monster
 +}
 +
 +bool isApItem(const Item* item)
@@ -2134,10 +2178,10 @@ index 0000000..29e6baf
 +} // namespace AP
 diff --git a/src/archipelago_barony.hpp b/src/archipelago_barony.hpp
 new file mode 100644
-index 0000000..d76be97
+index 0000000..f3b50d6
 --- /dev/null
 +++ b/src/archipelago_barony.hpp
-@@ -0,0 +1,90 @@
+@@ -0,0 +1,93 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client.
@@ -2197,6 +2241,9 @@ index 0000000..d76be97
 +
 +	// game.cpp, after the HUD and main menu are drawn: connection status, lives, death screen.
 +	void drawHud();
++
++	// opengl.cpp: Enemy Sanity marked enemies are drawn with a green glow.
++	bool isMarkedEnemy(const Entity* entity);
 +
 +	// The Archipelago item (floor pickups and shop items) and its own logo model and icon.
 +	bool isApItem(const Item* item);
@@ -2605,6 +2652,34 @@ index f9a26a3..a309479 100644
  }
  
  void actMinotaurTimer(Entity* my)
+diff --git a/src/opengl.cpp b/src/opengl.cpp
+index 1678756..f6c576d 100644
+--- a/src/opengl.cpp
++++ b/src/opengl.cpp
+@@ -10,6 +10,9 @@
+ -------------------------------------------------------------------------------*/
+ 
+ #include "main.hpp"
++#ifndef EDITOR
++#include "archipelago_barony.hpp"
++#endif
+ #include "draw.hpp"
+ #include "entity.hpp"
+ #include "files.hpp"
+@@ -979,6 +982,13 @@ static void uploadLightUniforms(view_t* camera, Shader& shader, Entity* entity,
+             constexpr GLfloat add[4] = { 0.f, 0.f, 0.f, 0.f };
+             GL_CHECK_ERR(glUniform4fv(shader.uniform("uColorAdd"), 1, add));
+         }
++#ifndef EDITOR
++        if (AP::isMarkedEnemy(entity)) { // Archipelago: Enemy Sanity marked enemies glow green
++            const float pulse = 0.5f + 0.5f * sinf((float)(entity->ticks % 100) * 0.0628f);
++            const GLfloat add[4] = { 0.f, 0.10f + 0.12f * pulse, 0.02f, 0.f };
++            GL_CHECK_ERR(glUniform4fv(shader.uniform("uColorAdd"), 1, add));
++        }
++#endif
+     } else {
+         if (remap) {
+             mat4x4_t empty(0.f);
 -- 
 2.43.0
 

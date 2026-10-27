@@ -53,7 +53,7 @@ class BaronyWorld(World):
     """
     Barony is a first-person roguelike dungeon crawler. Descend through the Mines, the Swamp,
     the Labyrinth, the Ruins and beyond to stop the lich Baron Herx. In this randomizer, floors,
-    kills, levels and hidden Archipelago pickups send checks, and anything you receive stays
+    enemies, levels and hidden Archipelago pickups send checks, and anything you receive stays
     with you across runs.
     """
 
@@ -135,8 +135,13 @@ class BaronyWorld(World):
         for level in range(2, self.level_check_max + 1):
             planned.append((data.level_location(level), self._floor_needed(level)))
 
-        for k in range(1, o.kill_checks.value + 1):
-            planned.append((data.kill_location(k), 1))
+        if o.enemy_sanity.value == o.enemy_sanity.option_kill_count:
+            for k in range(1, o.enemy_sanity_checks.value + 1):
+                planned.append((data.kill_location(k), 1))
+        elif o.enemy_sanity.value == o.enemy_sanity.option_marked_enemies:
+            per_floor = o.enemy_sanity_per_floor.value
+            for k in range(1, o.enemy_sanity_checks.value + 1):
+                planned.append((data.kill_location(k), self._floor_needed((k + per_floor - 1) // per_floor)))
 
         if o.bestiary_checks.value != o.bestiary_checks.option_off:
             include_all = o.bestiary_checks.value == o.bestiary_checks.option_all
@@ -281,8 +286,10 @@ class BaronyWorld(World):
             "goal_floor": self.goal_floor,
             "floor_check_interval": o.floor_check_interval.value,
             "level_checks": self.level_check_max,
-            "kill_checks": o.kill_checks.value,
-            "kill_check_interval": o.kill_check_interval.value,
+            "kill_checks": 0 if o.enemy_sanity.value == o.enemy_sanity.option_off else o.enemy_sanity_checks.value,
+            "kill_check_interval": o.enemy_sanity_kills_per_check.value,
+            "enemy_sanity": o.enemy_sanity.value,
+            "enemy_sanity_per_floor": o.enemy_sanity_per_floor.value,
             "bestiary_checks": o.bestiary_checks.value,
             "archipelago_pickups": self.pickup_count,
             "pickups_per_floor": o.pickups_per_floor.value,

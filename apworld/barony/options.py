@@ -43,25 +43,50 @@ class LevelChecks(Range):
     default = 15
 
 
-class KillChecks(Range):
+class EnemySanity(Choice):
     """
-    Number of kill milestone checks. 0 turns them off.
-    Kills are counted across all of your runs, not just the current one.
+    Killing enemies sends checks.
+    Off: no enemy checks.
+    Kill Count: every few kills is a check (see Kills Per Check). Kills count across all your runs.
+    Marked Enemies: some enemies on each floor glow green (see Marked Enemies Per Floor). Killing a
+    green one is a check. Bosses, shopkeepers and the Minotaur are never marked.
     """
-    display_name = "Kill Milestone Checks"
-    range_start = 0
+    display_name = "Enemy Sanity"
+    option_off = 0
+    option_kill_count = 1
+    option_marked_enemies = 2
+    default = option_kill_count
+
+
+class EnemySanityChecks(Range):
+    """
+    How many Enemy Sanity checks there are in total.
+    """
+    display_name = "Enemy Sanity Checks"
+    range_start = 1
     range_end = MAX_KILL_CHECKS
     default = 10
 
 
-class KillCheckInterval(Range):
+class EnemySanityKillsPerCheck(Range):
     """
-    How many kills between each kill milestone check.
+    For Kill Count: how many kills each check takes.
     """
-    display_name = "Kills Per Milestone"
+    display_name = "Kills Per Check"
     range_start = 1
     range_end = 100
     default = 10
+
+
+class EnemySanityPerFloor(Range):
+    """
+    For Marked Enemies: how many enemies on each floor are marked green. A normal floor starts with
+    about 5 to 8 enemies, so higher numbers mark most of them.
+    """
+    display_name = "Marked Enemies Per Floor"
+    range_start = 1
+    range_end = 5
+    default = 2
 
 
 class BestiaryChecks(Choice):
@@ -374,8 +399,10 @@ class BaronyOptions(PerGameCommonOptions):
     goal: Goal
     floor_check_interval: FloorCheckInterval
     level_checks: LevelChecks
-    kill_checks: KillChecks
-    kill_check_interval: KillCheckInterval
+    enemy_sanity: EnemySanity
+    enemy_sanity_checks: EnemySanityChecks
+    enemy_sanity_kills_per_check: EnemySanityKillsPerCheck
+    enemy_sanity_per_floor: EnemySanityPerFloor
     bestiary_checks: BestiaryChecks
     archipelago_pickups: ArchipelagoPickups
     pickups_per_floor: PickupsPerFloor
@@ -406,7 +433,8 @@ class BaronyOptions(PerGameCommonOptions):
 
 option_groups = [
     OptionGroup("Goal & Checks", [
-        Goal, FloorCheckInterval, LevelChecks, KillChecks, KillCheckInterval, BestiaryChecks,
+        Goal, FloorCheckInterval, LevelChecks, EnemySanity, EnemySanityChecks, EnemySanityKillsPerCheck,
+        EnemySanityPerFloor, BestiaryChecks,
         ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),
     OptionGroup("Dungeon", [StairKeys, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemyPool, EnemySeed, MusicShuffle, MusicSeed, DifficultyScaling, Difficulty]),

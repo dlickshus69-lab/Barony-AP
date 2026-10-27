@@ -58,6 +58,9 @@ namespace AP
 	// game.cpp, after the HUD and main menu are drawn: connection status, lives, death screen.
 	void drawHud();
 
+	// opengl.cpp: Enemy Sanity marked enemies are drawn with a green glow.
+	bool isMarkedEnemy(const Entity* entity);
+
 	// The Archipelago item (floor pickups and shop items) and its own logo model and icon.
 	bool isApItem(const Item* item);
 	int apItemModel();                 // model index, or -1 if the model didn't load

@@ -15,7 +15,7 @@ class TestSanctumShuffle(BaronyTestBase):
 class TestFewChecks(BaronyTestBase):
     """Every 10th floor only: the world has to hand out some Stair Keys at the start."""
     options = {
-        "stair_keys": True, "floor_check_interval": 10, "level_checks": 0, "kill_checks": 0,
+        "stair_keys": True, "floor_check_interval": 10, "level_checks": 0, "enemy_sanity": "off",
         "bestiary_checks": "off", "archipelago_pickups": 0, "shop_checks": 0, "boss_checks": False,
     }
 
@@ -32,6 +32,6 @@ class TestStairKeys(BaronyTestBase):
 
 class TestRandomizers(BaronyTestBase):
     options = {
-        "enemy_randomizer": "every_spawn", "enemy_pool": "anywhere", "enemy_seed": "reroll", "music_shuffle": "all_music", "music_seed": "always_random",
+        "enemy_sanity": "marked_enemies", "enemy_sanity_per_floor": 3, "enemy_randomizer": "every_spawn", "enemy_pool": "anywhere", "enemy_seed": "reroll", "music_shuffle": "all_music", "music_seed": "always_random",
         "bestiary_checks": "all", "floor_restart": "same_layout", "checkpoint_interval": "every_20_floors", "layout_seed": "new_each_run",
     }
