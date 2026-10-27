@@ -273,6 +273,21 @@ class LayoutSeed(Choice):
     default = option_locked
 
 
+class EnemyLevelScaling(Choice):
+    """
+    Enemies scale to your character level.
+    Off: enemies keep their normal strength.
+    Stronger Only: enemies below your level are made stronger to match you; tougher ones stay as they are.
+    Match Level: every enemy is set to your level, stronger or weaker.
+    Bosses, shopkeepers and the Minotaur aren't changed.
+    """
+    display_name = "Enemy Level Scaling"
+    option_off = 0
+    option_stronger_only = 1
+    option_match_level = 2
+    default = option_off
+
+
 class DifficultyScaling(DefaultOnToggle):
     """
     Monsters are scaled to how deep you actually are, not to where they normally live.
@@ -417,6 +432,7 @@ class BaronyOptions(PerGameCommonOptions):
     enemy_seed: EnemySeed
     music_shuffle: MusicShuffle
     music_seed: MusicSeed
+    enemy_level_scaling: EnemyLevelScaling
     difficulty_scaling: DifficultyScaling
     difficulty: Difficulty
     lives: Lives
@@ -437,7 +453,7 @@ option_groups = [
         EnemySanityPerFloor, BestiaryChecks,
         ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),
-    OptionGroup("Dungeon", [StairKeys, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemyPool, EnemySeed, MusicShuffle, MusicSeed, DifficultyScaling, Difficulty]),
+    OptionGroup("Dungeon", [StairKeys, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemyPool, EnemySeed, MusicShuffle, MusicSeed, EnemyLevelScaling, DifficultyScaling, Difficulty]),
     OptionGroup("Lives & Death", [Lives, ExtraLivesInPool, DeathPenalty, BossDeath, FloorRestart, CheckpointInterval, BaronyDeathLink]),
     OptionGroup("Traps & Players", [TrapChance, EnabledTraps, Players]),
 ]

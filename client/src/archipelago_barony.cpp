@@ -94,6 +94,7 @@ namespace
 		int music_seed = 0;           // 0 locked per floor, 1 random every time a song starts
 		int checkpoint_interval = 0;  // 0 off, else a checkpoint every this many floors
 		int layout_seed = 0;          // 0 locked (each floor's map comes from the seed), 1 random
+		int enemy_level_scaling = 0;  // 0 off, 1 stronger only, 2 match your level both ways
 		int players = 1;
 	};
 
@@ -373,6 +374,7 @@ namespace
 		registerSlotInt("music_seed", &SlotOptions::music_seed);
 		registerSlotInt("checkpoint_interval", &SlotOptions::checkpoint_interval);
 		registerSlotInt("layout_seed", &SlotOptions::layout_seed);
+		registerSlotInt("enemy_level_scaling", &SlotOptions::enemy_level_scaling);
 		registerSlotInt("players", &SlotOptions::players);
 
 		AP_Start();
@@ -1334,7 +1336,17 @@ void tick()
 	}
 
 	showServerMessages();
-	if ( !inGame() ) { return; }
+	if ( !inGame() )
+	{
+		// A Death Link that arrives in the menus or between runs is dropped, so it can't
+		// kill you the moment your next run starts.
+		if ( g_deathLinkIn.exchange(false) )
+		{
+			AP_DeathLinkClear();
+			printlog("[Archipelago] Death Link received outside a run; ignored.");
+		}
+		return;
+	}
 
 	pullInbox();
 	if ( g_save.runKey != uniqueGameKey && stats[clientnum]->HP > 0 )
@@ -1505,6 +1517,26 @@ void onMonsterInit(Entity* my, Stat* myStats)
 		if ( it != g_savedBossHP.end() )
 		{
 			myStats->HP = std::min(myStats->MAXHP, std::max<Sint32>(1, it->second));
+		}
+	}
+
+	// Enemy Level Scaling: bring monsters up to (or toward) the strongest player's level.
+	if ( g_slot.enemy_level_scaling != 0 && !isBoss && myStats->type != MINOTAUR && myStats->type != SHOPKEEPER
+		&& my->monsterAllySummonRank == 0 && !my->monsterAllyGetPlayerLeader() && myStats->leader_uid == 0 )
+	{
+		int playerLevel = 1;
+		for ( int p : activePlayers() ) { playerLevel = std::max<int>(playerLevel, stats[p]->LVL); }
+		int monsterLevel = std::max<int>(1, myStats->LVL);
+		if ( playerLevel > monsterLevel || g_slot.enemy_level_scaling == 2 )
+		{
+			// Each level of difference changes health and damage by about 8%.
+			double factor = std::max(0.5, std::min(3.0, 1.0 + 0.08 * (playerLevel - monsterLevel)));
+			myStats->MAXHP = std::max(1, (int)(myStats->MAXHP * factor));
+			myStats->HP = myStats->MAXHP;
+			if ( myStats->STR > 0 ) { myStats->STR = (Sint32)(myStats->STR * factor); }
+			if ( myStats->DEX > 0 ) { myStats->DEX = (Sint32)(myStats->DEX * (1.0 + (factor - 1.0) * 0.5)); }
+			if ( myStats->CON > 0 ) { myStats->CON = (Sint32)(myStats->CON * factor); }
+			myStats->LVL = std::max(1, playerLevel);
 		}
 	}
 

@@ -1,4 +1,4 @@
-From cc4899d23e8cd8ed5f2fcecbd39907634277a25f Mon Sep 17 00:00:00 2001
+From 675e96e7d14948a70de390a54c28590f3b60d853 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -11,7 +11,7 @@ Subject: [PATCH] Archipelago client hooks
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 2000 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 2032 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |   93 ++
  src/archipelago_ids.hpp           |   95 ++
  src/engine/audio/sound_game.cpp   |    2 +
@@ -25,7 +25,7 @@ Subject: [PATCH] Archipelago client hooks
  src/maps.cpp                      |    8 +
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   10 +
- 21 files changed, 2310 insertions(+), 2 deletions(-)
+ 21 files changed, 2342 insertions(+), 2 deletions(-)
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
  create mode 100644 src/archipelago_ids.hpp
@@ -220,10 +220,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..0a55e10
+index 0000000..31fe32f
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,2000 @@
+@@ -0,0 +1,2032 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -320,6 +320,7 @@ index 0000000..0a55e10
 +		int music_seed = 0;           // 0 locked per floor, 1 random every time a song starts
 +		int checkpoint_interval = 0;  // 0 off, else a checkpoint every this many floors
 +		int layout_seed = 0;          // 0 locked (each floor's map comes from the seed), 1 random
++		int enemy_level_scaling = 0;  // 0 off, 1 stronger only, 2 match your level both ways
 +		int players = 1;
 +	};
 +
@@ -599,6 +600,7 @@ index 0000000..0a55e10
 +		registerSlotInt("music_seed", &SlotOptions::music_seed);
 +		registerSlotInt("checkpoint_interval", &SlotOptions::checkpoint_interval);
 +		registerSlotInt("layout_seed", &SlotOptions::layout_seed);
++		registerSlotInt("enemy_level_scaling", &SlotOptions::enemy_level_scaling);
 +		registerSlotInt("players", &SlotOptions::players);
 +
 +		AP_Start();
@@ -1560,7 +1562,17 @@ index 0000000..0a55e10
 +	}
 +
 +	showServerMessages();
-+	if ( !inGame() ) { return; }
++	if ( !inGame() )
++	{
++		// A Death Link that arrives in the menus or between runs is dropped, so it can't
++		// kill you the moment your next run starts.
++		if ( g_deathLinkIn.exchange(false) )
++		{
++			AP_DeathLinkClear();
++			printlog("[Archipelago] Death Link received outside a run; ignored.");
++		}
++		return;
++	}
 +
 +	pullInbox();
 +	if ( g_save.runKey != uniqueGameKey && stats[clientnum]->HP > 0 )
@@ -1731,6 +1743,26 @@ index 0000000..0a55e10
 +		if ( it != g_savedBossHP.end() )
 +		{
 +			myStats->HP = std::min(myStats->MAXHP, std::max<Sint32>(1, it->second));
++		}
++	}
++
++	// Enemy Level Scaling: bring monsters up to (or toward) the strongest player's level.
++	if ( g_slot.enemy_level_scaling != 0 && !isBoss && myStats->type != MINOTAUR && myStats->type != SHOPKEEPER
++		&& my->monsterAllySummonRank == 0 && !my->monsterAllyGetPlayerLeader() && myStats->leader_uid == 0 )
++	{
++		int playerLevel = 1;
++		for ( int p : activePlayers() ) { playerLevel = std::max<int>(playerLevel, stats[p]->LVL); }
++		int monsterLevel = std::max<int>(1, myStats->LVL);
++		if ( playerLevel > monsterLevel || g_slot.enemy_level_scaling == 2 )
++		{
++			// Each level of difference changes health and damage by about 8%.
++			double factor = std::max(0.5, std::min(3.0, 1.0 + 0.08 * (playerLevel - monsterLevel)));
++			myStats->MAXHP = std::max(1, (int)(myStats->MAXHP * factor));
++			myStats->HP = myStats->MAXHP;
++			if ( myStats->STR > 0 ) { myStats->STR = (Sint32)(myStats->STR * factor); }
++			if ( myStats->DEX > 0 ) { myStats->DEX = (Sint32)(myStats->DEX * (1.0 + (factor - 1.0) * 0.5)); }
++			if ( myStats->CON > 0 ) { myStats->CON = (Sint32)(myStats->CON * factor); }
++			myStats->LVL = std::max(1, playerLevel);
 +		}
 +	}
 +
