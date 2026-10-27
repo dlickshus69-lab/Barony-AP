@@ -1,4 +1,4 @@
-From 3fdf8a4cbd7ba5363ca8a875c9c7079d6f0e4741 Mon Sep 17 00:00:00 2001
+From 9f454ba33bc0925bdbf9072dc7da288221828733 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -12,9 +12,9 @@ Subject: [PATCH] Archipelago client hooks
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 2631 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 2664 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |   97 ++
- src/archipelago_ids.hpp           |   95 ++
+ src/archipelago_ids.hpp           |   95 +
  src/engine/audio/sound_game.cpp   |    2 +
  src/files.cpp                     |    6 +
  src/game.cpp                      |    6 +
@@ -26,7 +26,7 @@ Subject: [PATCH] Archipelago client hooks
  src/maps.cpp                      |   11 +
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   10 +
- 22 files changed, 3224 insertions(+), 2 deletions(-)
+ 22 files changed, 3257 insertions(+), 2 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -504,10 +504,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..4c9e0ef
+index 0000000..f940cee
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,2631 @@
+@@ -0,0 +1,2664 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -2494,7 +2494,40 @@ index 0000000..4c9e0ef
 +	if ( myStats->type == SHOPKEEPER && g_slot.shop_checks > 0
 +		&& uncheckedCount(ap_ids::SHOP_OFFSET, g_slot.shop_checks) > 0 )
 +	{
-+		newItem(AP_ITEM_TYPE, EXCELLENT, 0, 1, AP_SHOP_APPEARANCE, true, &myStats->inventory);
++		Item* apItem = newItem(AP_ITEM_TYPE, EXCELLENT, 0, 1, AP_SHOP_APPEARANCE, true, &myStats->inventory);
++		if ( apItem )
++		{
++			// The shopkeeper has already sorted his stock into the shop's grid; give the Archipelago
++			// item a slot of its own (it used to sit on slot 0,0, hidden under another item).
++			const int maxX = Player::ShopGUI_t::MAX_SHOP_X, maxY = Player::ShopGUI_t::MAX_SHOP_Y;
++			std::set<int> taken;
++			Item* last = nullptr;
++			for ( node_t* n = myStats->inventory.first; n; n = n->next )
++			{
++				Item* it = (Item*)n->element;
++				if ( !it || it == apItem ) { continue; }
++				if ( it->x >= 0 && it->x < maxX && it->y >= 0 && it->y < maxY )
++				{
++					taken.insert(it->x + it->y * 100);
++					if ( !last || it->y > last->y || (it->y == last->y && it->x > last->x) ) { last = it; }
++				}
++			}
++			bool placed = false;
++			for ( int y = 0; y < maxY && !placed; ++y )
++			{
++				for ( int x = 0; x < maxX && !placed; ++x )
++				{
++					if ( !taken.count(x + y * 100) ) { apItem->x = x; apItem->y = y; placed = true; }
++				}
++			}
++			if ( !placed && last )
++			{
++				// A full shop: the item in the last slot (the cheapest) makes room.
++				apItem->x = last->x;
++				apItem->y = last->y;
++				list_RemoveNode(last->node);
++			}
++		}
 +	}
 +
 +	bool isBoss = myStats->type == LICH || myStats->type == DEVIL || myStats->type == LICH_ICE

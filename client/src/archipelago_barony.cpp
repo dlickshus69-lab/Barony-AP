@@ -1984,7 +1984,40 @@ void onMonsterInit(Entity* my, Stat* myStats)
 	if ( myStats->type == SHOPKEEPER && g_slot.shop_checks > 0
 		&& uncheckedCount(ap_ids::SHOP_OFFSET, g_slot.shop_checks) > 0 )
 	{
-		newItem(AP_ITEM_TYPE, EXCELLENT, 0, 1, AP_SHOP_APPEARANCE, true, &myStats->inventory);
+		Item* apItem = newItem(AP_ITEM_TYPE, EXCELLENT, 0, 1, AP_SHOP_APPEARANCE, true, &myStats->inventory);
+		if ( apItem )
+		{
+			// The shopkeeper has already sorted his stock into the shop's grid; give the Archipelago
+			// item a slot of its own (it used to sit on slot 0,0, hidden under another item).
+			const int maxX = Player::ShopGUI_t::MAX_SHOP_X, maxY = Player::ShopGUI_t::MAX_SHOP_Y;
+			std::set<int> taken;
+			Item* last = nullptr;
+			for ( node_t* n = myStats->inventory.first; n; n = n->next )
+			{
+				Item* it = (Item*)n->element;
+				if ( !it || it == apItem ) { continue; }
+				if ( it->x >= 0 && it->x < maxX && it->y >= 0 && it->y < maxY )
+				{
+					taken.insert(it->x + it->y * 100);
+					if ( !last || it->y > last->y || (it->y == last->y && it->x > last->x) ) { last = it; }
+				}
+			}
+			bool placed = false;
+			for ( int y = 0; y < maxY && !placed; ++y )
+			{
+				for ( int x = 0; x < maxX && !placed; ++x )
+				{
+					if ( !taken.count(x + y * 100) ) { apItem->x = x; apItem->y = y; placed = true; }
+				}
+			}
+			if ( !placed && last )
+			{
+				// A full shop: the item in the last slot (the cheapest) makes room.
+				apItem->x = last->x;
+				apItem->y = last->y;
+				list_RemoveNode(last->node);
+			}
+		}
 	}
 
 	bool isBoss = myStats->type == LICH || myStats->type == DEVIL || myStats->type == LICH_ICE
