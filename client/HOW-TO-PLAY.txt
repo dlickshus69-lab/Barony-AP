@@ -17,7 +17,12 @@ The tracker window:
              once you've seen them, with their own icons. Hover a pile to see what's in it.
              The Floor Key shows only while the Compass or the key warning points at it.
   Right      connection, floor, Floor Key, Minotaur, secret area entrance, counts, deaths, item log.
+  Map view: mouse wheel zooms, drag moves it, F = Follow (keeps you in the middle),
+             R = Fit (whole floor), + / - zoom, arrow keys move. Buttons for these sit on the map.
   Make the window narrow to hide the map.
+  Room link: paste your room's link (archipelago.gg/room/...) in the Server box instead of a
+             port. The tracker finds the port itself, and if the room sleeps and comes back on a
+             new port, it reconnects there by itself.
 
 In game:
   Top left   Archipelago status, and how many Archipelago things are left on this floor

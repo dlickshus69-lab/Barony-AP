@@ -15,6 +15,9 @@ namespace Gdiplus { using std::min; using std::max; } // gdiplus.h needs these w
 #include <algorithm>
 #include <fstream>
 #include <map>
+#include <winhttp.h>
+#include <atomic>
+#include <thread>
 #include <cmath>
 #include <cstring>
 #include <cwctype>
@@ -43,6 +46,14 @@ namespace
 	bool g_formShown = false;
 	int g_formTop = -1;
 	int g_sideX = 0;            // where the right-hand column starts (the map is left of it)
+	std::string g_roomLink;                  // the link typed in the Server box, if any
+	std::string g_pendingName;               // name to connect with once the port is found
+	bool g_pendingAuto = false;              // a lookup started by auto-reconnect
+	std::atomic<bool> g_lookupBusy{ false };
+	std::string g_lookupHost;                // written by the lookup thread before it posts
+	ULONGLONG g_lastLookup = 0;
+	int g_currentPort = 0;
+	const UINT WM_ROOM_PORT = WM_APP + 1;
 	std::wstring g_formNote;     // "enter a port", etc.
 	HBRUSH g_editBrush = nullptr;
 	const int ID_CONNECT = 101;
@@ -174,6 +185,8 @@ namespace
 		if ( !last["host"].empty() ) { host = last["host"]; }
 		if ( !last["port"].empty() ) { port = last["port"]; }
 		if ( !last["slot"].empty() ) { name = last["slot"]; }
+		if ( !last["room"].empty() ) { host = last["room"]; g_roomLink = host; }
+		g_currentPort = atoi(port.c_str());
 		SetWindowTextW(g_editServer, widen(host).c_str());
 		SetWindowTextW(g_editPort, widen(port).c_str());
 		SetWindowTextW(g_editName, widen(name).c_str());
@@ -187,20 +200,140 @@ namespace
 		return true;
 	}
 
+	// ---- Room links: archipelago.gg/room/<id>. Rooms sleep when idle and wake on a new port, so with
+	// the link we look the port up ourselves (and again whenever the connection is lost).
+
+	bool httpGet(const std::wstring& host, const std::wstring& path, std::string& body)
+	{
+		bool ok = false;
+		HINTERNET session = WinHttpOpen(L"BaronyAPTracker/1.0", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+		if ( !session ) { return false; }
+		WinHttpSetTimeouts(session, 5000, 5000, 8000, 8000);
+		HINTERNET conn = WinHttpConnect(session, host.c_str(), INTERNET_DEFAULT_HTTPS_PORT, 0);
+		HINTERNET req = conn ? WinHttpOpenRequest(conn, L"GET", path.c_str(), nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE) : nullptr;
+		if ( req && WinHttpSendRequest(req, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) && WinHttpReceiveResponse(req, nullptr) )
+		{
+			DWORD avail = 0;
+			while ( WinHttpQueryDataAvailable(req, &avail) && avail > 0 )
+			{
+				std::string chunk(avail, '\0');
+				DWORD got = 0;
+				if ( !WinHttpReadData(req, &chunk[0], avail, &got) ) { break; }
+				body.append(chunk.data(), got);
+				if ( body.size() > 2000000 ) { break; }
+			}
+			ok = true;
+		}
+		if ( req ) { WinHttpCloseHandle(req); }
+		if ( conn ) { WinHttpCloseHandle(conn); }
+		WinHttpCloseHandle(session);
+		return ok;
+	}
+
+	// "https://archipelago.gg/room/AbCd123" -> host "archipelago.gg", id "AbCd123".
+	bool parseRoomLink(const std::string& link, std::string& host, std::string& id)
+	{
+		size_t r = link.find("/room/");
+		if ( r == std::string::npos ) { return false; }
+		std::string front = link.substr(0, r);
+		size_t scheme = front.find("://");
+		host = scheme == std::string::npos ? front : front.substr(scheme + 3);
+		id = link.substr(r + 6);
+		size_t end = id.find_first_of("/?#");
+		if ( end != std::string::npos ) { id = id.substr(0, end); }
+		return !host.empty() && !id.empty();
+	}
+
+	// In a thread: wake the room (opening its page starts it), then ask for its current port.
+	void lookUpRoomPort(std::string link)
+	{
+		if ( g_lookupBusy.exchange(true) ) { return; }
+		g_lastLookup = GetTickCount64();
+		std::thread([link]() {
+			std::string host, id;
+			int port = 0;
+			if ( parseRoomLink(link, host, id) )
+			{
+				std::wstring whost = widen(host);
+				std::string page;
+				httpGet(whost, widen("/room/" + id), page);
+				for ( int attempt = 0; attempt < 4 && port <= 0; ++attempt )
+				{
+					Sleep(attempt == 0 ? 1500 : 3000);
+					std::string json;
+					if ( httpGet(whost, widen("/api/room_status/" + id), json) )
+					{
+						size_t k = json.find("\"last_port\"");
+						if ( k != std::string::npos )
+						{
+							size_t colon = json.find(':', k);
+							if ( colon != std::string::npos ) { port = atoi(json.c_str() + colon + 1); }
+						}
+					}
+				}
+			}
+			g_lookupHost = host;
+			g_lookupBusy = false;
+			PostMessageW(g_main, WM_ROOM_PORT, (WPARAM)std::max(0, port), 0);
+		}).detach();
+	}
+
+	// Writes connect.txt for the game (and starts it, from the launcher).
+	void finishConnect(const std::string& host, const std::string& port, const std::string& name)
+	{
+		std::string dir = exeDir() + "\\archipelago";
+		CreateDirectoryA(dir.c_str(), nullptr);
+		{
+			std::ofstream login(dir + "\\tracker_login.txt", std::ios::trunc);
+			login << "host=" << host << "\nport=" << port << "\nslot=" << name << "\n";
+			if ( !g_roomLink.empty() ) { login << "room=" << g_roomLink << "\n"; }
+		}
+		std::ofstream out(dir + "\\connect.txt", std::ios::trunc);
+		out << "server=" << host << ":" << port << "\nslot=" << name << "\n";
+		out.close();
+		g_currentPort = atoi(port.c_str());
+		g_formNote = L"Connecting...";
+		if ( g_launcher )
+		{
+			// Let the waiting barony.exe start the game; this window becomes the tracker.
+			HANDLE ev = OpenEventA(EVENT_MODIFY_STATE, FALSE, "BaronyAPLaunchConnect");
+			if ( ev ) { SetEvent(ev); CloseHandle(ev); }
+			g_launcher = false;
+			g_gameStartedAt = GetTickCount64();
+			ShowWindow(g_btnPlain, SW_HIDE);
+			InvalidateRect(g_btnConnect, nullptr, TRUE);
+		}
+		InvalidateRect(g_main, nullptr, FALSE);
+	}
+
+	void onRoomPort(int port)
+	{
+		bool automatic = g_pendingAuto;
+		g_pendingAuto = false;
+		if ( port <= 0 )
+		{
+			if ( !automatic ) { g_formNote = L"Couldn't find that room's port. Check the link, or type the port."; }
+			InvalidateRect(g_main, nullptr, FALSE);
+			return;
+		}
+		SetWindowTextW(g_editPort, std::to_wstring(port).c_str());
+		if ( automatic && port == g_currentPort ) { return; } // same port: the game keeps retrying on its own
+		std::string name = g_pendingName.empty() ? getText(g_editName) : g_pendingName;
+		finishConnect(g_lookupHost.empty() ? std::string("archipelago.gg") : g_lookupHost, std::to_string(port), name);
+	}
+
 	void doConnect()
 	{
 		std::string host = getText(g_editServer), port = getText(g_editPort), name = getText(g_editName);
 		if ( host.empty() ) { host = "archipelago.gg"; }
-		if ( host.find(':') != std::string::npos && port.empty() )
+		bool roomLink = host.find("/room/") != std::string::npos;
+		g_roomLink = roomLink ? host : std::string();
+		if ( !roomLink && host.find(':') != std::string::npos && port.empty() )
 		{
 			port = host.substr(host.rfind(':') + 1);
 			host = host.substr(0, host.rfind(':'));
 		}
-		if ( port.empty() || port.find_first_not_of("0123456789") != std::string::npos )
-		{
-			g_formNote = L"Type the room's port number (the digits after the colon).";
-		}
-		else if ( name.empty() )
+		if ( name.empty() )
 		{
 			g_formNote = L"Type your name (your slot name from your YAML).";
 		}
@@ -208,30 +341,34 @@ namespace
 		{
 			g_formNote = L"Start Barony first, then press Connect.";
 		}
+		else if ( roomLink )
+		{
+			g_pendingName = name;
+			g_pendingAuto = false;
+			g_formNote = L"Waking the room and finding its port...";
+			lookUpRoomPort(host);
+		}
+		else if ( port.empty() || port.find_first_not_of("0123456789") != std::string::npos )
+		{
+			g_formNote = L"Type the room's port number (the digits after the colon), or paste the room link.";
+		}
 		else
 		{
-			std::string dir = exeDir() + "\\archipelago";
-			CreateDirectoryA(dir.c_str(), nullptr);
-			{
-				std::ofstream login(dir + "\\tracker_login.txt", std::ios::trunc);
-				login << "host=" << host << "\nport=" << port << "\nslot=" << name << "\n";
-			}
-			std::ofstream out(dir + "\\connect.txt", std::ios::trunc);
-			out << "server=" << host << ":" << port << "\nslot=" << name << "\n";
-			out.close();
-			g_formNote = L"Connecting...";
-			if ( g_launcher )
-			{
-				// Let the waiting barony.exe start the game; this window becomes the tracker.
-				HANDLE ev = OpenEventA(EVENT_MODIFY_STATE, FALSE, "BaronyAPLaunchConnect");
-				if ( ev ) { SetEvent(ev); CloseHandle(ev); }
-				g_launcher = false;
-				g_gameStartedAt = GetTickCount64();
-				ShowWindow(g_btnPlain, SW_HIDE);
-				InvalidateRect(g_btnConnect, nullptr, TRUE);
-			}
+			finishConnect(host, port, name);
+			return;
 		}
 		InvalidateRect(g_main, nullptr, FALSE);
+	}
+
+	// Called every second: if the connection has been lost for a while and we know the room's link,
+	// check whether the room came back on a new port, and reconnect there.
+	void autoReconnect(const std::string& status, int lostFor)
+	{
+		if ( status != "lost" || g_roomLink.empty() || lostFor < 10 || g_lookupBusy ) { return; }
+		if ( GetTickCount64() - g_lastLookup < 30000 ) { return; }
+		g_pendingAuto = true;
+		g_pendingName = getText(g_editName);
+		lookUpRoomPort(g_roomLink);
 	}
 
 	void playPlain()
@@ -332,6 +469,16 @@ namespace
 	MapState g_map;
 	int g_mapX = 0, g_mapY = 0, g_mapCell = 0;
 	int g_hoverX = -1, g_hoverY = -1, g_mouseX = 0, g_mouseY = 0;
+	// Map view: Fit (the whole floor) or zoomed in; Follow keeps you in the middle.
+	double g_zoom = 1.0;
+	bool g_follow = false;
+	double g_viewX = -1, g_viewY = -1;   // tile at the middle of the map when zoomed and not following
+	bool g_dragging = false;
+	int g_dragX = 0, g_dragY = 0;
+	double g_dragViewX = 0, g_dragViewY = 0;
+	RECT g_mapArea{};                    // where the map itself is drawn
+	RECT g_btnFollow{}, g_btnFit{}, g_btnIn{}, g_btnOut{};
+	std::string g_viewFloor;             // a new floor goes back to Fit
 	std::map<std::string, Gdiplus::Image*> g_icons;
 
 	std::vector<std::string> splitTabs(const std::string& v)
@@ -453,15 +600,59 @@ namespace
 			return;
 		}
 		wchar_t buf[256];
+		if ( g_viewFloor != g_map.floorId ) { g_viewFloor = g_map.floorId; g_zoom = 1.0; g_viewX = g_viewY = -1; }
 		swprintf(buf, 256, L"Floor %d: %s", num("floor"), widen(g_map.name).c_str());
 		text(dc, area.left + 16, top, buf, GOLD, g_bodyFont);
-		top += 36;
+
+		// The view buttons, top right: Follow, Fit, zoom in, zoom out.
+		{
+			auto button = [&](RECT& r, int right, int w, const wchar_t* label, bool on) {
+				r = RECT{ right - w, top, right, top + 30 };
+				fill(dc, r, on ? RGB(90, 70, 30) : RGB(48, 38, 28));
+				HBRUSH b = CreateSolidBrush(on ? GOLD : RGB(110, 95, 75));
+				FrameRect(dc, &r, b);
+				DeleteObject(b);
+				SelectObject(dc, g_bodyFont);
+				SetTextColor(dc, on ? GOLD : TEXT);
+				DrawTextW(dc, label, -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+				return r.left - 6;
+			};
+			int right = area.right - 12;
+			right = button(g_btnOut, right, 34, L"-", false);
+			right = button(g_btnIn, right, 34, L"+", false);
+			right = button(g_btnFit, right, 56, L"Fit", g_zoom <= 1.0 && !g_follow);
+			button(g_btnFollow, right, 86, L"Follow", g_follow);
+		}
+		top += 38;
 		int legendH = 30;
 		int availW = area.right - area.left - 24, availH = area.bottom - top - legendH - 12;
-		int cell = std::max(2, std::min(availW / g_map.w, availH / g_map.h));
+		int fitCell = std::max(2, std::min(availW / g_map.w, availH / g_map.h));
+		int cell = std::max(2, (int)(fitCell * g_zoom + 0.5));
 		int mw = cell * g_map.w, mh = cell * g_map.h;
-		int mx = area.left + 12 + (availW - mw) / 2, my = top + std::max(0, (availH - mh) / 2);
+		int boxX = area.left + 12, boxY = top;
+		int mx, my;
+		if ( g_zoom <= 1.0 && !g_follow )
+		{
+			mx = boxX + (availW - mw) / 2;
+			my = boxY + std::max(0, (availH - mh) / 2);
+		}
+		else
+		{
+			// Zoomed in: the middle of the view is you (Follow) or wherever you dragged it.
+			if ( g_follow && g_map.hasPlayer ) { g_viewX = g_map.px; g_viewY = g_map.py; }
+			if ( g_viewX < 0 ) { g_viewX = g_map.hasPlayer ? g_map.px : g_map.w / 2.0; g_viewY = g_map.hasPlayer ? g_map.py : g_map.h / 2.0; }
+			g_viewX = std::min((double)g_map.w, std::max(0.0, g_viewX));
+			g_viewY = std::min((double)g_map.h, std::max(0.0, g_viewY));
+			mx = boxX + availW / 2 - (int)(g_viewX * cell);
+			my = boxY + availH / 2 - (int)(g_viewY * cell);
+		}
 		g_mapX = mx; g_mapY = my; g_mapCell = cell;
+		g_mapArea = RECT{ boxX, boxY, boxX + availW, boxY + availH };
+		{
+			RECT inner = g_mapArea;
+			fill(dc, inner, RGB(0, 24, 24));
+		}
+		IntersectClipRect(dc, g_mapArea.left, g_mapArea.top, g_mapArea.right, g_mapArea.bottom);
 
 		// The layout: one pixel per tile, stretched (Barony's own map colors).
 		BITMAPINFO bi{};
@@ -491,10 +682,11 @@ namespace
 		StretchDIBits(dc, mx, my, mw, mh, 0, 0, g_map.w, g_map.h, px.data(), &bi, DIB_RGB_COLORS, SRCCOPY);
 
 		Gdiplus::Graphics g(dc);
+		g.SetClip(Gdiplus::Rect(g_mapArea.left, g_mapArea.top, g_mapArea.right - g_mapArea.left, g_mapArea.bottom - g_mapArea.top));
 		g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
 		g.SetInterpolationMode(Gdiplus::InterpolationModeNearestNeighbor);
 		g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
-		float icon = (float)std::min(28, std::max(14, cell * 3 / 2));
+		float icon = (float)std::min(40, std::max(14, cell * 3 / 2));
 		auto sx = [&](double tx) { return (float)(mx + tx * cell); };
 		auto sy = [&](double ty) { return (float)(my + ty * cell); };
 		auto tileCenterX = [&](int tx) { return (float)(mx + tx * cell + cell / 2.0); };
@@ -605,9 +797,11 @@ namespace
 		}
 
 		g.Flush(Gdiplus::FlushIntentionSync);
+		g.ResetClip();
+		SelectClipRgn(dc, nullptr);
 		// Legend under the map.
 		int ly = area.bottom - legendH - 4;
-		text(dc, area.left + 16, ly, L"Green: Archipelago   Diamond: green enemy   Hover a pile to see it", DIM, g_bodyFont);
+		text(dc, area.left + 16, ly, L"Wheel: zoom   Drag: move   F: follow   R: fit   Hover a pile to see it", DIM, g_bodyFont);
 
 		// Hovering a pile: what's in it.
 		const MapPile* hp = pileAt(g_hoverX, g_hoverY);
@@ -673,7 +867,14 @@ namespace
 				c = GOLD;
 			}
 			else if ( status == "refused" ) { line = L"The server refused that name. Check it and connect again."; c = BAD; }
-			else if ( status == "lost" ) { line = L"Lost the connection. Check the port and connect again."; c = BAD; }
+			else if ( status == "lost" )
+			{
+				wchar_t lb[160];
+				swprintf(lb, 160, g_roomLink.empty() ? L"Connection lost. Reconnecting... (%ds) If the room restarted, type its new port."
+					: L"Connection lost. Reconnecting... (%ds) Checking the room for a new port.", num("lostfor"));
+				line = lb;
+				c = BAD;
+			}
 			else { line = L"Connect to your Archipelago room:"; }
 			RECT tr{ 14, y, rc.right - 14, y + 60 };
 			SelectObject(dc, g_bodyFont);
@@ -897,6 +1098,30 @@ namespace
 		EndPaint(hwnd, &ps);
 	}
 
+	void startZoomedView()
+	{
+		if ( g_viewX < 0 ) { g_viewX = g_map.hasPlayer ? g_map.px : g_map.w / 2.0; g_viewY = g_map.hasPlayer ? g_map.py : g_map.h / 2.0; }
+	}
+	void zoomBy(double f)
+	{
+		if ( g_zoom <= 1.0 && f > 1.0 ) { startZoomedView(); }
+		g_zoom = std::min(8.0, std::max(1.0, g_zoom * f));
+		if ( g_zoom <= 1.0 && !g_follow ) { g_viewX = g_viewY = -1; }
+	}
+	void toggleFollow()
+	{
+		g_follow = !g_follow;
+		if ( g_follow && g_zoom < 2.0 ) { g_zoom = 2.0; }
+	}
+	void fitView() { g_zoom = 1.0; g_follow = false; g_viewX = g_viewY = -1; }
+	void panBy(double dx, double dy)
+	{
+		if ( g_zoom <= 1.0 ) { zoomBy(2.0); }
+		g_follow = false;
+		startZoomedView();
+		g_viewX += dx; g_viewY += dy;
+	}
+
 	LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 	{
 		switch ( msg )
@@ -904,11 +1129,25 @@ namespace
 			case WM_TIMER:
 				readState();
 				readMap();
+				if ( gameRunning() && num("connected") == 0 ) { autoReconnect(g_state.values["status"], num("lostfor")); }
 				InvalidateRect(hwnd, nullptr, FALSE);
 				return 0;
 			case WM_KEYDOWN:
 				if ( wp == VK_TAB ) { g_showAll = !g_showAll; InvalidateRect(hwnd, nullptr, FALSE); }
 				if ( wp == 'L' || wp == VK_F4 ) { g_lootShort = !g_lootShort; InvalidateRect(hwnd, nullptr, FALSE); }
+				// Map view: F follow, R fit, + / - zoom, arrows move.
+				if ( wp == 'F' ) { toggleFollow(); }
+				else if ( wp == 'R' || wp == VK_HOME ) { fitView(); }
+				else if ( wp == VK_ADD || wp == VK_OEM_PLUS ) { zoomBy(1.25); }
+				else if ( wp == VK_SUBTRACT || wp == VK_OEM_MINUS ) { zoomBy(0.8); }
+				else if ( wp == VK_LEFT ) { panBy(-3, 0); }
+				else if ( wp == VK_RIGHT ) { panBy(3, 0); }
+				else if ( wp == VK_UP ) { panBy(0, -3); }
+				else if ( wp == VK_DOWN ) { panBy(0, 3); }
+				InvalidateRect(hwnd, nullptr, FALSE);
+				return 0;
+			case WM_ROOM_PORT:
+				onRoomPort((int)wp);
 				return 0;
 			case WM_COMMAND:
 				if ( LOWORD(wp) == ID_CONNECT ) { doConnect(); }
@@ -939,9 +1178,45 @@ namespace
 				g_formTop = -1;
 				InvalidateRect(hwnd, nullptr, FALSE);
 				return 0;
+			case WM_MOUSEWHEEL:
+			{
+				POINT sp{ (short)LOWORD(lp), (short)HIWORD(lp) };
+				ScreenToClient(hwnd, &sp);
+				if ( g_mapCell > 0 && PtInRect(&g_mapArea, sp) )
+				{
+					zoomBy((short)HIWORD(wp) > 0 ? 1.25 : 0.8);
+					InvalidateRect(hwnd, nullptr, FALSE);
+				}
+				return 0;
+			}
+			case WM_LBUTTONUP:
+				if ( g_dragging ) { g_dragging = false; ReleaseCapture(); }
+				return 0;
 			case WM_LBUTTONDOWN:
 			{
 				SetFocus(hwnd);
+				{
+					POINT cp{ (short)LOWORD(lp), (short)HIWORD(lp) };
+					if ( g_mapCell > 0 )
+					{
+						if ( PtInRect(&g_btnFollow, cp) ) { toggleFollow(); InvalidateRect(hwnd, nullptr, FALSE); return 0; }
+						if ( PtInRect(&g_btnFit, cp) ) { fitView(); InvalidateRect(hwnd, nullptr, FALSE); return 0; }
+						if ( PtInRect(&g_btnIn, cp) ) { zoomBy(1.25); InvalidateRect(hwnd, nullptr, FALSE); return 0; }
+						if ( PtInRect(&g_btnOut, cp) ) { zoomBy(0.8); InvalidateRect(hwnd, nullptr, FALSE); return 0; }
+						if ( PtInRect(&g_mapArea, cp) && (g_zoom > 1.0 || g_follow) )
+						{
+							// Drag to move the zoomed-in map.
+							startZoomedView();
+							g_follow = false;
+							g_dragging = true;
+							g_dragX = cp.x; g_dragY = cp.y;
+							g_dragViewX = g_viewX; g_dragViewY = g_viewY;
+							SetCapture(hwnd);
+							InvalidateRect(hwnd, nullptr, FALSE);
+							return 0;
+						}
+					}
+				}
 				POINT pt{ (short)LOWORD(lp) - g_sideX, (short)HIWORD(lp) };
 				if ( PtInRect(&g_lootBox, pt) ) { g_lootShort = !g_lootShort; InvalidateRect(hwnd, nullptr, FALSE); }
 				return 0;
@@ -949,8 +1224,16 @@ namespace
 			case WM_MOUSEMOVE:
 			{
 				int mx = (short)LOWORD(lp), my = (short)HIWORD(lp);
+				if ( g_dragging && g_mapCell > 0 )
+				{
+					g_viewX = g_dragViewX - (double)(mx - g_dragX) / g_mapCell;
+					g_viewY = g_dragViewY - (double)(my - g_dragY) / g_mapCell;
+					InvalidateRect(hwnd, nullptr, FALSE);
+					return 0;
+				}
 				int tx = -1, ty = -1;
-				if ( g_mapCell > 0 && mx >= g_mapX && my >= g_mapY )
+				POINT mp{ mx, my };
+				if ( g_mapCell > 0 && PtInRect(&g_mapArea, mp) && mx >= g_mapX && my >= g_mapY )
 				{
 					tx = (mx - g_mapX) / g_mapCell;
 					ty = (my - g_mapY) / g_mapCell;

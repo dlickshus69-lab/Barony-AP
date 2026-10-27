@@ -150,6 +150,7 @@ namespace
 	std::mutex g_netMutex;
 	std::vector<int64_t> g_inbox;              // received items not yet handled
 	std::vector<std::string> g_deathSources;   // Death Link senders not yet counted
+	std::vector<std::string> g_deathTexts;     // "Herx died" lines for the logs, not yet shown
 	bool g_inboxClearRequested = false;
 	std::set<int64_t> g_serverChecked;         // locations the server says are checked
 	SlotOptions g_slotIncoming;
@@ -160,6 +161,7 @@ namespace
 	bool g_started = false;                    // AP_Start has been called
 	bool g_ready = false;                      // authenticated, slot data + save loaded
 	bool g_triedAutoConnect = false;
+	Uint32 g_lostSince = 0;      // ticks when the connection dropped (0 = connected)
 	bool g_apOff = false;        // "Play without Archipelago" in the launcher (or barony.exe -ap-off)
 	bool g_viaLauncher = false;  // started from the tracker's launcher: it's already open, connect.txt waiting
 	std::string g_server, g_slotName, g_password;
@@ -181,6 +183,8 @@ namespace
 	int g_restartApBudget = 0;     // on a restarted floor, how many may still appear
 	bool g_floorIsRestart = false; // the current floor is a restart
 	bool g_floorReady = false;     // onNewFloor finished; the next generation starts a new count
+	int g_floorApUnfound = 0;      // Archipelago items still on the current floor (kept up to date)
+	int g_carryPickups = 0;        // left behind on earlier floors: added to the next floor that gets pickups
 
 	bool g_compassGivePending = false; // a new run: hand over the compass once the character is ready
 	int g_secretExitThisFloor = 0; // set by generateDungeon, used once in onNewFloor
@@ -282,7 +286,7 @@ namespace
 	bool isItemMessage(const std::string& t)
 	{
 		static const char* const keys[] = { "Received", "Found an Archipelago", "Trap", " sent to ", " found their ",
-			"Marked enemy", "Stair Key", "Extra Life", "Lives:" };
+			"Marked enemy", "Stair Key", "Extra Life", "Lives:", " died", "lose a life" };
 		for ( const char* k : keys ) { if ( t.find(k) != std::string::npos ) { return true; } }
 		return false;
 	}
@@ -419,12 +423,14 @@ namespace
 
 	void pullDeathSources()
 	{
-		std::vector<std::string> sources;
+		std::vector<std::string> sources, texts;
 		{
 			std::lock_guard<std::mutex> lock(g_netMutex);
 			sources.swap(g_deathSources);
+			texts.swap(g_deathTexts);
 		}
 		for ( auto& src : sources ) { recordDeath(src); }
+		for ( auto& t : texts ) { say(COLOR_TRAP, "%s", t.c_str()); }
 	}
 
 	std::string sanitize(std::string s)
@@ -486,10 +492,14 @@ namespace
 			g_serverChecked.insert(loc);
 		});
 		AP_SetDeathLinkSupported(true);
-		AP_SetDeathLinkRecvCallback([](std::string source, std::string) {
+		AP_SetDeathLinkRecvCallback([](std::string source, std::string cause) {
 			{
 				std::lock_guard<std::mutex> lock(g_netMutex);
 				g_deathSources.push_back(source);
+				// The log shows who died (and how, when their game says): "Herx died: fell in lava".
+				std::string line = source.empty() ? std::string("Someone died") : source + " died";
+				if ( !cause.empty() && cause != source ) { line += ": " + cause; }
+				g_deathTexts.push_back(line);
 			}
 			g_deathLinkIn = true;
 		});
@@ -930,6 +940,8 @@ namespace
 		{
 			say(COLOR_AP, "New run. Lives: %d", g_save.livesLeft);
 		}
+		g_carryPickups = 0;
+		g_floorApUnfound = 0;
 		writeSave();
 	}
 
@@ -1738,9 +1750,11 @@ namespace
 		{
 			if ( !strncmp(map.name, name, strlen(name)) ) { return; }
 		}
-		int toPlace = std::min(g_slot.pickups_per_floor,
+		int carry = g_floorIsRestart ? 0 : g_carryPickups;
+		int toPlace = std::min(g_slot.pickups_per_floor + carry,
 			uncheckedCount(ap_ids::PICKUP_OFFSET, g_slot.archipelago_pickups) - apItemsLyingAround());
 		if ( g_floorIsRestart ) { toPlace = std::min(toPlace, g_restartApBudget - g_attemptApMade); }
+		if ( !g_floorIsRestart ) { g_carryPickups = 0; } // this floor took them (or none are left to place)
 		for ( int i = 0; i < toPlace; ++i )
 		{
 			int x, y;
@@ -1768,6 +1782,7 @@ namespace
 		if ( toPlace > 0 )
 		{
 			say(COLOR_AP, "%d Archipelago item%s on this floor.", toPlace, toPlace == 1 ? " lies" : "s lie");
+			if ( carry > 0 ) { say(COLOR_AP, "(%d of them you left behind on an earlier floor.)", std::min(carry, toPlace)); }
 		}
 		else if ( g_floorIsRestart && g_floorApTotal > 0 && g_restartApBudget <= 0 )
 		{
@@ -2167,6 +2182,13 @@ namespace
 		g_floorIsRestart = restarted;
 		if ( !restarted )
 		{
+			// Archipelago items left on the floor you just left move to the next one, so none are lost.
+			if ( g_floorApUnfound > 0 )
+			{
+				g_carryPickups += g_floorApUnfound;
+				printlog("[Archipelago] %d Archipelago item(s) left behind; they move to the next floor.", g_floorApUnfound);
+			}
+			g_floorApUnfound = 0;
 			g_floorApTotal = g_attemptApMade; // chests already made theirs during generation
 			g_floorApFound = 0;
 		}
@@ -2232,12 +2254,12 @@ namespace
 		{
 			--g_save.livesLeft;
 			applyDeathPenalty(stats[p]);
-			say(COLOR_TRAP, "Death Link! Someone else died... you lose a life (%d left).", g_save.livesLeft);
+			say(COLOR_TRAP, "You lose a life (%d left).", g_save.livesLeft);
 			printlog("[Archipelago] Death Link: lost a life. Lives left: %d", g_save.livesLeft);
 			writeSave();
 			return;
 		}
-		say(COLOR_TRAP, "Death Link! Someone else died...");
+		say(COLOR_TRAP, "...and they take you with them.");
 		g_dyingFromDeathLink = true;
 		stats[p]->HP = 0;
 	}
@@ -2370,7 +2392,9 @@ namespace
 		std::ostringstream out;
 		bool authed = AP_GetConnectionStatus() == AP_ConnectionStatus::Authenticated;
 		out << "connected=" << (authed ? 1 : 0) << "\n";
+		if ( authed ) { g_lostSince = 0; }
 		out << "status=" << (authed ? "connected" : "lost") << "\nserver=" << g_server << "\ngame=1\n";
+		out << "lostfor=" << (g_lostSince ? (ticks - g_lostSince) / TICKS_PER_SECOND : 0) << "\n";
 		out << "slot=" << g_slotName << "\n";
 		out << "ingame=" << (inGame() ? 1 : 0) << "\n";
 		out << "floor=" << currentlevel << "\n";
@@ -2693,6 +2717,8 @@ void tick()
 
 	if ( AP_GetConnectionStatus() == AP_ConnectionStatus::Disconnected )
 	{
+		if ( g_lostSince == 0 ) { g_lostSince = ticks ? ticks : 1; }
+		if ( ticks % TICKS_PER_SECOND == 0 ) { writeTrackerFile(); } // the tracker shows "Reconnecting..."
 		return; // APCpp reconnects by itself; items wait in the inbox
 	}
 
@@ -2702,6 +2728,7 @@ void tick()
 	if ( keystatus[SDLK_F3] ) { keystatus[SDLK_F3] = 0; g_logPanel = g_logPanel == 3 ? 0 : 3; }
 	if ( keystatus[SDLK_F4] ) { keystatus[SDLK_F4] = 0; ++g_lootToggles; } // tracker: full or short loot list
 	pullDeathSources();
+	if ( g_floorReady && inGame() ) { g_floorApUnfound = std::max(0, g_floorApTotal - g_floorApFound); }
 	if ( ticks % TICKS_PER_SECOND == 0 ) { writeTrackerFile(); writeTrackerMap(); }
 	if ( !inGame() )
 	{
@@ -3078,6 +3105,7 @@ bool tryConsumeLife(int player)
 	{
 		AP_DeathLinkSend("lost a life in the dungeon");
 		recordDeath(g_slotName);
+		addLog("You died (" + std::to_string(g_save.livesLeft) + (g_save.livesLeft == 1 ? " life" : " lives") + " left)", COLOR_TRAP);
 	}
 
 	if ( g_slot.death_items == 1 ) { countTakenLoot(); }
@@ -3113,6 +3141,7 @@ void onPlayerDied(int player)
 	{
 		AP_DeathLinkSend("died in the dungeon");
 		recordDeath(g_slotName);
+		addLog("You died", COLOR_TRAP);
 	}
 }
 
