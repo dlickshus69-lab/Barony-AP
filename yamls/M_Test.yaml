@@ -30,6 +30,7 @@ Barony:
   floor_shuffle: full
   layout_seed: locked
   enemy_randomizer: off
+  enemy_randomizer_secret_areas: false
   enemy_pool: near_depth
   enemy_seed: locked
   music_shuffle: off

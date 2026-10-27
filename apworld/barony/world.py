@@ -288,6 +288,7 @@ class BaronyWorld(World):
             "floor_keys": int(bool(o.floor_keys)),
             "key_compass_time": o.key_compass_time.value,
             "skill_checks": o.skill_checks.value,
+            "enemy_randomizer_secret": int(bool(o.enemy_randomizer_secret_areas)),
             "skill_check_max_rank": o.skill_check_max_rank.value,
             "floor_shuffle": o.floor_shuffle.value,
             "floor_shuffle_seed": self.floor_shuffle_seed,

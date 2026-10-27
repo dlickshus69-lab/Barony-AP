@@ -210,16 +210,24 @@ class EnemyRandomizer(Choice):
     spiders, say). A kind can roll itself, so some stay the same.
     Every Spawn: every monster is picked at random.
     See Enemy Seed for whether this changes when you die.
-    Hand-made floors (like the ones between biomes) are randomized too. Bosses, shopkeepers, Minotaurs,
-    people and named characters are never changed, and neither are the starting floor, the town, secret
-    areas or boss arenas. With difficulty scaling on, monsters that normally live deeper are weakened to
-    match your floor.
+    Works on every floor from floor 1, hand-made floors included. Never in the safe places (the starting
+    area, the town and Minetown) or boss arenas, and bosses, what they summon, shopkeepers, Minotaurs
+    and named characters are never changed. Other secret areas: see Enemy Randomizer: Secret Areas.
+    With difficulty scaling on, monsters that normally live deeper are weakened to match your floor.
     """
     display_name = "Enemy Randomizer"
     option_off = 0
     option_per_floor = 1
     option_every_spawn = 2
     default = option_off
+
+
+class EnemyRandomizerSecretAreas(Toggle):
+    """
+    Also randomize the monsters in secret areas (the Gnomish Mines, Sokoban, the Mystic Library and so
+    on). Minetown, the secret shopkeeper town, is never changed.
+    """
+    display_name = "Enemy Randomizer: Secret Areas"
 
 
 class EnemyPool(Choice):
@@ -721,6 +729,7 @@ class BaronyOptions(PerGameCommonOptions):
     floor_shuffle: FloorShuffle
     layout_seed: LayoutSeed
     enemy_randomizer: EnemyRandomizer
+    enemy_randomizer_secret_areas: EnemyRandomizerSecretAreas
     enemy_pool: EnemyPool
     enemy_seed: EnemySeed
     music_shuffle: MusicShuffle
@@ -766,7 +775,7 @@ option_groups = [
         ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),
     OptionGroup("Skills", [SkillChecks, SkillCheckMaxRank]),
-    OptionGroup("Dungeon", [FloorKeys, KeyCompassTime, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemyPool, EnemySeed, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, MinotaurTime, DifficultyScaling, Difficulty]),
+    OptionGroup("Dungeon", [FloorKeys, KeyCompassTime, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemyRandomizerSecretAreas, EnemyPool, EnemySeed, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, MinotaurTime, DifficultyScaling, Difficulty]),
     OptionGroup("Lives & Checkpoints", [Lives, ExtraLivesInPool, CheckpointInterval]),
     OptionGroup("Death Link", [BaronyDeathLink, DeathLinkMode, DeathPenalty, DeathItems, FloorRestart, BossDeath]),
     OptionGroup("Traps", [TrapChance, MinotaurTrapWeight, AmbushTrapWeight, PolymorphTrapWeight, FumbleTrapWeight, BlindnessTrapWeight, TeleportTrapWeight, HungerTrapWeight, DarknessTrapWeight, CurseTrapWeight,

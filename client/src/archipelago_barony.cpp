@@ -82,6 +82,7 @@ namespace
 		int stair_keys = 0;           // old seeds only
 		int floor_keys = 0;           // a key on every floor opens its stairs
 		int key_compass_time = 30;
+		int enemy_randomizer_secret = 0; // Enemy Randomizer also in secret areas (never Minetown)
 		int skill_checks = 0;         // 0 off, 1 any class, 2.. a class (Barony class index + 2)
 		int skill_check_max_rank = 3; // 1 Basic .. 5 Legendary    // Minotaur floors: seconds before he arrives that the key compass turns on
 		int floor_shuffle = 0;        // 0 off, 1 sections, 2 full
@@ -493,6 +494,7 @@ namespace
 		registerSlotInt("floor_keys", &SlotOptions::floor_keys);
 		registerSlotInt("key_compass_time", &SlotOptions::key_compass_time);
 		registerSlotInt("skill_checks", &SlotOptions::skill_checks);
+		registerSlotInt("enemy_randomizer_secret", &SlotOptions::enemy_randomizer_secret);
 		registerSlotInt("skill_check_max_rank", &SlotOptions::skill_check_max_rank);
 		registerSlotInt("floor_shuffle", &SlotOptions::floor_shuffle);
 		registerSlotInt("floor_shuffle_seed", &SlotOptions::floor_shuffle_seed);
@@ -2823,9 +2825,20 @@ void noteSecretExit(int secretLevelExit)
 	g_secretExitThisFloor = secretLevelExit;
 }
 
+// Where the Enemy Randomizer works: every floor from floor 1, but never the safe places (the starting
+// area, the town, Minetown) or boss arenas; other secret areas only with Enemy Randomizer: Secret Areas.
+static bool enemyRandomizerHere()
+{
+	if ( currentlevel < 1 || isSpecialMap() ) { return false; }
+	if ( !strncmp(map.name, "Minetown", 8) ) { return false; }
+	if ( secretlevel && !g_slot.enemy_randomizer_secret ) { return false; }
+	return true;
+}
+
 int randomizeMonster(int monsterType)
 {
 	if ( !g_ready || g_slot.enemy_randomizer == 0 || multiplayer == CLIENT ) { return monsterType; }
+	if ( !enemyRandomizerHere() ) { return monsterType; }
 	if ( monsterType == SHOPKEEPER || monsterType == MINOTAUR || monsterType == LICH || monsterType == DEVIL
 		|| monsterType == LICH_ICE || monsterType == LICH_FIRE || monsterType == NOTHING ) { return monsterType; }
 	auto pool = enemyPool();
@@ -2864,11 +2877,10 @@ int randomizeMonster(int monsterType)
 
 int randomizePlacedMonster(int monsterType, bool named)
 {
-	// Hand-made floors: their own spawn lists and monsters placed in the map editor. Story floors
-	// (secret areas, the town, boss arenas), named characters and people are left alone.
+	// Hand-made floors: their own spawn lists and monsters placed in the map editor. Named characters
+	// are left alone, and so is everywhere enemyRandomizerHere() rules out.
 	if ( !g_ready || g_slot.enemy_randomizer == 0 || multiplayer == CLIENT ) { return monsterType; }
-	if ( named || secretlevel || isSpecialMap() || monsterType == HUMAN ) { return monsterType; }
-	if ( currentlevel < 1 ) { return monsterType; } // the starting floor stays as it is
+	if ( named || !enemyRandomizerHere() ) { return monsterType; }
 	bool isEnemy = false;
 	for ( auto& m : ap_ids::BESTIARY ) { if ( m.monster == monsterType ) { isEnemy = true; break; } }
 	if ( !isEnemy ) { return monsterType; } // bots, decoys and other special things
