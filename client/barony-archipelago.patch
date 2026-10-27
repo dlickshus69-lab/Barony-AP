@@ -1,4 +1,4 @@
-From 61573fbd3f4d9572e1b27b4d695bb18664de72ff Mon Sep 17 00:00:00 2001
+From cc4899d23e8cd8ed5f2fcecbd39907634277a25f Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -11,7 +11,7 @@ Subject: [PATCH] Archipelago client hooks
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 1956 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 2000 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |   93 ++
  src/archipelago_ids.hpp           |   95 ++
  src/engine/audio/sound_game.cpp   |    2 +
@@ -25,7 +25,7 @@ Subject: [PATCH] Archipelago client hooks
  src/maps.cpp                      |    8 +
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   10 +
- 21 files changed, 2266 insertions(+), 2 deletions(-)
+ 21 files changed, 2310 insertions(+), 2 deletions(-)
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
  create mode 100644 src/archipelago_ids.hpp
@@ -220,10 +220,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..a756052
+index 0000000..0a55e10
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,1956 @@
+@@ -0,0 +1,2000 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -1017,6 +1017,43 @@ index 0000000..a756052
 +	std::set<Uint32> g_markedEnemies;
 +	int g_markedThisFloor = 0;
 +
++	// Enemies killed on this floor, across restarts. A restarted floor comes back with that many fewer,
++	// so dying and redoing a floor can't be used to farm XP.
++	int g_floorKills = 0;
++
++	bool isRemovableEnemy(Entity* e)
++	{
++		if ( !e || e->behavior != &actMonster ) { return false; }
++		Stat* st = e->getStats();
++		if ( !st ) { return false; }
++		int t = st->type;
++		if ( t == SHOPKEEPER || t == MINOTAUR || t == LICH || t == DEVIL || t == LICH_ICE || t == LICH_FIRE || t == NOTHING )
++		{
++			return false;
++		}
++		if ( st->leader_uid != 0 || e->monsterAllySummonRank != 0 ) { return false; } // allies and followers
++		return true;
++	}
++
++	void removeKilledEnemies()
++	{
++		if ( g_floorKills <= 0 || !map.creatures ) { return; }
++		std::vector<Entity*> candidates;
++		for ( node_t* node = map.creatures->first; node; node = node->next )
++		{
++			Entity* e = (Entity*)node->element;
++			if ( isRemovableEnemy(e) ) { candidates.push_back(e); }
++		}
++		int removed = 0;
++		for ( Entity* e : candidates )
++		{
++			if ( removed >= g_floorKills ) { break; }
++			list_RemoveNode(e->mynode);
++			++removed;
++		}
++		printlog("[Archipelago] Floor restart: removed %d of %d enemies already killed here.", removed, g_floorKills);
++	}
++
 +	void sendKillChecks()
 +	{
 +		if ( g_slot.enemy_sanity != 1 ) { return; }
@@ -1396,7 +1433,10 @@ index 0000000..a756052
 +
 +	void onNewFloor()
 +	{
++		bool restarted = g_restartPending;
 +		endDeathScreen();
++		if ( restarted ) { removeKilledEnemies(); }
++		else { g_floorKills = 0; }
 +		g_markedEnemies.clear();
 +		g_markedThisFloor = 0;
 +		sendFloorChecks();
@@ -1728,6 +1768,10 @@ index 0000000..a756052
 +	if ( type == SHOPKEEPER ) { return; }
 +
 +	++g_save.totalKills;
++	if ( type != MINOTAUR && type != LICH && type != DEVIL && type != LICH_ICE && type != LICH_FIRE )
++	{
++		++g_floorKills;
++	}
 +	sendKillChecks();
 +	if ( g_markedEnemies.erase(my->getUID()) )
 +	{
@@ -2143,9 +2187,9 @@ index 0000000..a756052
 +	bool connecting = !g_ready && AP_GetConnectionStatus() != AP_ConnectionStatus::ConnectionRefused;
 +	const char* label = connected ? "Archipelago Connected" : connecting ? "Archipelago Connecting..." : "Archipelago Disconnected";
 +	Uint32 color = connected ? makeColorRGB(120, 230, 120) : connecting ? makeColorRGB(240, 210, 90) : makeColorRGB(240, 90, 80);
-+	drawImage("images/ui/Archipelago/AP_Logo.png", 8, 6, 24, 24,
++	drawImage("*images/ui/Archipelago/AP_Logo.png", 8, 6, 24, 24,
 +		connected ? 0xFFFFFFFF : makeColor(255, 255, 255, 110));
-+	drawText(label, HUD_FONT, color, 38, 10);
++	drawText(label, BIG_FONT, color, 38, 10);
 +
 +	// Top right: lives.
 +	if ( g_ready && inGame() && (g_slot.lives > 0 || g_save.livesLeft > 0) )

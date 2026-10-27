@@ -791,6 +791,43 @@ namespace
 	std::set<Uint32> g_markedEnemies;
 	int g_markedThisFloor = 0;
 
+	// Enemies killed on this floor, across restarts. A restarted floor comes back with that many fewer,
+	// so dying and redoing a floor can't be used to farm XP.
+	int g_floorKills = 0;
+
+	bool isRemovableEnemy(Entity* e)
+	{
+		if ( !e || e->behavior != &actMonster ) { return false; }
+		Stat* st = e->getStats();
+		if ( !st ) { return false; }
+		int t = st->type;
+		if ( t == SHOPKEEPER || t == MINOTAUR || t == LICH || t == DEVIL || t == LICH_ICE || t == LICH_FIRE || t == NOTHING )
+		{
+			return false;
+		}
+		if ( st->leader_uid != 0 || e->monsterAllySummonRank != 0 ) { return false; } // allies and followers
+		return true;
+	}
+
+	void removeKilledEnemies()
+	{
+		if ( g_floorKills <= 0 || !map.creatures ) { return; }
+		std::vector<Entity*> candidates;
+		for ( node_t* node = map.creatures->first; node; node = node->next )
+		{
+			Entity* e = (Entity*)node->element;
+			if ( isRemovableEnemy(e) ) { candidates.push_back(e); }
+		}
+		int removed = 0;
+		for ( Entity* e : candidates )
+		{
+			if ( removed >= g_floorKills ) { break; }
+			list_RemoveNode(e->mynode);
+			++removed;
+		}
+		printlog("[Archipelago] Floor restart: removed %d of %d enemies already killed here.", removed, g_floorKills);
+	}
+
 	void sendKillChecks()
 	{
 		if ( g_slot.enemy_sanity != 1 ) { return; }
@@ -1170,7 +1207,10 @@ namespace
 
 	void onNewFloor()
 	{
+		bool restarted = g_restartPending;
 		endDeathScreen();
+		if ( restarted ) { removeKilledEnemies(); }
+		else { g_floorKills = 0; }
 		g_markedEnemies.clear();
 		g_markedThisFloor = 0;
 		sendFloorChecks();
@@ -1502,6 +1542,10 @@ void onMonsterDeath(Entity* my, Stat* myStats)
 	if ( type == SHOPKEEPER ) { return; }
 
 	++g_save.totalKills;
+	if ( type != MINOTAUR && type != LICH && type != DEVIL && type != LICH_ICE && type != LICH_FIRE )
+	{
+		++g_floorKills;
+	}
 	sendKillChecks();
 	if ( g_markedEnemies.erase(my->getUID()) )
 	{
@@ -1917,9 +1961,9 @@ void drawHud()
 	bool connecting = !g_ready && AP_GetConnectionStatus() != AP_ConnectionStatus::ConnectionRefused;
 	const char* label = connected ? "Archipelago Connected" : connecting ? "Archipelago Connecting..." : "Archipelago Disconnected";
 	Uint32 color = connected ? makeColorRGB(120, 230, 120) : connecting ? makeColorRGB(240, 210, 90) : makeColorRGB(240, 90, 80);
-	drawImage("images/ui/Archipelago/AP_Logo.png", 8, 6, 24, 24,
+	drawImage("*images/ui/Archipelago/AP_Logo.png", 8, 6, 24, 24,
 		connected ? 0xFFFFFFFF : makeColor(255, 255, 255, 110));
-	drawText(label, HUD_FONT, color, 38, 10);
+	drawText(label, BIG_FONT, color, 38, 10);
 
 	// Top right: lives.
 	if ( g_ready && inGame() && (g_slot.lives > 0 || g_save.livesLeft > 0) )
