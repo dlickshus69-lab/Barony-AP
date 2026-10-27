@@ -1221,6 +1221,7 @@ namespace
 	constexpr Uint32 FLOOR_KEY_APPEARANCE = 0x464B4559; // "FKEY"
 	bool g_floorKeyFound = false;
 	bool g_floorNeedsKey = false;
+	std::string g_keyCompass; // on Minotaur floors near the end: "18 tiles NE" (empty otherwise)
 
 	bool isFloorKeyEntity(Entity* e)
 	{
@@ -1322,6 +1323,30 @@ namespace
 		entity->skill[13] = 1;
 		entity->skill[14] = FLOOR_KEY_APPEARANCE;
 		entity->skill[15] = 1;
+	}
+
+	// Key compass: once the Minotaur is 30 seconds away (or here), point at the key.
+	void updateKeyCompass(int minotaurSecs)
+	{
+		g_keyCompass.clear();
+		if ( !g_floorNeedsKey || g_floorKeyFound || !(minotaurSecs == -2 || (minotaurSecs >= 0 && minotaurSecs <= 30)) ) { return; }
+		Entity* pl = players[clientnum] ? players[clientnum]->entity : nullptr;
+		if ( !pl || !map.entities ) { return; }
+		for ( node_t* node = map.entities->first; node; node = node->next )
+		{
+			Entity* e = (Entity*)node->element;
+			if ( !isFloorKeyEntity(e) ) { continue; }
+			double dx = (e->x - pl->x) / 16.0, dy = (e->y - pl->y) / 16.0; // tiles; +y is south on the map
+			int tiles = (int)std::lround(std::sqrt(dx * dx + dy * dy));
+			if ( tiles <= 1 ) { g_keyCompass = "right here"; return; }
+			static const char* const DIRS[] = { "E", "SE", "S", "SW", "W", "NW", "N", "NE" };
+			double ang = std::atan2(dy, dx); // 0 = east, clockwise because +y is south
+			int octant = ((int)std::lround(ang / (PI / 4)) + 8) % 8;
+			char buf[48];
+			snprintf(buf, sizeof(buf), "%d tiles %s", tiles, DIRS[octant]);
+			g_keyCompass = buf;
+			return;
+		}
 	}
 
 	// Picked up? Then the stairs open. Lost (a monster took it, it fell somewhere)? Put out a new one.
@@ -1968,6 +1993,7 @@ namespace
 		out << "deaths_total=" << totalDeaths() << "\n";
 		out << "minotaur=" << g_minotaurSecs << "\n";
 		out << "floorkey=" << (!g_floorNeedsKey ? 2 : g_floorKeyFound ? 1 : 0) << "\n";
+		out << "keycompass=" << g_keyCompass << "\n";
 		{
 			int per = std::max(1, g_slot.kill_check_interval);
 			out << "es_mode=" << g_slot.enemy_sanity << "\nes_left=" << uncheckedCount(ap_ids::KILL_OFFSET, g_slot.kill_checks)
@@ -2143,6 +2169,7 @@ void tick()
 		g_loot = countLoot();
 		updateMinotaurStatus();
 		updateFloorKey();
+		updateKeyCompass(g_minotaurSecs);
 	}
 }
 
@@ -2908,8 +2935,9 @@ void drawHud()
 		}
 		if ( g_floorNeedsKey && !g_floorKeyFound )
 		{
-			drawText("Find the Floor Key", HUD_FONT, makeColorRGB(255, 200, 90), 38, row);
-			row += 18;
+			std::string keyLine = g_keyCompass.empty() ? std::string("Find the Floor Key") : "Floor Key: " + g_keyCompass;
+			drawText(keyLine.c_str(), g_keyCompass.empty() ? HUD_FONT : BIG_FONT, makeColorRGB(255, 200, 90), 38, row);
+			row += g_keyCompass.empty() ? 18 : 22;
 		}
 		// Key hint: only for the first moments of a floor, so the corner stays clean.
 		if ( g_logPanel == 0 && ticks - g_floorStartTicks < (Uint32)(TICKS_PER_SECOND * 12) )

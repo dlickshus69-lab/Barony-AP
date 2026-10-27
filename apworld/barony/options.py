@@ -168,6 +168,8 @@ class FloorKeys(DefaultOnToggle):
     until you find it. It's part of your own game only: it is never an Archipelago item, nobody can send
     it to you, and you never wait on another game for it. The starting floor, secret areas and boss
     floors don't have one. If you die and the floor restarts, a key you already found stays found.
+    On Minotaur floors, once the Minotaur is 30 seconds away (or here), you're shown how far the key is
+    and which way.
     """
     display_name = "Floor Keys"
 

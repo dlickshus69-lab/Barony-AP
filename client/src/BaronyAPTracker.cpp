@@ -192,7 +192,12 @@ namespace
 				text(dc, 14, y, buf, TEXT, g_bodyFont);
 				y += 24;
 				int key = num("floorkey");
-				if ( key == 0 ) { text(dc, 14, y, L"Floor Key: not found yet", GOLD, g_bodyFont); y += 24; }
+				if ( key == 0 )
+				{
+					std::wstring compass = widen(g_state.values["keycompass"]);
+					text(dc, 14, y, compass.empty() ? L"Floor Key: not found yet" : L"Floor Key: " + compass, GOLD, g_bodyFont);
+					y += 24;
+				}
 				else if ( key == 1 ) { text(dc, 14, y, L"Floor Key: found, the stairs are open", GOOD, g_bodyFont); y += 24; }
 				int mino = num("minotaur");
 				if ( mino >= 0 && g_state.values.count("minotaur") )

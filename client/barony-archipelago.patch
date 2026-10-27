@@ -1,18 +1,18 @@
-From a17fe10b1cdca5e30166875bb129d0ffd9e2ba43 Mon Sep 17 00:00:00 2001
+From b3e5723b81cf94e201d1981eff88274dea452e96 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
 
 ---
  CMakeLists.txt                    |   32 +
- src/BaronyAPTracker.cpp           |  407 ++++
+ src/BaronyAPTracker.cpp           |  412 ++++
  src/CMakeLists.txt                |    1 +
  src/actchest.cpp                  |    7 +
  src/actgeneral.cpp                |    2 +
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 3006 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 3034 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |  100 +
  src/archipelago_ids.hpp           |   95 +
  src/engine/audio/sound_game.cpp   |    2 +
@@ -27,7 +27,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   10 +
  src/ui/MainMenu.cpp               |    5 +-
- 23 files changed, 3753 insertions(+), 4 deletions(-)
+ 23 files changed, 3786 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -78,10 +78,10 @@ index 4e9ed8f..c2b0e9a 100644
      # Only for MinGW...
 diff --git a/src/BaronyAPTracker.cpp b/src/BaronyAPTracker.cpp
 new file mode 100644
-index 0000000..8219415
+index 0000000..f180894
 --- /dev/null
 +++ b/src/BaronyAPTracker.cpp
-@@ -0,0 +1,407 @@
+@@ -0,0 +1,412 @@
 +// Barony Archipelago tracker window.
 +//
 +// Barony (the Archipelago build) starts this when it connects, and writes
@@ -276,7 +276,12 @@ index 0000000..8219415
 +				text(dc, 14, y, buf, TEXT, g_bodyFont);
 +				y += 24;
 +				int key = num("floorkey");
-+				if ( key == 0 ) { text(dc, 14, y, L"Floor Key: not found yet", GOLD, g_bodyFont); y += 24; }
++				if ( key == 0 )
++				{
++					std::wstring compass = widen(g_state.values["keycompass"]);
++					text(dc, 14, y, compass.empty() ? L"Floor Key: not found yet" : L"Floor Key: " + compass, GOLD, g_bodyFont);
++					y += 24;
++				}
 +				else if ( key == 1 ) { text(dc, 14, y, L"Floor Key: found, the stairs are open", GOOD, g_bodyFont); y += 24; }
 +				int mino = num("minotaur");
 +				if ( mino >= 0 && g_state.values.count("minotaur") )
@@ -643,10 +648,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..515ad49
+index 0000000..3ef2db8
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,3006 @@
+@@ -0,0 +1,3034 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -1870,6 +1875,7 @@ index 0000000..515ad49
 +	constexpr Uint32 FLOOR_KEY_APPEARANCE = 0x464B4559; // "FKEY"
 +	bool g_floorKeyFound = false;
 +	bool g_floorNeedsKey = false;
++	std::string g_keyCompass; // on Minotaur floors near the end: "18 tiles NE" (empty otherwise)
 +
 +	bool isFloorKeyEntity(Entity* e)
 +	{
@@ -1971,6 +1977,30 @@ index 0000000..515ad49
 +		entity->skill[13] = 1;
 +		entity->skill[14] = FLOOR_KEY_APPEARANCE;
 +		entity->skill[15] = 1;
++	}
++
++	// Key compass: once the Minotaur is 30 seconds away (or here), point at the key.
++	void updateKeyCompass(int minotaurSecs)
++	{
++		g_keyCompass.clear();
++		if ( !g_floorNeedsKey || g_floorKeyFound || !(minotaurSecs == -2 || (minotaurSecs >= 0 && minotaurSecs <= 30)) ) { return; }
++		Entity* pl = players[clientnum] ? players[clientnum]->entity : nullptr;
++		if ( !pl || !map.entities ) { return; }
++		for ( node_t* node = map.entities->first; node; node = node->next )
++		{
++			Entity* e = (Entity*)node->element;
++			if ( !isFloorKeyEntity(e) ) { continue; }
++			double dx = (e->x - pl->x) / 16.0, dy = (e->y - pl->y) / 16.0; // tiles; +y is south on the map
++			int tiles = (int)std::lround(std::sqrt(dx * dx + dy * dy));
++			if ( tiles <= 1 ) { g_keyCompass = "right here"; return; }
++			static const char* const DIRS[] = { "E", "SE", "S", "SW", "W", "NW", "N", "NE" };
++			double ang = std::atan2(dy, dx); // 0 = east, clockwise because +y is south
++			int octant = ((int)std::lround(ang / (PI / 4)) + 8) % 8;
++			char buf[48];
++			snprintf(buf, sizeof(buf), "%d tiles %s", tiles, DIRS[octant]);
++			g_keyCompass = buf;
++			return;
++		}
 +	}
 +
 +	// Picked up? Then the stairs open. Lost (a monster took it, it fell somewhere)? Put out a new one.
@@ -2617,6 +2647,7 @@ index 0000000..515ad49
 +		out << "deaths_total=" << totalDeaths() << "\n";
 +		out << "minotaur=" << g_minotaurSecs << "\n";
 +		out << "floorkey=" << (!g_floorNeedsKey ? 2 : g_floorKeyFound ? 1 : 0) << "\n";
++		out << "keycompass=" << g_keyCompass << "\n";
 +		{
 +			int per = std::max(1, g_slot.kill_check_interval);
 +			out << "es_mode=" << g_slot.enemy_sanity << "\nes_left=" << uncheckedCount(ap_ids::KILL_OFFSET, g_slot.kill_checks)
@@ -2792,6 +2823,7 @@ index 0000000..515ad49
 +		g_loot = countLoot();
 +		updateMinotaurStatus();
 +		updateFloorKey();
++		updateKeyCompass(g_minotaurSecs);
 +	}
 +}
 +
@@ -3557,8 +3589,9 @@ index 0000000..515ad49
 +		}
 +		if ( g_floorNeedsKey && !g_floorKeyFound )
 +		{
-+			drawText("Find the Floor Key", HUD_FONT, makeColorRGB(255, 200, 90), 38, row);
-+			row += 18;
++			std::string keyLine = g_keyCompass.empty() ? std::string("Find the Floor Key") : "Floor Key: " + g_keyCompass;
++			drawText(keyLine.c_str(), g_keyCompass.empty() ? HUD_FONT : BIG_FONT, makeColorRGB(255, 200, 90), 38, row);
++			row += g_keyCompass.empty() ? 18 : 22;
 +		}
 +		// Key hint: only for the first moments of a floor, so the corner stays clean.
 +		if ( g_logPanel == 0 && ticks - g_floorStartTicks < (Uint32)(TICKS_PER_SECOND * 12) )

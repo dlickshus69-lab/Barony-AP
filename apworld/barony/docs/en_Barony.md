@@ -34,6 +34,9 @@ With Floor Keys on, every floor from floor 1 has a key lying somewhere you can w
 stay locked until you pick it up. It's only part of your own game: never an Archipelago item, so you
 never wait on someone else for it. The starting floor, secret areas and boss floors don't need one.
 
+On a Minotaur floor, once the Minotaur is 30 seconds away (or already there), the screen and the
+tracker point you at the key: "Floor Key: 18 tiles NE" (directions as on the map, north up).
+
 ## How does the Minotaur Trap work?
 
 It starts the normal Minotaur timer on your current floor, with the usual warning. If a Minotaur
