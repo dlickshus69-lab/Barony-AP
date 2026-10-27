@@ -210,15 +210,15 @@ namespace
 				int total = ground + chests + shop + marked;
 				text(dc, 20, y + 8, L"Archipelago on this floor", GOLD, g_bodyFont);
 				swprintf(buf, 256, L"%d", total);
-				text(dc, rc.right - 60, y + 8, buf, total ? GOLD : DIM, g_titleFont);
+				text(dc, rc.right - 60, y + 8, buf, total ? GOOD : DIM, g_titleFont);
 				swprintf(buf, 256, L"On the ground: %d", ground);
-				text(dc, 30, y + 36, buf, ground ? TEXT : DIM, g_bodyFont);
+				text(dc, 30, y + 36, buf, ground ? GOOD : DIM, g_bodyFont);
 				swprintf(buf, 256, L"In chests: %d", chests);
-				text(dc, 30, y + 56, buf, chests ? TEXT : DIM, g_bodyFont);
+				text(dc, 30, y + 56, buf, chests ? GOOD : DIM, g_bodyFont);
 				swprintf(buf, 256, L"In the shop: %d", shop);
-				text(dc, 30, y + 76, buf, shop ? TEXT : DIM, g_bodyFont);
+				text(dc, 30, y + 76, buf, shop ? GOOD : DIM, g_bodyFont);
 				swprintf(buf, 256, L"Green enemies: %d", marked);
-				text(dc, 30, y + 96, buf, marked ? TEXT : DIM, g_bodyFont);
+				text(dc, 30, y + 96, buf, marked ? GOOD : DIM, g_bodyFont);
 				y += 128;
 				swprintf(buf, 256, L"Archipelago pickups still to find: %d", num("pickups_left"));
 				text(dc, 14, y, buf, DIM, g_bodyFont);
@@ -253,23 +253,23 @@ namespace
 				g_lootBox = RECT{ 10, y, rc.right - 10, y + boxH };
 				text(dc, 20, y + 10, g_lootShort ? L"Other loot on this floor  (F4: more)" : L"Other loot on this floor", STEEL, g_bodyFont);
 				swprintf(buf, 256, L"%d", num("loot_total"));
-				text(dc, rc.right - 60, y + 6, buf, num("loot_total") ? STEEL : DIM, g_titleFont);
+				text(dc, rc.right - 60, y + 6, buf, num("loot_total") ? GOOD : DIM, g_titleFont);
 				if ( !g_lootShort )
 				{
 					int colW = (rc.right - 60) / 2;
 					for ( int i = 0; i < 12; ++i )
 					{
 						int cx = 30 + (i % 2) * (colW + 10), cy = y + 40 + (i / 2) * 21;
-						COLORREF c = rows[i].n ? TEXT : DIM;
+						COLORREF c = rows[i].n ? GOOD : DIM;
 						text(dc, cx, cy, rows[i].name, c, g_bodyFont);
 						swprintf(buf, 256, L"%d", rows[i].n);
 						text(dc, cx + colW - 30, cy, buf, c, g_bodyFont);
 					}
 					int ly = y + 40 + 6 * 21 + 6;
 					swprintf(buf, 256, L"Gold piles  %d", num("loot_gold"));
-					text(dc, 30, ly, buf, num("loot_gold") ? TEXT : DIM, g_bodyFont);
+					text(dc, 30, ly, buf, num("loot_gold") ? GOOD : DIM, g_bodyFont);
 					swprintf(buf, 256, L"Chests with loot  %d", num("loot_chests"));
-					text(dc, 30 + colW + 10, ly, buf, num("loot_chests") ? TEXT : DIM, g_bodyFont);
+					text(dc, 30 + colW + 10, ly, buf, num("loot_chests") ? GOOD : DIM, g_bodyFont);
 					text(dc, 30, ly + 22, L"On the floor only; chest contents aren't counted.", DIM, g_bodyFont);
 				}
 				y += boxH + 12;
@@ -364,8 +364,18 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE, LPSTR, int show)
 	g_logo = loadImage("images\\ui\\Archipelago\\AP_Title.png");
 	if ( !g_logo ) { g_logo = loadImage("images\\system\\title.png"); }
 
-	g_titleFont = CreateFontW(26, 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, 0, 0, NONANTIALIASED_QUALITY, 0, L"Consolas");
-	g_bodyFont = CreateFontW(17, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Consolas");
+	// Barony's own UI font (Pixel Maz), from the game's fonts folder; Consolas if it can't be loaded.
+	std::string fontPath = exeDir() + "\\fonts\\pixel_maz.ttf";
+	if ( AddFontResourceExA(fontPath.c_str(), FR_PRIVATE, nullptr) > 0 )
+	{
+		g_titleFont = CreateFontW(-44, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, NONANTIALIASED_QUALITY, 0, L"Pixel Maz");
+		g_bodyFont = CreateFontW(-32, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, NONANTIALIASED_QUALITY, 0, L"Pixel Maz");
+	}
+	else
+	{
+		g_titleFont = CreateFontW(26, 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, 0, 0, NONANTIALIASED_QUALITY, 0, L"Consolas");
+		g_bodyFont = CreateFontW(17, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Consolas");
+	}
 
 	WNDCLASSW wc{};
 	wc.lpfnWndProc = wndProc;
