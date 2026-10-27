@@ -16,7 +16,8 @@ The tracker window:
              Archipelago items (green) and green enemies show from the start; other items show
              once you've seen them, with their own icons. Hover a pile to see what's in it.
              The Floor Key shows only while the Compass or the key warning points at it.
-             A gold diamond is a bounty enemy, a red diamond a Champion.
+             A gold diamond is a bounty enemy, a red diamond a Champion, a purple coin a
+             merchant caravan, a grey cross one of your graves.
   Right      connection, playtime (only time in the dungeon counts; it shows how long the
              seed took once you've won), floor, Floor Key, Minotaur, Champion, bounty, lantern, secret area entrance, counts, deaths, and tabs:
              Item log, Full log and Spells (Tab or click to switch). The mouse wheel over this

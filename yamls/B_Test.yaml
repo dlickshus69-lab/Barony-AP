@@ -63,6 +63,8 @@ Barony:
   lives: 5
   extra_lives_in_pool: 2
   checkpoint_interval: every_5_floors
+  death_markers: true
+  death_marker_gold: 20
 
   # Filler
   xp_boost_weight: 30
@@ -102,6 +104,10 @@ Barony:
   bounty_enemies: false
   bounty_chance: 50
   bounty_checks: 5
+  merchant_caravan: false
+  caravan_chance: 25
+  caravan_checks: 5
+  caravan_hints: true
   randomize_loot: same_kind
   music_mods: mixed
 

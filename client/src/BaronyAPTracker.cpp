@@ -477,7 +477,7 @@ namespace
 		std::vector<std::string> rows;
 		bool hasPlayer = false;
 		double px = 0, py = 0, pyaw = 0;
-		std::vector<MapPoint> ap, foes, chests, stairs, secrets, bounties, champions;
+		std::vector<MapPoint> ap, foes, chests, stairs, secrets, bounties, champions, graves, caravans;
 		bool hasKey = false;
 		double kx = 0, ky = 0;
 		bool locked = false;
@@ -537,6 +537,8 @@ namespace
 			else if ( k == "foe" ) { m.foes.push_back({ d(0), d(1), "" }); }
 			else if ( k == "bounty" ) { m.bounties.push_back({ d(0), d(1), "" }); }
 			else if ( k == "champion" ) { m.champions.push_back({ d(0), d(1), "" }); }
+			else if ( k == "grave" ) { m.graves.push_back({ d(0), d(1), "" }); }
+			else if ( k == "caravan" ) { m.caravans.push_back({ d(0), d(1), "" }); }
 			else if ( k == "chest" ) { m.chests.push_back({ d(0), d(1), "" }); }
 			else if ( k == "stairs" ) { m.stairs.push_back({ d(0), d(1), "" }); }
 			else if ( k == "secret" ) { m.secrets.push_back({ d(0), d(1), "" }); }
@@ -800,6 +802,24 @@ namespace
 			g.FillPolygon(&body, pts, 4);
 			g.DrawPolygon(&black, pts, 4);
 		}
+		for ( auto& f : g_map.graves )
+		{
+			// Your grave: a grey cross.
+			float r = icon * 0.4f, cx = sx(f.x), cy = sy(f.y);
+			Gdiplus::Pen edge(Gdiplus::Color(255, 0, 0, 0), 5.0f), grey(Gdiplus::Color(255, 190, 190, 195), 3.0f);
+			g.DrawLine(&edge, cx, cy - r, cx, cy + r);
+			g.DrawLine(&edge, cx - r * 0.6f, cy - r * 0.35f, cx + r * 0.6f, cy - r * 0.35f);
+			g.DrawLine(&grey, cx, cy - r, cx, cy + r);
+			g.DrawLine(&grey, cx - r * 0.6f, cy - r * 0.35f, cx + r * 0.6f, cy - r * 0.35f);
+		}
+		for ( auto& f : g_map.caravans )
+		{
+			// The merchant caravan: a purple coin.
+			float r = icon * 0.45f, cx = sx(f.x), cy = sy(f.y);
+			Gdiplus::SolidBrush body(Gdiplus::Color(255, 180, 120, 255));
+			g.FillEllipse(&body, cx - r, cy - r, r * 2, r * 2);
+			g.DrawEllipse(&black, cx - r, cy - r, r * 2, r * 2);
+		}
 		for ( auto& f : g_map.champions )
 		{
 			// A Champion: a big red diamond.
@@ -844,7 +864,7 @@ namespace
 		SelectClipRgn(dc, nullptr);
 		// Legend under the map.
 		int ly = area.bottom - legendH - 4;
-		text(dc, area.left + 16, ly, L"Wheel: zoom   Drag: move   F: follow   R: fit   Gold diamond: bounty   Red: champion", DIM, g_bodyFont);
+		text(dc, area.left + 16, ly, L"Wheel: zoom   Drag: move   F: follow   R: fit   Gold diamond: bounty   Red: champion   Purple: caravan   Cross: your grave", DIM, g_bodyFont);
 
 		// Hovering a pile: what's in it.
 		const MapPile* hp = pileAt(g_hoverX, g_hoverY);
@@ -1007,6 +1027,16 @@ namespace
 				if ( !g_state.values["champion"].empty() )
 				{
 					text(dc, 14, y, L"Champion: " + widen(g_state.values["champion"]) + L" guards the stairs", BAD, g_bodyFont);
+					y += 24;
+				}
+				if ( num("caravan") )
+				{
+					text(dc, 14, y, L"A merchant caravan is on this floor", SECRET, g_bodyFont);
+					y += 24;
+				}
+				if ( num("graves") > 0 )
+				{
+					text(dc, 14, y, num("graves") == 1 ? L"Your grave is on this floor" : L"Your graves are on this floor", DIM, g_bodyFont);
 					y += 24;
 				}
 				if ( g_state.values.count("lantern") )

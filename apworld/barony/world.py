@@ -204,6 +204,13 @@ class BaronyWorld(World):
             for k in range(1, o.bounty_checks.value + 1):
                 planned.append((data.bounty_location(k), self._floor_needed(-(-k * 100 // chance))))
 
+        if o.merchant_caravan and o.caravan_checks.value > 0:
+            # Caravans stop on some floors (counted across runs), two Archipelago items each: the
+            # k-th one expects about ceil(k / 2) * 100 / chance floors of play.
+            chance = max(5, o.caravan_chance.value)
+            for k in range(1, o.caravan_checks.value + 1):
+                planned.append((data.caravan_location(k), self._floor_needed(-(-((k + 1) // 2) * 100 // chance))))
+
         if o.spellbook_checks:
             for spell in data.SPELLS:
                 if not spell.dlc and spell.depth <= self.goal_floor:
@@ -321,6 +328,17 @@ class BaronyWorld(World):
         self.multiworld.itempool += pool
 
     # ------------------------------------------------------------------ client data
+    def hint_locations(self) -> list:
+        """Caravan Hints: this slot's locations, the ones holding progression first, then useful."""
+        def rank(loc) -> int:
+            item = loc.item
+            if item is None:
+                return 3
+            return 0 if item.advancement else 1 if item.useful else 2
+        locs = [loc for loc in self.multiworld.get_locations(self.player) if loc.address is not None]
+        locs.sort(key=lambda loc: (rank(loc), loc.address))
+        return [loc.address for loc in locs if rank(loc) < 2]
+
     def fill_slot_data(self) -> Mapping[str, Any]:
         o = self.options
         return {
@@ -361,6 +379,13 @@ class BaronyWorld(World):
             "champion_checks": len(self.champion_floors()),
             "progressive_lantern": int(bool(o.progressive_lantern)),
             "lantern_darkness": o.lantern_darkness.value,
+            "death_markers": int(bool(o.death_markers)),
+            "death_marker_gold": o.death_marker_gold.value,
+            "merchant_caravan": int(bool(o.merchant_caravan)),
+            "caravan_chance": o.caravan_chance.value,
+            "caravan_checks": o.caravan_checks.value if o.merchant_caravan else 0,
+            "caravan_hints": int(bool(o.merchant_caravan and o.caravan_hints)),
+            "hint_locations": self.hint_locations() if o.merchant_caravan and o.caravan_hints else [],
             "bounty_enemies": int(bool(o.bounty_enemies)),
             "bounty_chance": o.bounty_chance.value,
             "bounty_checks": o.bounty_checks.value if o.bounty_enemies else 0,

@@ -295,6 +295,14 @@ def bounty_location(k: int) -> str:
     return f"Bounty {k}"
 
 
+CARAVAN_OFFSET = 1400     # + 1..MAX_CARAVAN_CHECKS
+MAX_CARAVAN_CHECKS = 20
+
+
+def caravan_location(k: int) -> str:
+    return f"Caravan Purchase {k}"
+
+
 # Boss, town and Sanctum floors: no Champion there.
 NO_CHAMPION_FLOORS = {20, 24, 25, 35}
 
@@ -330,6 +338,8 @@ for _bk in range(1, MAX_BOUNTY_CHECKS + 1):
     LOCATION_NAME_TO_ID[bounty_location(_bk)] = BASE_ID + BOUNTY_OFFSET + _bk
 for _ck in range(1, MAX_CHAMPION_CHECKS + 1):
     LOCATION_NAME_TO_ID[champion_location(_ck)] = BASE_ID + CHAMPION_OFFSET + _ck
+for _cv in range(1, MAX_CARAVAN_CHECKS + 1):
+    LOCATION_NAME_TO_ID[caravan_location(_cv)] = BASE_ID + CARAVAN_OFFSET + _cv
 
 
 # ---------------------------------------------------------------------------------------

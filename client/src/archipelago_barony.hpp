@@ -85,7 +85,7 @@ namespace AP
 	int apItemModel();                 // model index, or -1 if the model didn't load
 	int floorKeyModel();               // the Floor Key's own model, or -1
 	const char* apItemIconPath();
-	const char* apItemName(bool withArticle);
+	const char* apItemName(const Item* item, bool withArticle);
 	// init.cpp, right after the game's models load: adds the Archipelago model.
 	void loadExtraModels();
 	// ui/MainMenu.cpp: the title image (Barony's logo with the Archipelago logo for the O).

@@ -36,6 +36,17 @@ Progressive Lantern (Extras): the dungeon starts darker (Lantern Darkness sets h
 Progressive Lanterns in the item pool each light it up again, ending brighter than normal. They aren't
 inventory items, so you can't lose or drop them.
 
+Death Markers (Lives & Checkpoints, on by default): where you lose a life or die, a gravestone marks it.
+Back on that floor number (after the floor restarts, or on a later run) your grave is somewhere on the
+floor, usually well away from the start but always somewhere you can walk to. Walk up to it to get back
+some of the gold you had (Death Marker Gold), once per grave. Graves you've seen show as a grey cross on
+the tracker map.
+
+Merchant Caravan (Extras): sometimes a merchant stops on a floor. He sells normal items like any Barony
+shop (prices follow your Trading skill and Charisma), up to two Archipelago items (Caravan Checks), and an
+Archipelago Hint that reveals what's at one of your unchecked locations, the ones that matter first. It
+doesn't use hint points. He's gone once you take the stairs. He shows as a purple coin on the tracker map.
+
 The Hall of Fame (F5 in game, and shown by itself in the starting area) keeps every run on this seed:
 runs and wins, deepest floor, fastest win, fewest lives lost in a win, most kills and gold, and your
 last five runs.

@@ -45,7 +45,9 @@ Floor Keys (or defeat every enemy) open the stairs, with a Compass and a key war
 floors. Lives restart the floor instead of ending the run, with Death Link, death penalties and a
 death counter. Optional: Floor Shuffle, Enemy Randomizer, Randomize Loot, bigger floors, extra
 monsters, Music Shuffle and Workshop music mods, boss and enemy level scaling, Bounty Enemies,
-Champion floors (a tough guard at the stairs), and a 5-second safe window after losing a life.
+Champion floors (a tough guard at the stairs), Death Markers (your grave gives some gold back), a
+Merchant Caravan (a travelling shop with Archipelago items and hints), and a 5-second safe window
+after losing a life.
 
 ## Tracker window
 

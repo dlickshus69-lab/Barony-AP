@@ -17,6 +17,7 @@ constexpr int64_t SPELLBOOK_OFFSET = 1100;
 constexpr int64_t SPELL_ITEM_OFFSET = 100;
 constexpr int64_t BOUNTY_OFFSET = 1200;
 constexpr int64_t CHAMPION_OFFSET = 1300;
+constexpr int64_t CARAVAN_OFFSET = 1400;
 constexpr int MAX_FLOOR = 45;
 constexpr int FLOORS_PER_SECTION = 5;
 

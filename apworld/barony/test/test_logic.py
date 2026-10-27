@@ -239,6 +239,40 @@ class TestNoLantern(BaronyTestBase):
         self.assertNotIn("Progressive Lantern", pool)
 
 
+class TestCaravan(BaronyTestBase):
+    options = {"merchant_caravan": True, "caravan_chance": 50, "caravan_checks": 6, "caravan_hints": True}
+
+    def test_caravan(self) -> None:
+        locs = {loc.name for loc in self.multiworld.get_locations(self.player)}
+        self.assertIn("Caravan Purchase 6", locs)
+        self.assertNotIn("Caravan Purchase 7", locs)
+        from Fill import distribute_items_restrictive
+        distribute_items_restrictive(self.multiworld)
+        sd = self.world.fill_slot_data()
+        self.assertEqual((sd["merchant_caravan"], sd["caravan_checks"], sd["caravan_hints"]), (1, 6, 1))
+        own = {loc.address for loc in self.multiworld.get_locations(self.player)}
+        self.assertTrue(sd["hint_locations"])
+        self.assertTrue(set(sd["hint_locations"]) <= own)
+
+
+class TestCaravanOff(BaronyTestBase):
+    options = {"merchant_caravan": False, "caravan_checks": 6}
+
+    def test_off(self) -> None:
+        locs = {loc.name for loc in self.multiworld.get_locations(self.player)}
+        self.assertNotIn("Caravan Purchase 1", locs)
+        sd = self.world.fill_slot_data()
+        self.assertEqual((sd["caravan_checks"], sd["caravan_hints"], sd["hint_locations"]), (0, 0, []))
+
+
+class TestDeathMarkers(BaronyTestBase):
+    options = {"death_markers": True, "death_marker_gold": 35}
+
+    def test_slot(self) -> None:
+        sd = self.world.fill_slot_data()
+        self.assertEqual((sd["death_markers"], sd["death_marker_gold"]), (1, 35))
+
+
 class TestShortHerx(BaronyTestBase):
     """Dungeon Floors with a normal goal: 8 floors, then Baron Herx."""
     options = {"goal": "herx", "custom_dungeon_length": True, "dungeon_floors": 12, "boss_checks": True}

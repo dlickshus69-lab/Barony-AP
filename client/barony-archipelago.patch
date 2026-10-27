@@ -1,20 +1,20 @@
-From 447d1c4aa355a86d779ceefa2177424061ee7ef9 Mon Sep 17 00:00:00 2001
+From 8793e1924ef00dcb158e171b359c8c6707161550 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
 
 ---
  CMakeLists.txt                    |   32 +
- src/BaronyAPTracker.cpp           | 1532 +++++++++
+ src/BaronyAPTracker.cpp           | 1562 +++++++++
  src/CMakeLists.txt                |    1 +
  src/actchest.cpp                  |    7 +
  src/actgeneral.cpp                |    2 +
  src/actladder.cpp                 |   25 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |   10 +-
- src/archipelago_barony.cpp        | 4855 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 5187 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |  128 +
- src/archipelago_ids.hpp           |  247 ++
+ src/archipelago_ids.hpp           |  248 ++
  src/charclass.cpp                 |    4 +
  src/engine/audio/music.cpp        |    4 +
  src/engine/audio/sound_game.cpp   |    2 +
@@ -31,7 +31,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   20 +
  src/ui/MainMenu.cpp               |    5 +-
- 27 files changed, 7054 insertions(+), 4 deletions(-)
+ 27 files changed, 7417 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -82,10 +82,10 @@ index 4e9ed8f..b417834 100644
      # Only for MinGW...
 diff --git a/src/BaronyAPTracker.cpp b/src/BaronyAPTracker.cpp
 new file mode 100644
-index 0000000..07618f0
+index 0000000..d164eda
 --- /dev/null
 +++ b/src/BaronyAPTracker.cpp
-@@ -0,0 +1,1532 @@
+@@ -0,0 +1,1562 @@
 +// Barony Archipelago tracker window.
 +//
 +// Barony (the Archipelago build) starts this with the game, and writes
@@ -565,7 +565,7 @@ index 0000000..07618f0
 +		std::vector<std::string> rows;
 +		bool hasPlayer = false;
 +		double px = 0, py = 0, pyaw = 0;
-+		std::vector<MapPoint> ap, foes, chests, stairs, secrets, bounties, champions;
++		std::vector<MapPoint> ap, foes, chests, stairs, secrets, bounties, champions, graves, caravans;
 +		bool hasKey = false;
 +		double kx = 0, ky = 0;
 +		bool locked = false;
@@ -625,6 +625,8 @@ index 0000000..07618f0
 +			else if ( k == "foe" ) { m.foes.push_back({ d(0), d(1), "" }); }
 +			else if ( k == "bounty" ) { m.bounties.push_back({ d(0), d(1), "" }); }
 +			else if ( k == "champion" ) { m.champions.push_back({ d(0), d(1), "" }); }
++			else if ( k == "grave" ) { m.graves.push_back({ d(0), d(1), "" }); }
++			else if ( k == "caravan" ) { m.caravans.push_back({ d(0), d(1), "" }); }
 +			else if ( k == "chest" ) { m.chests.push_back({ d(0), d(1), "" }); }
 +			else if ( k == "stairs" ) { m.stairs.push_back({ d(0), d(1), "" }); }
 +			else if ( k == "secret" ) { m.secrets.push_back({ d(0), d(1), "" }); }
@@ -888,6 +890,24 @@ index 0000000..07618f0
 +			g.FillPolygon(&body, pts, 4);
 +			g.DrawPolygon(&black, pts, 4);
 +		}
++		for ( auto& f : g_map.graves )
++		{
++			// Your grave: a grey cross.
++			float r = icon * 0.4f, cx = sx(f.x), cy = sy(f.y);
++			Gdiplus::Pen edge(Gdiplus::Color(255, 0, 0, 0), 5.0f), grey(Gdiplus::Color(255, 190, 190, 195), 3.0f);
++			g.DrawLine(&edge, cx, cy - r, cx, cy + r);
++			g.DrawLine(&edge, cx - r * 0.6f, cy - r * 0.35f, cx + r * 0.6f, cy - r * 0.35f);
++			g.DrawLine(&grey, cx, cy - r, cx, cy + r);
++			g.DrawLine(&grey, cx - r * 0.6f, cy - r * 0.35f, cx + r * 0.6f, cy - r * 0.35f);
++		}
++		for ( auto& f : g_map.caravans )
++		{
++			// The merchant caravan: a purple coin.
++			float r = icon * 0.45f, cx = sx(f.x), cy = sy(f.y);
++			Gdiplus::SolidBrush body(Gdiplus::Color(255, 180, 120, 255));
++			g.FillEllipse(&body, cx - r, cy - r, r * 2, r * 2);
++			g.DrawEllipse(&black, cx - r, cy - r, r * 2, r * 2);
++		}
 +		for ( auto& f : g_map.champions )
 +		{
 +			// A Champion: a big red diamond.
@@ -932,7 +952,7 @@ index 0000000..07618f0
 +		SelectClipRgn(dc, nullptr);
 +		// Legend under the map.
 +		int ly = area.bottom - legendH - 4;
-+		text(dc, area.left + 16, ly, L"Wheel: zoom   Drag: move   F: follow   R: fit   Gold diamond: bounty   Red: champion", DIM, g_bodyFont);
++		text(dc, area.left + 16, ly, L"Wheel: zoom   Drag: move   F: follow   R: fit   Gold diamond: bounty   Red: champion   Purple: caravan   Cross: your grave", DIM, g_bodyFont);
 +
 +		// Hovering a pile: what's in it.
 +		const MapPile* hp = pileAt(g_hoverX, g_hoverY);
@@ -1095,6 +1115,16 @@ index 0000000..07618f0
 +				if ( !g_state.values["champion"].empty() )
 +				{
 +					text(dc, 14, y, L"Champion: " + widen(g_state.values["champion"]) + L" guards the stairs", BAD, g_bodyFont);
++					y += 24;
++				}
++				if ( num("caravan") )
++				{
++					text(dc, 14, y, L"A merchant caravan is on this floor", SECRET, g_bodyFont);
++					y += 24;
++				}
++				if ( num("graves") > 0 )
++				{
++					text(dc, 14, y, num("graves") == 1 ? L"Your grave is on this floor" : L"Your graves are on this floor", DIM, g_bodyFont);
 +					y += 24;
 +				}
 +				if ( g_state.values.count("lantern") )
@@ -1819,10 +1849,10 @@ index 0872ea6..aee34f8 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..75d45d7
+index 0000000..bb41b80
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,4855 @@
+@@ -0,0 +1,5187 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -1885,6 +1915,8 @@ index 0000000..75d45d7
 +	constexpr const char* GAME_NAME = "Barony";
 +	constexpr Uint32 AP_FLOOR_APPEARANCE = 0x41504631; // "APF1": an Archipelago floor pickup
 +	constexpr Uint32 AP_SHOP_APPEARANCE = 0x41505331;  // "APS1": an Archipelago shop item
++	constexpr Uint32 AP_CARAVAN_APPEARANCE = 0x41504331; // "APC1": an Archipelago item sold by a caravan
++	constexpr Uint32 AP_HINT_APPEARANCE = 0x41504831;  // "APH1": an Archipelago Hint sold by a caravan
 +	constexpr ItemType AP_ITEM_TYPE = GEM_LUCK;        // borrowed model until there's a logo model
 +	const Uint32 COLOR_AP = makeColorRGB(255, 166, 77);
 +	const Uint32 COLOR_TRAP = makeColorRGB(255, 90, 90);
@@ -1922,6 +1954,13 @@ index 0000000..75d45d7
 +		int champion_checks = 0;
 +		int progressive_lantern = 0;  // less light, three Progressive Lanterns bring it back and more
 +		int lantern_darkness = 2;
++		int death_markers = 0;        // gravestones where you died give some gold back
++		int death_marker_gold = 20;   // percent of the gold you had
++		int merchant_caravan = 0;     // a travelling shop on some floors
++		int caravan_chance = 25;
++		int caravan_checks = 0;
++		int caravan_hints = 0;
++		std::vector<int64_t> hint_locations; // Caravan Hints: this slot's locations, the ones that matter first
 +		int bounty_enemies = 0;       // a gold-glowing, tougher enemy on some floors
 +		int bounty_chance = 50;       // percent of floors with a bounty
 +		int bounty_checks = 0;        // the first N bounty kills are checks
@@ -1978,6 +2017,9 @@ index 0000000..75d45d7
 +		bool goalSent = false;
 +		long bountyKills = 0;         // bounty enemies defeated (all runs)
 +		long championKills = 0;       // Champions defeated (all runs)
++		struct Grave { int floor; long gold; bool claimed; };
++		std::vector<Grave> graves;    // Death Markers
++		std::set<int64_t> hinted;     // Caravan Hints already bought
 +		// Hall of Fame: this run so far, and every run before ("deepest,kills,livesLost,gold,seconds,result")
 +		bool runActive = false;
 +		int runDeepest = 0, runKills = 0, runLivesLost = 0;
@@ -2098,6 +2140,8 @@ index 0000000..75d45d7
 +	void giveCompassIfMissing();
 +	void launchTracker();
 +	void startRunRecord();
++	void buyHint();
++	void clearFloorUids();
 +	bool g_hofPanel = false;      // Hall of Fame panel (F5)
 +	Uint32 g_hofAutoUntil = 0;    // shown by itself for a while at the start of a run
 +	void placeRushTownExit();
@@ -2232,6 +2276,8 @@ index 0000000..75d45d7
 +		out << "runActive=" << (g_save.runActive ? 1 : 0) << "\nrunDeepest=" << g_save.runDeepest << "\nrunKills=" << g_save.runKills
 +			<< "\nrunLivesLost=" << g_save.runLivesLost << "\nrunGoldMax=" << g_save.runGoldMax << "\nrunStartPlay=" << g_save.runStartPlay << "\n";
 +		for ( auto& r : g_save.runs ) { out << "run:" << r << "\n"; }
++		for ( auto& g : g_save.graves ) { out << "grave:" << g.floor << "," << g.gold << "," << (g.claimed ? 1 : 0) << "\n"; }
++		for ( int64_t h : g_save.hinted ) { out << "hinted:" << h << "\n"; }
 +		out << "playSeconds=" << g_save.playSeconds << "\nfinishSeconds=" << g_save.finishSeconds << "\n";
 +		out << "carryPickups=" << g_carryPickups << "\nfloorUnfound=" << g_floorApUnfound << "\n";
 +		out << "rushSeq=" << g_save.rushSeq << "\nrushPhase=" << g_save.rushPhase << "\nrushLevel=" << g_save.rushLevel
@@ -2249,6 +2295,14 @@ index 0000000..75d45d7
 +		{
 +			if ( !line.empty() && line.back() == '\r' ) { line.pop_back(); }
 +			if ( line.compare(0, 4, "run:") == 0 ) { g_save.runs.push_back(line.substr(4)); continue; } // Hall of Fame
++			if ( line.compare(0, 6, "grave:") == 0 )
++			{
++				SaveData::Grave g{};
++				int claimed = 0;
++				if ( sscanf(line.c_str() + 6, "%d,%ld,%d", &g.floor, &g.gold, &claimed) == 3 ) { g.claimed = claimed != 0; g_save.graves.push_back(g); }
++				continue;
++			}
++			if ( line.compare(0, 7, "hinted:") == 0 ) { g_save.hinted.insert(atoll(line.c_str() + 7)); continue; }
 +			auto eq = line.rfind('=');
 +			if ( eq == std::string::npos ) { continue; }
 +			std::string key = line.substr(0, eq);
@@ -2434,6 +2488,23 @@ index 0000000..75d45d7
 +		registerSlotInt("champion_checks", &SlotOptions::champion_checks);
 +		registerSlotInt("progressive_lantern", &SlotOptions::progressive_lantern);
 +		registerSlotInt("lantern_darkness", &SlotOptions::lantern_darkness);
++		registerSlotInt("death_markers", &SlotOptions::death_markers);
++		registerSlotInt("death_marker_gold", &SlotOptions::death_marker_gold);
++		registerSlotInt("merchant_caravan", &SlotOptions::merchant_caravan);
++		registerSlotInt("caravan_chance", &SlotOptions::caravan_chance);
++		registerSlotInt("caravan_checks", &SlotOptions::caravan_checks);
++		registerSlotInt("caravan_hints", &SlotOptions::caravan_hints);
++		AP_RegisterSlotDataRawCallback("hint_locations", [](std::string raw) {
++			std::vector<int64_t> ids;
++			const char* c = raw.c_str();
++			while ( *c )
++			{
++				if ( isdigit((unsigned char)*c) ) { char* end; ids.push_back(strtoll(c, &end, 10)); c = end; }
++				else { ++c; }
++			}
++			std::lock_guard<std::mutex> lock(g_netMutex);
++			g_slotIncoming.hint_locations = ids;
++		});
 +		registerSlotInt("bounty_enemies", &SlotOptions::bounty_enemies);
 +		registerSlotInt("bounty_chance", &SlotOptions::bounty_chance);
 +		registerSlotInt("bounty_checks", &SlotOptions::bounty_checks);
@@ -2833,6 +2904,7 @@ index 0000000..75d45d7
 +	void initRun()
 +	{
 +		endDeathScreen();
++		clearFloorUids(); // a new game numbers its entities from 1 again
 +		warnSkillClass();
 +		g_compassGivePending = true;
 +		g_save.runKey = uniqueGameKey;
@@ -3237,8 +3309,26 @@ index 0000000..75d45d7
 +				if ( !item || item->type != AP_ITEM_TYPE ) { continue; }
 +				bool floor = item->appearance == AP_FLOOR_APPEARANCE;
 +				bool shop = item->appearance == AP_SHOP_APPEARANCE;
-+				if ( !floor && !shop ) { continue; }
++				bool caravan = item->appearance == AP_CARAVAN_APPEARANCE;
++				bool hint = item->appearance == AP_HINT_APPEARANCE;
++				if ( !floor && !shop && !caravan && !hint ) { continue; }
 +				if ( itemIsEquipped(item, p) ) { continue; }
++				if ( hint || caravan )
++				{
++					for ( int n = 0; n < std::max(1, (int)item->count); ++n )
++					{
++						if ( hint ) { buyHint(); continue; }
++						int k = nextUnchecked(ap_ids::CARAVAN_OFFSET, g_slot.caravan_checks);
++						if ( k > 0 )
++						{
++							sendLocation(ap_ids::BASE_ID + ap_ids::CARAVAN_OFFSET + k);
++							say(COLOR_AP, "Bought an Archipelago item! (Caravan Purchase %d)", k);
++						}
++						else { say(COLOR_AP, "This Archipelago item was already found."); }
++					}
++					list_RemoveNode(node);
++					continue;
++				}
 +
 +				if ( floor ) { ++g_floorApFound; }
 +				int index = floor ? nextUnchecked(ap_ids::PICKUP_OFFSET, g_slot.archipelago_pickups)
@@ -3462,7 +3552,8 @@ index 0000000..75d45d7
 +	bool lootRerollable(ItemType type, Uint32 appearance)
 +	{
 +		if ( type < 0 || type >= NUMITEMS ) { return false; }
-+		if ( type == AP_ITEM_TYPE && (appearance == AP_FLOOR_APPEARANCE || appearance == AP_SHOP_APPEARANCE) ) { return false; }
++		if ( type == AP_ITEM_TYPE && (appearance == AP_FLOOR_APPEARANCE || appearance == AP_SHOP_APPEARANCE
++			|| appearance == AP_CARAVAN_APPEARANCE || appearance == AP_HINT_APPEARANCE) ) { return false; }
 +		if ( type == FLOOR_KEY_TYPE && appearance == FLOOR_KEY_APPEARANCE ) { return false; }
 +		if ( type == COMPASS_TYPE && appearance == COMPASS_APPEARANCE ) { return false; }
 +		if ( type == ARTIFACT_ORB_BLUE || type == ARTIFACT_ORB_RED || type == ARTIFACT_ORB_PURPLE || type == ARTIFACT_ORB_GREEN ) { return false; }
@@ -4208,11 +4299,14 @@ index 0000000..75d45d7
 +	}
 +
 +	// ------------------------------------------------------- Grace after losing a life
-+	// For a few seconds after losing a life and playing on (or a floor restart): no damage, enemies lose
-+	// track of you, and you're moved out from under a boulder or a wall, so one hit can't take two lives.
++	// For a few seconds after losing a life and playing on (or a floor restart): no damage (Barony's
++	// buddha mode, so an Amulet of Life Saving isn't used up either), unseen by enemies, and moved out
++	// from under a boulder, so one hit can't take two lives.
 +	const int GRACE_SECONDS = 5;
 +	Uint32 g_graceUntil = 0;
 +	Sint32 g_graceHP = 0;
++	bool g_graceBuddha = false;     // we turned buddha mode on (and turn it off again)
++	bool g_graceInvisible = false;  // we made the player invisible (and take it off again)
 +
 +	bool boulderOn(double x, double y)
 +	{
@@ -4224,35 +4318,77 @@ index 0000000..75d45d7
 +		return false;
 +	}
 +
++	bool safeFloorTile(int x, int y)
++	{
++		if ( x < 0 || y < 0 || x >= (int)map.width || y >= (int)map.height ) { return false; }
++		int index = y * MAPLAYERS + x * MAPLAYERS * map.height;
++		if ( !map.tiles[index] || map.tiles[OBSTACLELAYER + index] ) { return false; } // pit or wall
++		if ( lavatiles && lavatiles[map.tiles[index]] ) { return false; }
++		if ( swimmingtiles && swimmingtiles[map.tiles[index]] ) { return false; }
++		return true;
++	}
++
 +	void unstickPlayer(Entity* pl)
 +	{
-+		if ( !pl ) { return; }
-+		if ( !boulderOn(pl->x, pl->y) && !checkObstacle((long)pl->x, (long)pl->y, pl, nullptr) ) { return; }
-+		for ( int r = 1; r <= 5; ++r )
++		if ( !pl || !map.tiles ) { return; }
++		if ( !boulderOn(pl->x, pl->y) ) { return; }
++		// Walk outward over floor you could walk on (never through walls) to the nearest free tile.
++		const int w = map.width, h = map.height;
++		int sx = (int)(pl->x / 16), sy = (int)(pl->y / 16);
++		if ( sx < 0 || sy < 0 || sx >= w || sy >= h ) { return; }
++		std::vector<int> dist(w * h, -1), queue{ sx + sy * w };
++		dist[sx + sy * w] = 0;
++		for ( size_t q = 0; q < queue.size(); ++q )
 +		{
-+			for ( int dy = -r; dy <= r; ++dy )
++			int cx = queue[q] % w, cy = queue[q] / w;
++			if ( dist[queue[q]] > 0 )
 +			{
-+				for ( int dx = -r; dx <= r; ++dx )
++				double nx = cx * 16 + 8, ny = cy * 16 + 8;
++				if ( !boulderOn(nx, ny) && !checkObstacle((long)nx, (long)ny, pl, nullptr) )
 +				{
-+					if ( std::abs(dx) != r && std::abs(dy) != r ) { continue; } // just the ring
-+					double nx = ((int)(pl->x / 16) + dx) * 16 + 8, ny = ((int)(pl->y / 16) + dy) * 16 + 8;
-+					if ( nx < 0 || ny < 0 || nx >= map.width * 16 || ny >= map.height * 16 ) { continue; }
-+					if ( checkObstacle((long)nx, (long)ny, pl, nullptr) || boulderOn(nx, ny) ) { continue; }
 +					pl->x = nx; pl->y = ny;
 +					pl->vel_x = pl->vel_y = 0;
 +					return;
 +				}
 +			}
++			if ( dist[queue[q]] >= 6 ) { continue; }
++			const int dx[] = { 1, -1, 0, 0 }, dy[] = { 0, 0, 1, -1 };
++			for ( int k = 0; k < 4; ++k )
++			{
++				int nx = cx + dx[k], ny = cy + dy[k];
++				if ( nx < 0 || ny < 0 || nx >= w || ny >= h || dist[nx + ny * w] >= 0 || !safeFloorTile(nx, ny) ) { continue; }
++				dist[nx + ny * w] = dist[queue[q]] + 1;
++				queue.push_back(nx + ny * w);
++			}
++		}
++	}
++
++	void endGrace()
++	{
++		g_graceUntil = 0;
++		if ( g_graceBuddha ) { buddhamode = false; g_graceBuddha = false; }
++		if ( g_graceInvisible )
++		{
++			g_graceInvisible = false;
++			Entity* pl = players[clientnum] ? players[clientnum]->entity : nullptr;
++			if ( pl && stats[clientnum] && !g_deathScreen ) { pl->setEffect(EFF_INVISIBLE, false, 0, false); }
 +		}
 +	}
 +
 +	void startGrace()
 +	{
 +		Stat* s = stats[clientnum];
-+		if ( !s ) { return; }
++		Entity* pl = players[clientnum] ? players[clientnum]->entity : nullptr;
++		if ( !s || !pl ) { return; }
 +		g_graceUntil = ticks + TICKS_PER_SECOND * GRACE_SECONDS;
-+		g_graceHP = s->HP;
-+		unstickPlayer(players[clientnum] ? players[clientnum]->entity : nullptr);
++		g_graceHP = std::max<Sint32>(1, s->HP);
++		if ( !buddhamode ) { buddhamode = true; g_graceBuddha = true; }
++		if ( !s->getEffectActive(EFF_INVISIBLE) )
++		{
++			pl->setEffect(EFF_INVISIBLE, true, TICKS_PER_SECOND * GRACE_SECONDS, false);
++			g_graceInvisible = true;
++		}
++		unstickPlayer(pl);
 +	}
 +
 +	bool graceActive() { return g_graceUntil && ticks < g_graceUntil; }
@@ -4260,7 +4396,7 @@ index 0000000..75d45d7
 +	void updateGrace()
 +	{
 +		if ( !g_graceUntil ) { return; }
-+		if ( !graceActive() || g_deathScreen || g_restartPending ) { g_graceUntil = 0; return; }
++		if ( !graceActive() || g_deathScreen || g_restartPending ) { endGrace(); return; }
 +		Stat* s = stats[clientnum];
 +		Entity* pl = players[clientnum] ? players[clientnum]->entity : nullptr;
 +		if ( !s || !pl ) { return; }
@@ -4274,9 +4410,212 @@ index 0000000..75d45d7
 +		}
 +	}
 +
++	// ------------------------------------------------------- Death Markers
++	// Where you lose a life or die, a grave remembers the floor number and some of your gold. Back on
++	// that floor number (a restart or a later run) the grave stands somewhere well away from the start
++	// that you can walk to; walking up to it gives the gold back, once.
++	const int GRAVE_SPRITE = 224; // gravestone_faded.vox
++	const size_t MAX_GRAVES = 40;
++	std::map<Uint32, size_t> g_graveEntities; // grave entity uid -> index in g_save.graves
++
++	void actApGrave(Entity* my) { (void)my; } // just stands there; the client claims it
++
++	void recordGrave(Stat* s)
++	{
++		if ( !g_slot.death_markers || !s || currentlevel < 1 || secretlevel || isSpecialMap() ) { return; }
++		long gold = std::max(10L, (long)s->GOLD * std::max(1, g_slot.death_marker_gold) / 100);
++		if ( g_save.graves.size() >= MAX_GRAVES )
++		{
++			// Make room: the oldest claimed grave goes first, else the oldest.
++			auto it = std::find_if(g_save.graves.begin(), g_save.graves.end(), [](const SaveData::Grave& g) { return g.claimed; });
++			g_save.graves.erase(it != g_save.graves.end() ? it : g_save.graves.begin());
++		}
++		g_save.graves.push_back({ currentlevel, gold, false });
++	}
++
++	void spawnGraves()
++	{
++		g_graveEntities.clear();
++		if ( !g_slot.death_markers || currentlevel < 1 || secretlevel || isSpecialMap() ) { return; }
++		int placed = 0;
++		for ( size_t i = g_save.graves.size(); i-- > 0 && placed < 3; )
++		{
++			SaveData::Grave& g = g_save.graves[i];
++			if ( g.claimed || g.floor != currentlevel ) { continue; }
++			int x, y;
++			if ( !findReachableSpot(x, y) ) { break; } // the far half of the floor you can walk to
++			Entity* e = newEntity(GRAVE_SPRITE, 1, map.entities, nullptr);
++			if ( !e ) { break; }
++			e->x = x * 16 + 8;
++			e->y = y * 16 + 8;
++			e->sizex = 4;
++			e->sizey = 4;
++			e->z = 8 - (models[GRAVE_SPRITE] ? models[GRAVE_SPRITE]->sizez / 4.0 : 2);
++			e->yaw = (local_rng.rand() % 4) * PI / 2;
++			e->flags[PASSABLE] = true; // never blocks a corridor
++			e->flags[NOUPDATE] = true;
++			e->behavior = &actApGrave;
++			g_graveEntities[e->getUID()] = i;
++			++placed;
++		}
++		if ( placed > 0 )
++		{
++			say(COLOR_AP, placed == 1 ? "Your grave from an earlier death is somewhere on this floor."
++				: "Your graves from earlier deaths are somewhere on this floor.");
++		}
++	}
++
++	void updateGraves()
++	{
++		if ( g_graveEntities.empty() ) { return; }
++		Entity* pl = players[clientnum] ? players[clientnum]->entity : nullptr;
++		Stat* s = stats[clientnum];
++		if ( !pl || !s || s->HP <= 0 ) { return; }
++		for ( auto it = g_graveEntities.begin(); it != g_graveEntities.end(); )
++		{
++			Entity* e = uidToEntity(it->first);
++			if ( !e || it->second >= g_save.graves.size() ) { it = g_graveEntities.erase(it); continue; }
++			double dx = e->x - pl->x, dy = e->y - pl->y;
++			if ( dx * dx + dy * dy > 20 * 20 ) { ++it; continue; }
++			SaveData::Grave& g = g_save.graves[it->second];
++			if ( !g.claimed )
++			{
++				g.claimed = true;
++				s->GOLD += g.gold;
++				say(COLOR_AP, "You find your own grave, and %ld gold you left behind.", g.gold);
++				playSoundEntityLocal(pl, 242 + local_rng.rand() % 4, 64); // coins
++				writeSave();
++			}
++			it = g_graveEntities.erase(it);
++		}
++	}
++
++	// ------------------------------------------------------- Merchant Caravan
++	// Sometimes a travelling merchant stops on a floor: a normal Barony shop (Trading and Charisma set
++	// the prices) plus Archipelago items and a hint. It moves on when you take the stairs.
++	Uint32 g_caravanUid = 0;
++	bool g_caravanHere = false;
++
++	bool openAround(int x, int y)
++	{
++		for ( int dy = -1; dy <= 1; ++dy )
++		{
++			for ( int dx = -1; dx <= 1; ++dx )
++			{
++				int nx = x + dx, ny = y + dy;
++				if ( nx < 0 || ny < 0 || nx >= (int)map.width || ny >= (int)map.height ) { return false; }
++				int index = ny * MAPLAYERS + nx * MAPLAYERS * map.height;
++				if ( !map.tiles[index] || map.tiles[OBSTACLELAYER + index] ) { return false; }
++				if ( lavatiles && lavatiles[map.tiles[index]] ) { return false; }
++				if ( swimmingtiles && swimmingtiles[map.tiles[index]] ) { return false; }
++				if ( shoparea && shoparea[ny + nx * map.height] ) { return false; }
++			}
++		}
++		return true;
++	}
++
++	void spawnCaravan(bool restarted)
++	{
++		g_caravanUid = 0;
++		bool eligible = g_slot.merchant_caravan && currentlevel >= 1 && !secretlevel && !isSpecialMap();
++		if ( !restarted ) { g_caravanHere = eligible && (int)(local_rng.rand() % 100) < g_slot.caravan_chance; }
++		if ( !eligible || !g_caravanHere ) { return; }
++		int x = -1, y = -1;
++		for ( int tries = 0; tries < 40 && x < 0; ++tries )
++		{
++			int cx, cy;
++			if ( !findReachableSpot(cx, cy) ) { break; }
++			if ( openAround(cx, cy) ) { x = cx; y = cy; } // in a room, never a corridor he'd block
++		}
++		if ( x < 0 ) { return; }
++		Entity* m = summonMonsterNoSmoke(SHOPKEEPER, x * 16 + 8, y * 16 + 8, true);
++		if ( !m ) { return; }
++		g_caravanUid = m->getUID();
++		if ( Stat* st = m->getStats() ) { strncpy(st->name, "Caravan Merchant", sizeof(st->name) - 1); }
++		say(COLOR_AP, "A merchant caravan has stopped on this floor.");
++	}
++
++	bool caravanAlive()
++	{
++		Entity* e = g_caravanUid ? uidToEntity(g_caravanUid) : nullptr;
++		Stat* st = e ? e->getStats() : nullptr;
++		return st && st->HP > 0;
++	}
++
++	// A free slot in the shop's grid (or the cheapest item's slot when it's full).
++	void placeInShop(Stat* st, Item* item)
++	{
++		const int maxX = Player::ShopGUI_t::MAX_SHOP_X, maxY = Player::ShopGUI_t::MAX_SHOP_Y;
++		std::set<int> taken;
++		Item* last = nullptr;
++		for ( node_t* n = st->inventory.first; n; n = n->next )
++		{
++			Item* it = (Item*)n->element;
++			if ( !it || it == item ) { continue; }
++			if ( it->x >= 0 && it->x < maxX && it->y >= 0 && it->y < maxY )
++			{
++				taken.insert(it->x + it->y * 100);
++				if ( !isApItem(it) && (!last || it->y > last->y || (it->y == last->y && it->x > last->x)) ) { last = it; }
++			}
++		}
++		for ( int y = 0; y < maxY; ++y )
++		{
++			for ( int x = 0; x < maxX; ++x )
++			{
++				if ( !taken.count(x + y * 100) ) { item->x = x; item->y = y; return; }
++			}
++		}
++		if ( last ) { item->x = last->x; item->y = last->y; list_RemoveNode(last->node); }
++	}
++
++	int hintsLeft()
++	{
++		int n = 0;
++		for ( int64_t id : g_slot.hint_locations ) { if ( !isChecked(id) && !g_save.hinted.count(id) ) { ++n; } }
++		return n;
++	}
++
++	void stockCaravan(Stat* st)
++	{
++		int apStock = std::min(2, uncheckedCount(ap_ids::CARAVAN_OFFSET, g_slot.caravan_checks));
++		for ( int i = 0; i < apStock; ++i )
++		{
++			// A different blessing each, so two bought ones never stack into one.
++			if ( Item* it = newItem(AP_ITEM_TYPE, EXCELLENT, (Sint16)i, 1, AP_CARAVAN_APPEARANCE, true, &st->inventory) ) { placeInShop(st, it); }
++		}
++		if ( g_slot.caravan_hints && hintsLeft() > 0 )
++		{
++			if ( Item* it = newItem(AP_ITEM_TYPE, EXCELLENT, 0, 1, AP_HINT_APPEARANCE, true, &st->inventory) ) { placeInShop(st, it); }
++		}
++	}
++
++	void buyHint()
++	{
++		for ( int64_t id : g_slot.hint_locations )
++		{
++			if ( isChecked(id) || g_save.hinted.count(id) ) { continue; }
++			g_save.hinted.insert(id);
++			std::set<int64_t> one{ id };
++			AP_SendLocationScouts(one, 2);
++			say(COLOR_AP, "Bought an Archipelago Hint: it shows in the log.");
++			writeSave();
++			return;
++		}
++		say(COLOR_AP, "There's nothing left to hint.");
++	}
++
 +	// ------------------------------------------------------- Champions
-+	// Every Champion Floors floors, a much tougher monster guards the stairs down.
 +	Uint32 g_championUid = 0;
++	void clearFloorUids()
++	{
++		g_championUid = 0;
++		g_caravanUid = 0;
++		g_bountyUid = 0;
++		g_graveEntities.clear();
++		endGrace();
++	}
++
++	// Every Champion Floors floors, a much tougher monster guards the stairs down.
 +	bool g_championBuffed = false;
 +	bool g_championDeadHere = false;
 +
@@ -4346,6 +4685,7 @@ index 0000000..75d45d7
 +		if ( !g_championUid ) { return false; }
 +		Entity* e = uidToEntity(g_championUid);
 +		Stat* st = e ? e->getStats() : nullptr;
++		if ( st && (st->leader_uid != 0 || e->monsterAllyGetPlayerLeader()) ) { return false; } // tamed: it's yours now
 +		return st && st->HP > 0;
 +	}
 +
@@ -4498,6 +4838,8 @@ index 0000000..75d45d7
 +		pickBounty(restarted);
 +		pickChampion(restarted);
 +		if ( restarted ) { startGrace(); }
++		spawnGraves();
++		spawnCaravan(restarted);
 +		g_save.runDeepest = std::max(g_save.runDeepest, currentlevel);
 +		if ( g_markedThisFloor > 0 )
 +		{
@@ -4528,7 +4870,7 @@ index 0000000..75d45d7
 +		if ( g_slot.death_link_mode == 1 && g_save.livesLeft > 0 )
 +		{
 +			--g_save.livesLeft;
-+	++g_save.runLivesLost;
++			++g_save.runLivesLost;
 +			applyDeathPenalty(stats[p]);
 +			say(COLOR_TRAP, "You lose a life (%d left). Safe for %d seconds.", g_save.livesLeft, GRACE_SECONDS);
 +			startGrace();
@@ -4568,7 +4910,8 @@ index 0000000..75d45d7
 +		for ( node_t* n = list->first; n; n = n->next )
 +		{
 +			Item* it = (Item*)n->element;
-+			if ( it && it->type == AP_ITEM_TYPE && (it->appearance == AP_FLOOR_APPEARANCE || it->appearance == AP_SHOP_APPEARANCE) )
++			if ( it && it->type == AP_ITEM_TYPE && (it->appearance == AP_FLOOR_APPEARANCE || it->appearance == AP_SHOP_APPEARANCE
++				|| it->appearance == AP_CARAVAN_APPEARANCE) )
 +			{
 +				return true;
 +			}
@@ -4714,6 +5057,7 @@ index 0000000..75d45d7
 +			Entity* c = g_championUid ? uidToEntity(g_championUid) : nullptr;
 +			Stat* cs = c ? c->getStats() : nullptr;
 +			out << "champion=" << (cs && cs->HP > 0 ? getMonsterLocalizedName((Monster)cs->type) : std::string()) << "\n";
++			out << "caravan=" << (caravanAlive() ? 1 : 0) << "\ngraves=" << g_graveEntities.size() << "\n";
 +			if ( g_slot.progressive_lantern ) { out << "lantern=" << std::min(3, countReceived(ap_ids::ITEM_LANTERN)) << "\n"; }
 +		}
 +		out << "secretexit=" << (g_floorHasSecretExit && !secretlevel ? 1 : 0) << "\n";
@@ -4948,6 +5292,10 @@ index 0000000..75d45d7
 +					free(item);
 +					out << "item=" << tx << "\t" << ty << "\t" << cleanField(path) << "\t" << cleanField(name) << "\n";
 +				}
++				else if ( e->behavior == &actApGrave )
++				{
++					if ( g_graveEntities.count(e->getUID()) && tileSeen(ix, iy) ) { out << "grave=" << tx << "\t" << ty << "\n"; }
++				}
 +				else if ( e->behavior == &actGoldBag )
 +				{
 +					if ( tileSeen(ix, iy) ) { out << "gold=" << tx << "\t" << ty << "\t" << e->skill[0] << "\n"; }
@@ -4969,6 +5317,10 @@ index 0000000..75d45d7
 +				else if ( e->behavior == &actMonster )
 +				{
 +					Stat* st = e->getStats();
++					if ( st && st->type == SHOPKEEPER && g_caravanUid && e->getUID() == g_caravanUid && st->HP > 0 )
++					{
++						out << "caravan=" << tx << "\t" << ty << "\n";
++					}
 +					if ( st && st->type == SHOPKEEPER )
 +					{
 +						for ( node_t* n = st->inventory.first; n; n = n->next )
@@ -5212,6 +5564,7 @@ index 0000000..75d45d7
 +	updateBounty();
 +	updateChampion();
 +	updateGrace();
++	updateGraves();
 +	if ( stats[clientnum] && stats[clientnum]->GOLD > g_save.runGoldMax ) { g_save.runGoldMax = stats[clientnum]->GOLD; }
 +	syncPermanents();
 +	if ( ticks % TICKS_PER_SECOND == 0 ) { syncSpells(); }
@@ -5401,7 +5754,8 @@ index 0000000..75d45d7
 +	if ( myStats->type == SHOPKEEPER ) { rerollItemList(&myStats->inventory); } // Randomize Loot
 +
 +	// Shopkeepers stock an Archipelago item while shop checks remain.
-+	if ( myStats->type == SHOPKEEPER && g_slot.shop_checks > 0
++	if ( myStats->type == SHOPKEEPER && g_caravanUid && my->getUID() == g_caravanUid ) { stockCaravan(myStats); }
++	else if ( myStats->type == SHOPKEEPER && g_slot.shop_checks > 0
 +		&& uncheckedCount(ap_ids::SHOP_OFFSET, g_slot.shop_checks) > 0 )
 +	{
 +		Item* apItem = newItem(AP_ITEM_TYPE, EXCELLENT, 0, 1, AP_SHOP_APPEARANCE, true, &myStats->inventory);
@@ -5609,9 +5963,10 @@ index 0000000..75d45d7
 +	if ( g_save.livesLeft <= 0 ) { return false; }
 +
 +	--g_save.livesLeft;
++	++g_save.runLivesLost;
 +	bool fromDeathLink = g_dyingFromDeathLink;
 +	g_dyingFromDeathLink = false;
-+	endRunRecord(RUN_GAME_OVER);
++	recordGrave(s);
 +
 +	// Remember boss health on this floor, for "keep damage".
 +	g_savedBossHP.clear();
@@ -5665,6 +6020,8 @@ index 0000000..75d45d7
 +	if ( !g_ready || multiplayer == CLIENT ) { return; }
 +	bool fromDeathLink = g_dyingFromDeathLink;
 +	g_dyingFromDeathLink = false;
++	if ( player == clientnum && stats[player] ) { recordGrave(stats[player]); }
++	endRunRecord(RUN_GAME_OVER);
 +	if ( !fromDeathLink )
 +	{
 +		AP_DeathLinkSend("died in the dungeon");
@@ -5782,13 +6139,18 @@ index 0000000..75d45d7
 +bool isApItem(const Item* item)
 +{
 +	return item && item->type == AP_ITEM_TYPE
-+		&& (item->appearance == AP_FLOOR_APPEARANCE || item->appearance == AP_SHOP_APPEARANCE);
++		&& (item->appearance == AP_FLOOR_APPEARANCE || item->appearance == AP_SHOP_APPEARANCE
++			|| item->appearance == AP_CARAVAN_APPEARANCE || item->appearance == AP_HINT_APPEARANCE);
 +}
 +
 +int apItemModel() { return g_apModelIndex; }
 +int floorKeyModel() { return g_floorKeyModelIndex; }
 +const char* apItemIconPath() { return "items/images/AP_Item.png"; }
-+const char* apItemName(bool withArticle) { return withArticle ? "an Archipelago item" : "Archipelago item"; }
++const char* apItemName(const Item* item, bool withArticle)
++{
++	if ( item && item->appearance == AP_HINT_APPEARANCE ) { return withArticle ? "an Archipelago Hint" : "Archipelago Hint"; }
++	return withArticle ? "an Archipelago item" : "Archipelago item";
++}
 +
 +// The main-menu title: Barony's own logo with the O swapped for the Archipelago logo. It's made here
 +// from the player's own copy of Barony's title.png (the mod only ships the small Archipelago piece),
@@ -6680,7 +7042,7 @@ index 0000000..75d45d7
 +} // namespace AP
 diff --git a/src/archipelago_barony.hpp b/src/archipelago_barony.hpp
 new file mode 100644
-index 0000000..40b9c96
+index 0000000..75bd90e
 --- /dev/null
 +++ b/src/archipelago_barony.hpp
 @@ -0,0 +1,128 @@
@@ -6771,7 +7133,7 @@ index 0000000..40b9c96
 +	int apItemModel();                 // model index, or -1 if the model didn't load
 +	int floorKeyModel();               // the Floor Key's own model, or -1
 +	const char* apItemIconPath();
-+	const char* apItemName(bool withArticle);
++	const char* apItemName(const Item* item, bool withArticle);
 +	// init.cpp, right after the game's models load: adds the Archipelago model.
 +	void loadExtraModels();
 +	// ui/MainMenu.cpp: the title image (Barony's logo with the Archipelago logo for the O).
@@ -6814,10 +7176,10 @@ index 0000000..40b9c96
 +}
 diff --git a/src/archipelago_ids.hpp b/src/archipelago_ids.hpp
 new file mode 100644
-index 0000000..2c29451
+index 0000000..8883f58
 --- /dev/null
 +++ b/src/archipelago_ids.hpp
-@@ -0,0 +1,247 @@
+@@ -0,0 +1,248 @@
 +// GENERATED by tools/gen_cpp_ids.py from apworld/barony/data.py. Do not edit by hand.
 +#pragma once
 +#include <cstdint>
@@ -6837,6 +7199,7 @@ index 0000000..2c29451
 +constexpr int64_t SPELL_ITEM_OFFSET = 100;
 +constexpr int64_t BOUNTY_OFFSET = 1200;
 +constexpr int64_t CHAMPION_OFFSET = 1300;
++constexpr int64_t CARAVAN_OFFSET = 1400;
 +constexpr int MAX_FLOOR = 45;
 +constexpr int FLOORS_PER_SECTION = 5;
 +
@@ -7388,7 +7751,7 @@ index 02b85c1..676acaf 100644
  	{
  		messagePlayer(player, MESSAGE_INVENTORY, Language::get(971));
 diff --git a/src/items.cpp b/src/items.cpp
-index 879c6ea..56d293b 100644
+index 879c6ea..6fcedf7 100644
 --- a/src/items.cpp
 +++ b/src/items.cpp
 @@ -13,6 +13,7 @@
@@ -7405,7 +7768,7 @@ index 879c6ea..56d293b 100644
  	int c = 0;
 +	if ( AP::isApItem(this) ) // Archipelago
 +	{
-+		snprintf(tempstr, 1024, "%s", AP::apItemName(true));
++		snprintf(tempstr, 1024, "%s", AP::apItemName(this, true));
 +		return tempstr;
 +	}
 +	if ( AP::isFloorKey(this) ) // Archipelago: Floor Keys
@@ -7427,7 +7790,7 @@ index 879c6ea..56d293b 100644
  {
 +	if ( AP::isApItem(this) ) // Archipelago
 +	{
-+		snprintf(tempstr, 1024, "%s", AP::apItemName(false));
++		snprintf(tempstr, 1024, "%s", AP::apItemName(this, false));
 +		return tempstr;
 +	}
 +	if ( AP::isFloorKey(this) ) // Archipelago: Floor Keys

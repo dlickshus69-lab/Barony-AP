@@ -554,6 +554,62 @@ class BountyChecks(Range):
     default = 5
 
 
+class DeathMarkers(DefaultOnToggle):
+    """
+    Where you lose a life or die, a gravestone marks the spot for later. When you come back to that
+    floor number (after a floor restart, or on a later run) your grave is somewhere on the floor,
+    usually well away from the start but always somewhere you can walk to. Walk up to it to get back
+    some of the gold you had when you died (once per grave). Seen graves show on the tracker map.
+    """
+    display_name = "Death Markers"
+
+
+class DeathMarkerGold(Range):
+    """Death Markers only: how much of the gold you had when you died a grave gives back, in percent."""
+    display_name = "Death Marker Gold"
+    range_start = 5
+    range_end = 50
+    default = 20
+
+
+class MerchantCaravan(Toggle):
+    """
+    Sometimes a merchant caravan stops on a floor (somewhere you can walk to). It sells normal items
+    like any Barony shop, with prices set by your Trading skill and Charisma, plus Archipelago items
+    (Caravan Checks) and an Archipelago Hint. It moves on when you take the stairs.
+    Never on boss, town or Sanctum floors, or in secret areas.
+    """
+    display_name = "Merchant Caravan"
+
+
+class CaravanChance(Range):
+    """Merchant Caravan only: the chance, in percent, that a caravan stops on a floor."""
+    display_name = "Caravan Chance"
+    range_start = 5
+    range_end = 100
+    default = 25
+
+
+class CaravanChecks(Range):
+    """
+    Merchant Caravan only: how many Archipelago items caravans sell in all (up to two per caravan,
+    counted across runs). Each one bought is a check. 0 = caravans only sell normal items and hints.
+    """
+    display_name = "Caravan Checks"
+    range_start = 0
+    range_end = 20
+    default = 5
+
+
+class CaravanHints(DefaultOnToggle):
+    """
+    Merchant Caravan only: each caravan also sells an Archipelago Hint. Buying it reveals what's at one
+    of your unchecked locations (items that matter come first), for you and the player it belongs to.
+    It doesn't use your hint points.
+    """
+    display_name = "Caravan Hints"
+
+
 class RandomizeLoot(Choice):
     """
     Rerolls the ordinary loot: what's in chests, what shopkeepers sell, and items lying on the floor.
@@ -1098,6 +1154,12 @@ class BaronyOptions(PerGameCommonOptions):
     bounty_enemies: BountyEnemies
     bounty_chance: BountyChance
     bounty_checks: BountyChecks
+    death_markers: DeathMarkers
+    death_marker_gold: DeathMarkerGold
+    merchant_caravan: MerchantCaravan
+    caravan_chance: CaravanChance
+    caravan_checks: CaravanChecks
+    caravan_hints: CaravanHints
     randomize_loot: RandomizeLoot
     music_mods: MusicMods
     extra_monsters: ExtraMonsters
@@ -1144,12 +1206,13 @@ option_groups = [
     OptionGroup("Dungeon", [FloorKeys, FloorKeyRequirement, Compass, CompassMode, CompassPingTime, CompassRecharge, KeyCompassTime, MinotaurTime, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemySeed, EnemyRandomizerSecretAreas, EnemyPool, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, DifficultyScaling, Difficulty]),
     OptionGroup("Class, Skills & Spells", [SkillChecks, SkillCheckMaxRank, LockClass, SpellSanity, SpellUpgrades,
                                            SpellSanityDLCSpells, SpellbookChecks]),
-    OptionGroup("Lives & Checkpoints", [Lives, ExtraLivesInPool, CheckpointInterval]),
+    OptionGroup("Lives & Checkpoints", [Lives, ExtraLivesInPool, CheckpointInterval, DeathMarkers, DeathMarkerGold]),
     OptionGroup("Filler", [XPBoostWeight, GoldPouchWeight, HealingPotionWeight, FoodRationWeight, RandomItemWeight]),
     OptionGroup("Traps", [TrapChance, MinotaurTrapWeight, AmbushTrapWeight, PolymorphTrapWeight, FumbleTrapWeight, BlindnessTrapWeight, TeleportTrapWeight, HungerTrapWeight, DarknessTrapWeight, CurseTrapWeight,
                           PolymorphTrapDuration, BlindnessTrapDuration]),
     OptionGroup("Death Link", [BaronyDeathLink, DeathLinkMode, DeathPenalty, DeathItems, FloorRestart, BossDeath]),
-    OptionGroup("Extras", [FloorSize, ExtraMonsters, ProgressiveLantern, LanternDarkness, BountyEnemies, BountyChance, BountyChecks, RandomizeLoot, MusicMods]),
+    OptionGroup("Extras", [FloorSize, ExtraMonsters, ProgressiveLantern, LanternDarkness, BountyEnemies, BountyChance, BountyChecks,
+                          MerchantCaravan, CaravanChance, CaravanChecks, CaravanHints, RandomizeLoot, MusicMods]),
     OptionGroup("Challenges", [ChampionFloors, ChampionLocksStairs, ChampionChecks]),
     OptionGroup("Quality of Life", [FloorKeyOnTrackerMap]),
     OptionGroup("Players", [Players]),
