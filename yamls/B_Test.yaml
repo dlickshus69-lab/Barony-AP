@@ -29,7 +29,6 @@ Barony:
   compass_recharge: 90
   key_compass_time: 30
   minotaur_time: 100
-  floor_key_on_tracker_map: false
   floor_shuffle: full
   layout_seed: locked
   enemy_randomizer: off
@@ -88,6 +87,9 @@ Barony:
   extra_monsters: 0
   randomize_loot: same_kind
   music_mods: mixed
+
+  # Quality of Life
+  floor_key_on_tracker_map: false
 
   # Players
   players: 1

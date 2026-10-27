@@ -947,7 +947,7 @@ option_groups = [
         EnemySanityPerFloor, BestiaryChecks,
         ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),
-    OptionGroup("Dungeon", [FloorKeys, FloorKeyRequirement, Compass, CompassMode, CompassPingTime, CompassRecharge, KeyCompassTime, MinotaurTime, FloorKeyOnTrackerMap, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemySeed, EnemyRandomizerSecretAreas, EnemyPool, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, DifficultyScaling, Difficulty]),
+    OptionGroup("Dungeon", [FloorKeys, FloorKeyRequirement, Compass, CompassMode, CompassPingTime, CompassRecharge, KeyCompassTime, MinotaurTime, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemySeed, EnemyRandomizerSecretAreas, EnemyPool, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, DifficultyScaling, Difficulty]),
     OptionGroup("Class & Skills", [SkillChecks, SkillCheckMaxRank, LockClass]),
     OptionGroup("Lives & Checkpoints", [Lives, ExtraLivesInPool, CheckpointInterval]),
     OptionGroup("Filler", [XPBoostWeight, GoldPouchWeight, HealingPotionWeight, FoodRationWeight, RandomItemWeight]),
@@ -955,5 +955,6 @@ option_groups = [
                           PolymorphTrapDuration, BlindnessTrapDuration]),
     OptionGroup("Death Link", [BaronyDeathLink, DeathLinkMode, DeathPenalty, DeathItems, FloorRestart, BossDeath]),
     OptionGroup("Extras", [FloorSize, ExtraMonsters, RandomizeLoot, MusicMods]),
+    OptionGroup("Quality of Life", [FloorKeyOnTrackerMap]),
     OptionGroup("Players", [Players]),
 ]
