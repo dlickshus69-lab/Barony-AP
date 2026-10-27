@@ -62,6 +62,10 @@ namespace AP
 	// init.cpp, right after the game's models load: adds the Archipelago model.
 	void loadExtraModels();
 
+	// actchest.cpp / actgeneral.cpp: Archipelago items in chests and breakable containers.
+	void onChestCreated(Entity* chest);
+	void onBreakableDestroyed(Entity* breakable);
+
 	// maps.cpp, monsterCurve(): Enemy Randomizer. Returns the monster type to spawn instead.
 	int randomizeMonster(int monsterType);
 

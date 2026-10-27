@@ -79,7 +79,8 @@ class BestiaryChecks(Choice):
 
 class ArchipelagoPickups(Range):
     """
-    Archipelago items placed on the floor of the dungeon. Picking one up sends a check.
+    Archipelago items found in the dungeon: lying on the floor, inside some chests, and
+    sometimes dropped by crates, pots and barrels you break. Picking one up sends a check.
     0 turns them off.
     """
     display_name = "Archipelago Pickups"

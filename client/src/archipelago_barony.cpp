@@ -142,6 +142,9 @@ namespace
 	Uint32 g_deathScreenStart = 0;
 	constexpr Uint32 DEATH_SCREEN_MIN_TICKS = TICKS_PER_SECOND * 2;
 	Uint32 g_lastPlayerUid = 0;
+	bool g_savedGodmode = false;
+	bool g_confirmWasDown = true;               // edge detection: needs a fresh press
+	void endDeathScreen();
 	std::set<Uint32> g_countedDeaths;          // monster uids already counted
 
 	// Inventory as it was when the current floor began; losing a life puts it back.
@@ -655,6 +658,7 @@ namespace
 	// Called once per character: permanent items and starting lives.
 	void initRun()
 	{
+		endDeathScreen();
 		g_save.runKey = uniqueGameKey;
 		g_save.livesLeft = g_slot.lives;
 		g_savedBossHP.clear();
@@ -940,9 +944,28 @@ namespace
 		}
 	}
 
+	// Any confirm-like button: A / Space / Enter / attack / use. Uses our own edge detection so
+	// another part of the game consuming the press first can't swallow it.
+	bool confirmPressed()
+	{
+		auto& in = Input::inputs[clientnum];
+		bool down = in.binary("MenuConfirm") || in.binary("Attack") || in.binary("Use")
+			|| keystatus[SDLK_SPACE] || keystatus[SDLK_RETURN] || keystatus[SDLK_KP_ENTER];
+		bool pressed = down && !g_confirmWasDown;
+		g_confirmWasDown = down;
+		return pressed;
+	}
+
+	void endDeathScreen()
+	{
+		if ( !g_deathScreen ) { return; }
+		g_deathScreen = false;
+		godmode = g_savedGodmode;
+	}
+
 	void restartFloor()
 	{
-		g_deathScreen = false;
+		endDeathScreen();
 		int player = g_deathScreenPlayer;
 		Stat* s = stats[player];
 		if ( !s ) { return; }
@@ -974,6 +997,7 @@ namespace
 
 	void onNewFloor()
 	{
+		endDeathScreen();
 		sendFloorChecks();
 		sendSpecialAreaCheck();
 		spawnFloorPickups();
@@ -1071,10 +1095,13 @@ void tick()
 	if ( !g_ready ) { return; }
 
 	// The death screen works even while the connection is down.
-	if ( g_deathScreen && inGame() && ticks - g_deathScreenStart >= DEATH_SCREEN_MIN_TICKS
-		&& Input::inputs[clientnum].consumeBinaryToggle("MenuConfirm") )
+	if ( g_deathScreen && inGame() )
 	{
-		restartFloor();
+		bool pressed = confirmPressed();
+		if ( pressed && ticks - g_deathScreenStart >= DEATH_SCREEN_MIN_TICKS )
+		{
+			restartFloor();
+		}
 	}
 
 	if ( AP_GetConnectionStatus() == AP_ConnectionStatus::Disconnected )
@@ -1357,8 +1384,13 @@ bool tryConsumeLife(int player)
 	s->HP = 1;
 	if ( Entity* ent = players[player]->entity )
 	{
+		// Frozen, untouchable and unseen until the restart: no more hits or blood.
 		ent->setEffect(EFF_PARALYZED, true, TICKS_PER_SECOND * 3600, false);
+		ent->setEffect(EFF_INVISIBLE, true, TICKS_PER_SECOND * 3600, false);
 	}
+	g_savedGodmode = godmode;
+	godmode = true;
+	g_confirmWasDown = true; // the button must be let go and pressed again
 	g_deathScreen = true;
 	g_deathScreenPlayer = player;
 	g_deathScreenStart = ticks;
@@ -1464,6 +1496,47 @@ namespace
 		}
 		return pool;
 	}
+}
+
+// ---------------------------------------------------------------- Archipelago items in containers
+namespace
+{
+	int apItemsLyingAround()
+	{
+		int n = 0;
+		if ( !map.entities ) { return 0; }
+		for ( node_t* node = map.entities->first; node; node = node->next )
+		{
+			Entity* e = (Entity*)node->element;
+			if ( e && e->behavior == &actItem && e->skill[10] == AP_ITEM_TYPE
+				&& ((Uint32)e->skill[14] == AP_FLOOR_APPEARANCE) ) { ++n; }
+		}
+		return n;
+	}
+
+	bool apItemAvailable()
+	{
+		return g_ready && multiplayer != CLIENT && g_slot.archipelago_pickups > 0
+			&& uncheckedCount(ap_ids::PICKUP_OFFSET, g_slot.archipelago_pickups) > apItemsLyingAround();
+	}
+}
+
+void onChestCreated(Entity* chest)
+{
+	if ( !chest || chest->behavior != &actChest || !chest->children.first || !apItemAvailable() ) { return; }
+	if ( local_rng.rand() % 100 >= 25 ) { return; } // 1 in 4 chests
+	list_t* inventory = (list_t*)chest->children.first->element;
+	if ( inventory )
+	{
+		newItem(AP_ITEM_TYPE, EXCELLENT, 0, 1, AP_FLOOR_APPEARANCE, true, inventory);
+	}
+}
+
+void onBreakableDestroyed(Entity* breakable)
+{
+	if ( !breakable || !breakable->isColliderBreakableContainer() || !apItemAvailable() ) { return; }
+	if ( local_rng.rand() % 100 >= 8 ) { return; } // 1 in 12 crates, pots and barrels
+	dropItemMonster(newItem(AP_ITEM_TYPE, EXCELLENT, 0, 1, AP_FLOOR_APPEARANCE, true, nullptr), breakable, nullptr);
 }
 
 int randomizeMonster(int monsterType)
@@ -1616,11 +1689,11 @@ void drawHud()
 	// Top left: connection status.
 	bool connected = isConnected();
 	bool connecting = !g_ready && AP_GetConnectionStatus() != AP_ConnectionStatus::ConnectionRefused;
-	const char* label = connected ? "Archipelago: Connected" : connecting ? "Archipelago: Connecting..." : "Archipelago: Disconnected";
+	const char* label = connected ? "Archipelago Connected" : connecting ? "Archipelago Connecting..." : "Archipelago Disconnected";
 	Uint32 color = connected ? makeColorRGB(120, 230, 120) : connecting ? makeColorRGB(240, 210, 90) : makeColorRGB(240, 90, 80);
-	drawImage(connected ? "*images/ui/HUD/Ping_Green.png" : connecting ? "*images/ui/HUD/Ping_Yellow.png" : "*images/ui/HUD/Ping_Red.png",
-		10, 10, 18, 18);
-	drawText(label, HUD_FONT, color, 34, 10);
+	drawImage("images/ui/Archipelago/AP_Logo.png", 8, 6, 24, 24,
+		connected ? 0xFFFFFFFF : makeColor(255, 255, 255, 110));
+	drawText(label, HUD_FONT, color, 38, 10);
 
 	// Top right: lives.
 	if ( g_ready && inGame() && (g_slot.lives > 0 || g_save.livesLeft > 0) )
