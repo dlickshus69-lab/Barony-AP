@@ -22,12 +22,14 @@ FLOORS_PER_SECTION = 5
 GOAL_HERX = 0
 GOAL_DEVIL = 1
 GOAL_SANCTUM = 2
+GOAL_BOSS_RUSH = 3
 
 # The floor each goal boss lives on.
 GOAL_FLOOR = {
     GOAL_HERX: 20,
     GOAL_DEVIL: 24,
     GOAL_SANCTUM: 35,
+    GOAL_BOSS_RUSH: 10,  # replaced by Boss Rush Floors
 }
 
 MAX_FLOOR = 35
@@ -100,6 +102,7 @@ GOAL_BOSSES = {
     GOAL_HERX: ["LICH"],
     GOAL_DEVIL: ["DEVIL"],
     GOAL_SANCTUM: ["LICH_ICE", "LICH_FIRE"],
+    GOAL_BOSS_RUSH: ["LICH", "DEVIL", "LICH_ICE", "LICH_FIRE"],
 }
 
 

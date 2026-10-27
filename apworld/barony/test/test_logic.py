@@ -127,3 +127,26 @@ class TestCompassItem(BaronyTestBase):
     def test_one_compass(self) -> None:
         count = sum(1 for item in self.multiworld.itempool if item.name == "Progressive Compass")
         self.assertEqual(count, 1)
+
+
+class TestBossRush(BaronyTestBase):
+    """Boss Rush: a short dungeon, then the picked bosses; nothing past the rush floors."""
+    options = {"goal": "boss_rush", "boss_rush_floors": 5, "boss_rush_bosses": ["Herx", "Twin Liches"],
+               "boss_rush_rest_town": False, "boss_checks": True}
+
+    def test_rush_slot_data(self) -> None:
+        sd = self.world.fill_slot_data()
+        self.assertEqual(sd["goal"], 3)
+        self.assertEqual(sd["goal_floor"], 5)
+        self.assertEqual(sd["boss_rush_mask"], 5)
+        self.assertEqual(sd["boss_rush_town"], 0)
+        names = {loc.name for loc in self.multiworld.get_locations(self.player)}
+        self.assertNotIn("Reach Floor 6", names)
+        self.assertNotIn("Defeat Baron Herx", names)
+
+
+class TestBossRushEmptyBosses(BaronyTestBase):
+    options = {"goal": "boss_rush", "boss_rush_bosses": []}
+
+    def test_empty_means_all(self) -> None:
+        self.assertEqual(self.world.fill_slot_data()["boss_rush_mask"], 7)

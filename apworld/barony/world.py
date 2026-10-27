@@ -18,6 +18,7 @@ MAX_SENSIBLE_LEVEL = {
     data.GOAL_HERX: 18,
     data.GOAL_DEVIL: 22,
     data.GOAL_SANCTUM: 30,
+    data.GOAL_BOSS_RUSH: 30,  # lowered below to fit Boss Rush Floors
 }
 
 CLASSIFICATION = {
@@ -83,11 +84,15 @@ class BaronyWorld(World):
     def generate_early(self) -> None:
         goal = self.options.goal.value
         self.goal_floor = data.GOAL_FLOOR[goal]
+        if goal == data.GOAL_BOSS_RUSH:
+            self.goal_floor = self.options.boss_rush_floors.value
         self.num_sections = data.section_of_floor(self.goal_floor)
         self.floor_shuffle_seed = self.random.randint(1, 2**31 - 1)
 
         self.level_check_max = self.options.level_checks.value
         cap = MAX_SENSIBLE_LEVEL[goal]
+        if goal == data.GOAL_BOSS_RUSH:
+            cap = min(cap, max(5, self.goal_floor + 3))
         if self.level_check_max > cap:
             logger.warning(
                 f"Barony ({self.player_name}): level_checks {self.level_check_max} is higher than a run "
@@ -276,6 +281,10 @@ class BaronyWorld(World):
         return {
             "goal": o.goal.value,
             "goal_floor": self.goal_floor,
+            "boss_rush_floors": o.boss_rush_floors.value,
+            "boss_rush_mask": (sum(bit for name, bit in (("Herx", 1), ("Devil", 2), ("Twin Liches", 4))
+                                   if name in o.boss_rush_bosses.value) or 7),
+            "boss_rush_town": int(bool(o.boss_rush_rest_town)),
             "floor_check_interval": o.floor_check_interval.value,
             "level_checks": self.level_check_max,
             "kill_checks": 0 if o.enemy_sanity.value == o.enemy_sanity.option_off else o.enemy_sanity_checks.value,

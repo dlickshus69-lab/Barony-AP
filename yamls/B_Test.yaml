@@ -7,6 +7,12 @@ Barony:
 
   # Goal & Checks
   goal: devil
+  boss_rush_floors: 10
+  boss_rush_bosses:
+  - Devil
+  - Herx
+  - Twin Liches
+  boss_rush_rest_town: true
   floor_check_interval: 1
   level_checks: 15
   enemy_sanity: marked_enemies

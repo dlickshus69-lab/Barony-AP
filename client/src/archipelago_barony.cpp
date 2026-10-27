@@ -94,6 +94,9 @@ namespace
 		int skill_check_max_rank = 3; // 1 Basic .. 5 Legendary
 		int lock_class = 0;
 		int floor_size_mask = 1;      // Floor Size: bit 1 Normal, 2 Bigger, 4 Much Bigger
+		int boss_rush_mask = 7;       // Boss Rush: 1 Herx, 2 Devil, 4 Twin Liches
+		int boss_rush_floors = 10;    // Boss Rush: dungeon floors before the rush
+		int boss_rush_town = 1;       // Boss Rush: rest in a town between bosses
 		int floor_key_on_tracker_map = 0; // 1: the tracker map always shows the Floor Key
 		int randomize_loot = 0;       // 0 off, 1 same kind, 2 anything
 		int music_mods = 0;           // 0 off, 1 mixed with the original, 2 mods only
@@ -137,6 +140,10 @@ namespace
 		int darknessQueue = 0;
 		int goalBossesKilled = 0;     // bit per goal boss
 		bool goalSent = false;
+		std::string rushSeq;          // Boss Rush: this run's maps in order ("boss,hamlet,hellboss")
+		int rushPhase = 0;            // Boss Rush: how far along rushSeq this run is (1 = the first)
+		int rushLevel = 0;            // Boss Rush: the floor number the current phase was loaded at
+		Uint32 rushRunKey = 0;        // the run the rush state belongs to
 		int permApplied[8] = {};      // permanent items already given to the current run's character
 		std::map<std::string, int> deaths; // death counter: deaths per slot name in this multiworld
 	};
@@ -245,6 +252,8 @@ namespace
 	void warnSkillClass();
 	void giveCompassIfMissing();
 	void launchTracker();
+	void placeRushTownExit();
+	int bossRushGoalMask();
 	Uint32 g_stairsWarnedAt = 0;
 	void readCheckpoint();
 	int apItemsLyingAround();
@@ -370,6 +379,8 @@ namespace
 		out << "darknessQueue=" << g_save.darknessQueue << "\n";
 		out << "goalBossesKilled=" << g_save.goalBossesKilled << "\n";
 		out << "goalSent=" << (g_save.goalSent ? 1 : 0) << "\n";
+		out << "rushSeq=" << g_save.rushSeq << "\nrushPhase=" << g_save.rushPhase << "\nrushLevel=" << g_save.rushLevel
+			<< "\nrushRunKey=" << g_save.rushRunKey << "\n";
 		for ( auto& d : g_save.deaths ) { out << "death:" << d.first << "=" << d.second << "\n"; }
 		for ( int i = 0; i < 8; ++i ) { out << "perm" << i << "=" << g_save.permApplied[i] << "\n"; }
 	}
@@ -390,6 +401,7 @@ namespace
 				continue;
 			}
 			long long value = atoll(line.c_str() + eq + 1);
+			if ( key == "rushSeq" ) { g_save.rushSeq = line.substr(eq + 1); continue; }
 			if ( key == "processedItems" ) { g_save.processedItems = (int)value; }
 			else if ( key == "totalKills" ) { g_save.totalKills = (long)value; }
 			else if ( key == "greenKills" ) { g_save.greenKills = (long)value; }
@@ -399,6 +411,9 @@ namespace
 			else if ( key == "darknessQueue" ) { g_save.darknessQueue = (int)value; }
 			else if ( key == "goalBossesKilled" ) { g_save.goalBossesKilled = (int)value; }
 			else if ( key == "goalSent" ) { g_save.goalSent = value != 0; }
+			else if ( key == "rushPhase" ) { g_save.rushPhase = (int)value; }
+			else if ( key == "rushLevel" ) { g_save.rushLevel = (int)value; }
+			else if ( key == "rushRunKey" ) { g_save.rushRunKey = (Uint32)value; }
 			else if ( key.size() == 5 && key.compare(0, 4, "perm") == 0 && key[4] >= '0' && key[4] <= '7' )
 			{
 				g_save.permApplied[key[4] - '0'] = (int)value;
@@ -534,6 +549,9 @@ namespace
 		registerSlotInt("music_mods", &SlotOptions::music_mods);
 		registerSlotInt("randomize_loot", &SlotOptions::randomize_loot);
 		registerSlotInt("floor_key_on_tracker_map", &SlotOptions::floor_key_on_tracker_map);
+		registerSlotInt("boss_rush_mask", &SlotOptions::boss_rush_mask);
+		registerSlotInt("boss_rush_floors", &SlotOptions::boss_rush_floors);
+		registerSlotInt("boss_rush_town", &SlotOptions::boss_rush_town);
 		registerSlotInt("extra_monsters", &SlotOptions::extra_monsters);
 		registerSlotInt("floor_shuffle", &SlotOptions::floor_shuffle);
 		registerSlotInt("floor_shuffle_seed", &SlotOptions::floor_shuffle_seed);
@@ -1351,7 +1369,7 @@ namespace
 
 	// A spot the player can walk to from where they stand (doors count as open; walls, chasms and lava
 	// don't), preferring ones far away.
-	bool findReachableSpot(int& outX, int& outY)
+	bool findReachableSpot(int& outX, int& outY, bool nearCenter = false)
 	{
 		Entity* pl = players[clientnum] ? players[clientnum]->entity : nullptr;
 		if ( !pl || !map.tiles || map.width <= 0 || map.height <= 0 ) { return false; }
@@ -1407,6 +1425,23 @@ namespace
 			if ( dist[c] < 5 ) { continue; }
 			if ( checkObstacle((x << 4) + 8, (y << 4) + 8, nullptr, nullptr) ) { continue; }
 			(dist[c] >= maxDist / 2 ? far : near).push_back(c);
+		}
+		if ( nearCenter )
+		{
+			// The reachable spot closest to the middle of the map (Boss Rush: the town's way down).
+			int best = -1;
+			double bestD = 1e18;
+			for ( auto* list : { &far, &near } )
+			{
+				for ( int c : *list )
+				{
+					double ddx = c % w - w / 2.0, ddy = c / w - h / 2.0;
+					if ( ddx * ddx + ddy * ddy < bestD ) { bestD = ddx * ddx + ddy * ddy; best = c; }
+				}
+			}
+			if ( best < 0 ) { return false; }
+			outX = best % w; outY = best / w;
+			return true;
 		}
 		std::vector<int>& pick = !far.empty() ? far : near;
 		if ( pick.empty() ) { return false; }
@@ -2215,6 +2250,7 @@ namespace
 		sendSpecialAreaCheck();
 		spawnFloorPickups();
 		giveSecretAreaTools();
+		placeRushTownExit();
 		if ( !restarted ) { g_floorKeyFound = false; }
 		g_floorNeedsKey = floorUsesKey();
 		if ( g_floorNeedsKey && !g_floorKeyFound )
@@ -2443,6 +2479,100 @@ namespace
 		if ( !file ) { return; }
 		file << text;
 		lastWritten = text;
+	}
+
+	// ------------------------------------------------------- Boss Rush (Goal)
+	// The dungeon down to Boss Rush Floors, then the bosses you picked back to back (Herx, the
+	// Devil, the Twin Liches), with a rest in the town between them if you like. Bosses you've
+	// already beaten (in any run) are skipped.
+	bool bossRushOn() { return g_ready && g_slot.goal == 3 && multiplayer != CLIENT; }
+
+	int bossRushGoalMask()
+	{
+		int m = g_slot.boss_rush_mask & 7;
+		if ( m == 0 ) { m = 7; }
+		return (m & 1 ? 1 : 0) | (m & 2 ? 2 : 0) | (m & 4 ? 12 : 0);
+	}
+
+	std::vector<std::string> splitCommas(const std::string& v)
+	{
+		std::vector<std::string> out;
+		std::string cur;
+		for ( char c : v ) { if ( c == ',' ) { if ( !cur.empty() ) { out.push_back(cur); } cur.clear(); } else { cur += c; } }
+		if ( !cur.empty() ) { out.push_back(cur); }
+		return out;
+	}
+
+	std::string makeRushSeq()
+	{
+		int m = bossRushGoalMask(), killed = g_save.goalBossesKilled;
+		std::vector<std::string> bosses;
+		if ( (m & 1) && !(killed & 1) ) { bosses.push_back("boss"); }
+		if ( (m & 2) && !(killed & 2) ) { bosses.push_back("hellboss"); }
+		if ( (m & 12) && (killed & 12) != (m & 12) ) { bosses.push_back("sanctum"); }
+		std::string seq;
+		for ( size_t i = 0; i < bosses.size(); ++i )
+		{
+			if ( i > 0 && g_slot.boss_rush_town ) { seq += "hamlet,"; }
+			seq += bosses[i] + ",";
+		}
+		return seq;
+	}
+
+	// Called as a floor starts loading: in the rush, which map to load instead ("" = the usual one).
+	std::string bossRushMapFor(int level)
+	{
+		if ( !bossRushOn() || secretlevel ) { return ""; }
+		int start = std::max(1, g_slot.boss_rush_floors);
+		if ( level <= start ) { return ""; }
+		if ( g_save.rushRunKey != uniqueGameKey || g_save.rushSeq.empty() )
+		{
+			g_save.rushRunKey = uniqueGameKey;
+			g_save.rushSeq = makeRushSeq();
+			g_save.rushPhase = 0;
+			g_save.rushLevel = 0;
+		}
+		auto seq = splitCommas(g_save.rushSeq);
+		if ( seq.empty() ) { return ""; }
+		// A new floor number moves on to the next stop; the same one (a restart, or continuing a
+		// saved game) loads the same stop again.
+		if ( level != g_save.rushLevel || g_save.rushPhase == 0 )
+		{
+			g_save.rushPhase = std::min((int)seq.size(), g_save.rushPhase + 1);
+			g_save.rushLevel = level;
+		}
+		writeSave();
+		const std::string& map = seq[g_save.rushPhase - 1];
+		printlog("[Archipelago] Boss Rush: stop %d of %d (%s).", g_save.rushPhase, (int)seq.size(), map.c_str());
+		return map;
+	}
+
+	bool bossRushMoreAfterThis()
+	{
+		if ( !bossRushOn() || g_save.rushRunKey != uniqueGameKey ) { return false; }
+		return g_save.rushPhase > 0 && g_save.rushPhase < (int)splitCommas(g_save.rushSeq).size();
+	}
+
+	// In the rush's town: the way down to the next boss goes to the middle of town.
+	void placeRushTownExit()
+	{
+		if ( !bossRushOn() || strncmp(map.name, "Hamlet", 6) || !bossRushMoreAfterThis() || !map.entities ) { return; }
+		int x, y;
+		if ( !findReachableSpot(x, y, true) ) { return; }
+		int moved = 0;
+		for ( node_t* node = map.entities->first; node; node = node->next )
+		{
+			Entity* e = (Entity*)node->element;
+			if ( !e || e->behavior != &actLadder ) { continue; }
+			e->x = x * 16 + 8;
+			e->y = y * 16 + 8;
+			++moved;
+			break;
+		}
+		if ( moved )
+		{
+			say(COLOR_AP, "Boss Rush: rest and shop here. The way to the next boss is in the middle of town.");
+		}
 	}
 
 	// The tracker's floor map: archipelago/trackermap.txt. Only what the game's own map knows:
@@ -3052,6 +3182,16 @@ void onMonsterDeath(Entity* my, Stat* myStats)
 	int goalMask = 0, goalBit = 0;
 	if ( g_slot.goal == 0 ) { goalMask = 1; if ( type == LICH ) { goalBit = 1; } }
 	else if ( g_slot.goal == 1 ) { goalMask = 1; if ( type == DEVIL ) { goalBit = 1; } }
+	else if ( g_slot.goal == 3 )
+	{
+		// Boss Rush: every boss you picked (bits: Herx 1, Devil 2, Ice Lich 4, Fire Lich 8).
+		goalMask = bossRushGoalMask();
+		if ( type == LICH ) { goalBit = 1; }
+		else if ( type == DEVIL ) { goalBit = 2; }
+		else if ( type == LICH_ICE ) { goalBit = 4; }
+		else if ( type == LICH_FIRE ) { goalBit = 8; }
+		goalBit &= goalMask;
+	}
 	else { goalMask = 3; if ( type == LICH_ICE ) { goalBit = 1; } else if ( type == LICH_FIRE ) { goalBit = 2; } }
 
 	if ( goalBit )
@@ -3941,6 +4081,21 @@ void drawHud()
 	{
 		drawDeathScreen();
 	}
+}
+
+const char* bossRushNextMap()
+{
+	static std::string chosen;
+	chosen = bossRushMapFor(currentlevel);
+	return chosen.empty() ? nullptr : chosen.c_str();
+}
+
+bool bossRushSkipVictory()
+{
+	// Not the last boss yet: the victory portal takes you on to the next stop instead of ending.
+	if ( !bossRushMoreAfterThis() ) { return false; }
+	say(COLOR_AP, "Boss Rush: on to the next one!");
+	return true;
 }
 
 bool launcherGate()

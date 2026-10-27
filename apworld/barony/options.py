@@ -14,12 +14,47 @@ class Goal(Choice):
     Herx: Baron Herx on floor 20.
     Devil: the Devil at the bottom of Hell.
     Sanctum: both of the twin liches at the very end of the game (needs the expansion floors).
+    Boss Rush: play the dungeon down to Boss Rush Floors, then fight the bosses you pick in Boss Rush
+    Bosses back to back. Beat them all to win.
     """
     display_name = "Goal"
     option_herx = 0
     option_devil = 1
     option_sanctum = 2
+    option_boss_rush = 3
     default = option_herx
+
+
+class BossRushFloors(Range):
+    """
+    Boss Rush only: how many dungeon floors you play before the rush starts. Taking the stairs off
+    the last one starts the first boss.
+    5 is a short run, 10 a medium one, 19 is the whole dungeon before Baron Herx's floor.
+    """
+    display_name = "Boss Rush Floors"
+    range_start = 3
+    range_end = 19
+    default = 10
+
+
+class BossRushBosses(OptionSet):
+    """
+    Boss Rush only: which bosses are in the rush. They come in game order: Baron Herx, the Devil,
+    then the Twin Liches (both). A boss you've already beaten, in any run, stays beaten.
+    Leave it empty to get all three.
+    """
+    display_name = "Boss Rush Bosses"
+    valid_keys = ["Herx", "Devil", "Twin Liches"]
+    default = frozenset({"Herx", "Devil", "Twin Liches"})
+
+
+class BossRushRestTown(DefaultOnToggle):
+    """
+    Boss Rush only: after each boss (but the last), you rest in the town, with its shops. The way
+    down to the next boss is in the middle of town.
+    Off: straight from one boss to the next.
+    """
+    display_name = "Rest Town Between Bosses"
 
 
 class FloorCheckInterval(Range):
@@ -872,6 +907,9 @@ class Players(Range):
 @dataclass
 class BaronyOptions(PerGameCommonOptions):
     goal: Goal
+    boss_rush_floors: BossRushFloors
+    boss_rush_bosses: BossRushBosses
+    boss_rush_rest_town: BossRushRestTown
     floor_check_interval: FloorCheckInterval
     level_checks: LevelChecks
     enemy_sanity: EnemySanity
@@ -943,7 +981,7 @@ class BaronyOptions(PerGameCommonOptions):
 
 option_groups = [
     OptionGroup("Goal & Checks", [
-        Goal, FloorCheckInterval, LevelChecks, EnemySanity, EnemySanityChecks, EnemySanityKillsPerCheck,
+        Goal, BossRushFloors, BossRushBosses, BossRushRestTown, FloorCheckInterval, LevelChecks, EnemySanity, EnemySanityChecks, EnemySanityKillsPerCheck,
         EnemySanityPerFloor, BestiaryChecks,
         ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),
