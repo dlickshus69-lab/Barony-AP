@@ -1651,6 +1651,45 @@ namespace
 		return false;
 	}
 
+	// Ordinary loot lying on the floor (not Archipelago items), for the tracker window.
+	struct LootCounts { int cat[CATEGORY_MAX] = {}; int gold = 0; int chests = 0; int total = 0; };
+	LootCounts g_loot;
+	int g_lootToggles = 0; // F4 presses; the tracker flips between full and short when this changes
+
+	LootCounts countLoot()
+	{
+		LootCounts c;
+		if ( !map.entities ) { return c; }
+		for ( node_t* node = map.entities->first; node; node = node->next )
+		{
+			Entity* e = (Entity*)node->element;
+			if ( !e ) { continue; }
+			if ( e->behavior == &actItem && e->skill[10] != AP_ITEM_TYPE )
+			{
+				int type = e->skill[10];
+				if ( type >= 0 && type < NUMITEMS )
+				{
+					int cat = items[type].category;
+					if ( cat >= 0 && cat < CATEGORY_MAX ) { ++c.cat[cat]; ++c.total; }
+				}
+			}
+			else if ( e->behavior == &actGoldBag ) { ++c.gold; }
+			else if ( e->behavior == &actChest && e->children.first )
+			{
+				list_t* inv = (list_t*)e->children.first->element;
+				if ( inv )
+				{
+					for ( node_t* n = inv->first; n; n = n->next )
+					{
+						Item* it = (Item*)n->element;
+						if ( it && it->type != AP_ITEM_TYPE ) { ++c.chests; break; }
+					}
+				}
+			}
+		}
+		return c;
+	}
+
 	FloorCounts countFloor()
 	{
 		FloorCounts c;
@@ -1713,6 +1752,14 @@ namespace
 		out << "pickups_left=" << uncheckedCount(ap_ids::PICKUP_OFFSET, g_slot.archipelago_pickups) << "\n";
 		out << "deaths_total=" << totalDeaths() << "\n";
 		out << "minotaur=" << g_minotaurSecs << "\n";
+		out << "loot_toggle=" << g_lootToggles << "\nloot_total=" << g_loot.total << "\nloot_gold=" << g_loot.gold
+			<< "\nloot_chests=" << g_loot.chests << "\n";
+		static const char* const CAT_KEYS[] = { "weapon", "armor", "amulet", "potion", "scroll", "staff", "ring",
+			"spellbook", "gem", "thrown", "tool", "food", "book", "spell", "tome" };
+		for ( int i = 0; i < CATEGORY_MAX && i < (int)(sizeof(CAT_KEYS) / sizeof(CAT_KEYS[0])); ++i )
+		{
+			out << "loot_" << CAT_KEYS[i] << "=" << g_loot.cat[i] << "\n";
+		}
 		for ( auto& d : g_save.deaths ) { out << "death=" << d.first << "\t" << d.second << "\n"; }
 		size_t start = g_log.size() > 40 ? g_log.size() - 40 : 0;
 		for ( size_t i = start; i < g_log.size(); ++i )
@@ -1822,6 +1869,7 @@ void tick()
 	if ( keystatus[SDLK_F1] ) { keystatus[SDLK_F1] = 0; g_logPanel = g_logPanel == 1 ? 0 : 1; }
 	if ( keystatus[SDLK_F2] ) { keystatus[SDLK_F2] = 0; g_logPanel = g_logPanel == 2 ? 0 : 2; }
 	if ( keystatus[SDLK_F3] ) { keystatus[SDLK_F3] = 0; g_logPanel = g_logPanel == 3 ? 0 : 3; }
+	if ( keystatus[SDLK_F4] ) { keystatus[SDLK_F4] = 0; ++g_lootToggles; } // tracker: full or short loot list
 	pullDeathSources();
 	if ( ticks % TICKS_PER_SECOND == 0 ) { writeTrackerFile(); }
 	if ( !inGame() )
@@ -1871,6 +1919,7 @@ void tick()
 		sendLevelChecks();
 		scanInventories();
 		g_floorCounts = countFloor();
+		g_loot = countLoot();
 		updateMinotaurStatus();
 	}
 }
@@ -2627,7 +2676,7 @@ void drawHud()
 		// Key hint: only for the first moments of a floor, so the corner stays clean.
 		if ( g_logPanel == 0 && ticks - g_floorStartTicks < (Uint32)(TICKS_PER_SECOND * 12) )
 		{
-			drawText("F1: items   F2: log   F3: deaths", HUD_FONT, makeColorRGB(140, 140, 140), 38, row);
+			drawText("F1: items   F2: log   F3: deaths   F4: tracker loot list", HUD_FONT, makeColorRGB(140, 140, 140), 38, row);
 		}
 	}
 	if ( g_logPanel == 3 )

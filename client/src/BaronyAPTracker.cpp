@@ -30,6 +30,10 @@ namespace
 
 	TrackerState g_state;
 	bool g_showAll = false;
+	bool g_lootShort = false;   // the "other loot" box: full list (default) or just the total
+	int g_lastLootToggle = -1;  // F4 presses counted by the game
+	RECT g_lootBox{};           // where the loot box was drawn, for clicks
+	const COLORREF STEEL = RGB(184, 196, 214);
 	HFONT g_titleFont = nullptr, g_bodyFont = nullptr;
 	// Barony's own art, read from the Barony folder this program sits in.
 	Gdiplus::Image* g_logo = nullptr;
@@ -87,6 +91,14 @@ namespace
 			}
 		}
 		g_state = st;
+		// F4 in the game flips the loot box between full and short.
+		auto t = g_state.values.find("loot_toggle");
+		if ( t != g_state.values.end() )
+		{
+			int v = atoi(t->second.c_str());
+			if ( g_lastLootToggle >= 0 && v != g_lastLootToggle ) { g_lootShort = !g_lootShort; }
+			g_lastLootToggle = v;
+		}
 	}
 
 	Gdiplus::Image* loadImage(const std::string& relative)
@@ -196,7 +208,7 @@ namespace
 				drawPanel(dc, 10, y, rc.right - 20, 118);
 				int ground = num("ground"), chests = num("chests"), shop = num("shop"), marked = num("marked");
 				int total = ground + chests + shop + marked;
-				text(dc, 20, y + 8, L"Left on this floor", GOLD, g_bodyFont);
+				text(dc, 20, y + 8, L"Archipelago on this floor", GOLD, g_bodyFont);
 				swprintf(buf, 256, L"%d", total);
 				text(dc, rc.right - 60, y + 8, buf, total ? GOLD : DIM, g_titleFont);
 				swprintf(buf, 256, L"On the ground: %d", ground);
@@ -211,6 +223,42 @@ namespace
 				swprintf(buf, 256, L"Archipelago pickups still to find: %d", num("pickups_left"));
 				text(dc, 14, y, buf, DIM, g_bodyFont);
 				y += 30;
+
+				// Other (ordinary) loot lying on the floor: full list, or just the total (F4 / L / click).
+				struct Row { const wchar_t* name; int n; };
+				Row rows[] = {
+					{ L"Weapons", num("loot_weapon") }, { L"Armor", num("loot_armor") },
+					{ L"Potions", num("loot_potion") }, { L"Scrolls", num("loot_scroll") },
+					{ L"Spellbooks", num("loot_spellbook") }, { L"Magic staffs", num("loot_staff") },
+					{ L"Rings, amulets", num("loot_ring") + num("loot_amulet") }, { L"Gems", num("loot_gem") },
+					{ L"Tools", num("loot_tool") }, { L"Food", num("loot_food") },
+					{ L"Thrown", num("loot_thrown") }, { L"Books", num("loot_book") },
+				};
+				int boxH = g_lootShort ? 44 : 44 + 6 * 21 + 14 + 22 + 22;
+				drawPanel(dc, 10, y, rc.right - 20, boxH);
+				g_lootBox = RECT{ 10, y, rc.right - 10, y + boxH };
+				text(dc, 20, y + 10, g_lootShort ? L"Other loot on this floor  (F4: more)" : L"Other loot on this floor", STEEL, g_bodyFont);
+				swprintf(buf, 256, L"%d", num("loot_total"));
+				text(dc, rc.right - 60, y + 6, buf, num("loot_total") ? STEEL : DIM, g_titleFont);
+				if ( !g_lootShort )
+				{
+					int colW = (rc.right - 60) / 2;
+					for ( int i = 0; i < 12; ++i )
+					{
+						int cx = 30 + (i % 2) * (colW + 10), cy = y + 40 + (i / 2) * 21;
+						COLORREF c = rows[i].n ? TEXT : DIM;
+						text(dc, cx, cy, rows[i].name, c, g_bodyFont);
+						swprintf(buf, 256, L"%d", rows[i].n);
+						text(dc, cx + colW - 30, cy, buf, c, g_bodyFont);
+					}
+					int ly = y + 40 + 6 * 21 + 6;
+					swprintf(buf, 256, L"Gold piles  %d", num("loot_gold"));
+					text(dc, 30, ly, buf, num("loot_gold") ? TEXT : DIM, g_bodyFont);
+					swprintf(buf, 256, L"Chests with loot  %d", num("loot_chests"));
+					text(dc, 30 + colW + 10, ly, buf, num("loot_chests") ? TEXT : DIM, g_bodyFont);
+					text(dc, 30, ly + 22, L"On the floor only; chest contents aren't counted.", DIM, g_bodyFont);
+				}
+				y += boxH + 12;
 			}
 			else
 			{
@@ -268,7 +316,14 @@ namespace
 				return 0;
 			case WM_KEYDOWN:
 				if ( wp == VK_TAB ) { g_showAll = !g_showAll; InvalidateRect(hwnd, nullptr, FALSE); }
+				if ( wp == 'L' || wp == VK_F4 ) { g_lootShort = !g_lootShort; InvalidateRect(hwnd, nullptr, FALSE); }
 				return 0;
+			case WM_LBUTTONDOWN:
+			{
+				POINT pt{ (short)LOWORD(lp), (short)HIWORD(lp) };
+				if ( PtInRect(&g_lootBox, pt) ) { g_lootShort = !g_lootShort; InvalidateRect(hwnd, nullptr, FALSE); }
+				return 0;
+			}
 			case WM_ERASEBKGND:
 				return 1;
 			case WM_PAINT:
@@ -307,7 +362,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE, LPSTR, int show)
 	RegisterClassW(&wc);
 
 	HWND hwnd = CreateWindowExW(0, wc.lpszClassName, L"Barony Archipelago Tracker",
-		WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 460, 640, nullptr, nullptr, inst, nullptr);
+		WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 470, 960, nullptr, nullptr, inst, nullptr);
 	ShowWindow(hwnd, show);
 	SetTimer(hwnd, 1, 1000, nullptr);
 	readState();
