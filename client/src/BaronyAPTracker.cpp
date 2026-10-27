@@ -117,6 +117,8 @@ namespace
 				else { st.values[k] = v; }
 			}
 		}
+		// A file caught half-written (no status line yet): keep what we had.
+		if ( st.fileFound && !st.values.count("connected") && g_state.fileFound ) { return; }
 		g_state = st;
 		// F4 in the game flips the loot box between full and short.
 		auto t = g_state.values.find("loot_toggle");
@@ -500,6 +502,7 @@ namespace
 		MapState m;
 		std::ifstream in(exeDir() + "\\archipelago\\trackermap.txt");
 		std::string line;
+		bool saidNotInGame = false;
 		std::map<long long, size_t> pileIndex;
 		while ( in && std::getline(in, line) )
 		{
@@ -509,7 +512,7 @@ namespace
 			std::string k = line.substr(0, eq), v = line.substr(eq + 1);
 			auto f = splitTabs(v);
 			auto d = [&](size_t i) { return i < f.size() ? atof(f[i].c_str()) : 0.0; };
-			if ( k == "ingame" ) { m.ingame = v == "1"; }
+			if ( k == "ingame" ) { m.ingame = v == "1"; saidNotInGame = v == "0"; }
 			else if ( k == "size" ) { sscanf(v.c_str(), "%d %d", &m.w, &m.h); }
 			else if ( k == "floorid" ) { m.floorId = v; }
 			else if ( k == "name" ) { m.name = v; }
@@ -539,7 +542,12 @@ namespace
 				else { m.piles[found->second].items.push_back(it); }
 			}
 		}
-		if ( (int)m.rows.size() != m.h ) { m.ingame = false; }
+		if ( (int)m.rows.size() != m.h || m.h <= 0 )
+		{
+			// Caught mid-write (or no file): keep the last good map unless the game says no run is on.
+			if ( !saidNotInGame && g_map.ingame ) { return; }
+			m.ingame = false;
+		}
 		g_map = m;
 	}
 
@@ -1189,6 +1197,9 @@ namespace
 				}
 				return 0;
 			}
+			case WM_CAPTURECHANGED:
+				g_dragging = false;
+				return 0;
 			case WM_LBUTTONUP:
 				if ( g_dragging ) { g_dragging = false; ReleaseCapture(); }
 				return 0;

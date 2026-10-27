@@ -1,25 +1,25 @@
-From 9a307975a9a2c2359e2cdd82544966f6f787b236 Mon Sep 17 00:00:00 2001
+From 22a96c397df210922a1a4e2cb3684b5556fcf55c Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
 
 ---
  CMakeLists.txt                    |   32 +
- src/BaronyAPTracker.cpp           | 1353 +++++++++
+ src/BaronyAPTracker.cpp           | 1364 ++++++++++
  src/CMakeLists.txt                |    1 +
  src/actchest.cpp                  |    7 +
  src/actgeneral.cpp                |    2 +
- src/actladder.cpp                 |   19 +
+ src/actladder.cpp                 |   25 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 4213 +++++++++++++++++++++++++++++
- src/archipelago_barony.hpp        |  122 +
+ src/archipelago_barony.cpp        | 4231 +++++++++++++++++++++++++++++
+ src/archipelago_barony.hpp        |  123 +
  src/archipelago_ids.hpp           |  134 +
  src/charclass.cpp                 |    4 +
  src/engine/audio/music.cpp        |    4 +
  src/engine/audio/sound_game.cpp   |    2 +
  src/files.cpp                     |   53 +
- src/game.cpp                      |    7 +
+ src/game.cpp                      |   12 +
  src/init.cpp                      |    6 +
  src/init_game.cpp                 |    6 +
  src/interface/playerinventory.cpp |   13 +
@@ -29,7 +29,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   10 +
  src/ui/MainMenu.cpp               |    5 +-
- 25 files changed, 6082 insertions(+), 4 deletions(-)
+ 25 files changed, 6123 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -80,10 +80,10 @@ index 4e9ed8f..b417834 100644
      # Only for MinGW...
 diff --git a/src/BaronyAPTracker.cpp b/src/BaronyAPTracker.cpp
 new file mode 100644
-index 0000000..87ff500
+index 0000000..165dae9
 --- /dev/null
 +++ b/src/BaronyAPTracker.cpp
-@@ -0,0 +1,1353 @@
+@@ -0,0 +1,1364 @@
 +// Barony Archipelago tracker window.
 +//
 +// Barony (the Archipelago build) starts this with the game, and writes
@@ -203,6 +203,8 @@ index 0000000..87ff500
 +				else { st.values[k] = v; }
 +			}
 +		}
++		// A file caught half-written (no status line yet): keep what we had.
++		if ( st.fileFound && !st.values.count("connected") && g_state.fileFound ) { return; }
 +		g_state = st;
 +		// F4 in the game flips the loot box between full and short.
 +		auto t = g_state.values.find("loot_toggle");
@@ -586,6 +588,7 @@ index 0000000..87ff500
 +		MapState m;
 +		std::ifstream in(exeDir() + "\\archipelago\\trackermap.txt");
 +		std::string line;
++		bool saidNotInGame = false;
 +		std::map<long long, size_t> pileIndex;
 +		while ( in && std::getline(in, line) )
 +		{
@@ -595,7 +598,7 @@ index 0000000..87ff500
 +			std::string k = line.substr(0, eq), v = line.substr(eq + 1);
 +			auto f = splitTabs(v);
 +			auto d = [&](size_t i) { return i < f.size() ? atof(f[i].c_str()) : 0.0; };
-+			if ( k == "ingame" ) { m.ingame = v == "1"; }
++			if ( k == "ingame" ) { m.ingame = v == "1"; saidNotInGame = v == "0"; }
 +			else if ( k == "size" ) { sscanf(v.c_str(), "%d %d", &m.w, &m.h); }
 +			else if ( k == "floorid" ) { m.floorId = v; }
 +			else if ( k == "name" ) { m.name = v; }
@@ -625,7 +628,12 @@ index 0000000..87ff500
 +				else { m.piles[found->second].items.push_back(it); }
 +			}
 +		}
-+		if ( (int)m.rows.size() != m.h ) { m.ingame = false; }
++		if ( (int)m.rows.size() != m.h || m.h <= 0 )
++		{
++			// Caught mid-write (or no file): keep the last good map unless the game says no run is on.
++			if ( !saidNotInGame && g_map.ingame ) { return; }
++			m.ingame = false;
++		}
 +		g_map = m;
 +	}
 +
@@ -1275,6 +1283,9 @@ index 0000000..87ff500
 +				}
 +				return 0;
 +			}
++			case WM_CAPTURECHANGED:
++				g_dragging = false;
++				return 0;
 +			case WM_LBUTTONUP:
 +				if ( g_dragging ) { g_dragging = false; ReleaseCapture(); }
 +				return 0;
@@ -1496,7 +1507,7 @@ index b5a4f80..9de0707 100644
  	Entity* killer = nullptr;
  	if ( colliderKillerUid != 0 )
 diff --git a/src/actladder.cpp b/src/actladder.cpp
-index 72006c5..906faf9 100644
+index 72006c5..267996b 100644
 --- a/src/actladder.cpp
 +++ b/src/actladder.cpp
 @@ -11,6 +11,7 @@
@@ -1553,6 +1564,19 @@ index 72006c5..906faf9 100644
  				victory = portalVictoryType;
  				if ( multiplayer == SERVER )
  				{
+@@ -902,6 +921,12 @@ void Entity::actMidGamePortal()
+ 	double dist;
+ 	int i, c;
+ 
++	if ( multiplayer != CLIENT && AP::bossRushHideMidPortal() ) // Archipelago: Boss Rush ends at the last boss
++	{
++		if ( !flags[INVISIBLE] ) { flags[INVISIBLE] = true; serverUpdateEntityFlag(this, INVISIBLE); }
++		return;
++	}
++
+ 	if ( this->ticks == 1 )
+ 	{
+ 		this->createWorldUITooltip();
 diff --git a/src/actmonster.cpp b/src/actmonster.cpp
 index e3f78b0..b7d0cb0 100644
 --- a/src/actmonster.cpp
@@ -1615,10 +1639,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..d5d1e82
+index 0000000..ebbcbd7
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,4213 @@
+@@ -0,0 +1,4231 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -1702,7 +1726,6 @@ index 0000000..d5d1e82
 +		int shop_checks = 0;
 +		int boss_checks = 0;
 +		int special_area_checks = 0;
-+		int stair_keys = 0;           // old seeds only
 +		int floor_keys = 0;           // a key on every floor opens its stairs
 +		int key_compass_time = 30;
 +		int floor_key_requirement = 0; // 0 key or all enemies, 1 key only, 2 all enemies only
@@ -1739,8 +1762,6 @@ index 0000000..d5d1e82
 +		int layout_seed = 0;          // 0 locked (each floor's map comes from the seed), 1 random
 +		int enemy_level_scaling = 0;  // 0 off, 1 stronger only, 2 match your level both ways
 +		int boss_level_scaling = 0;   // the same, for bosses
-+		int trap_countdown_mask = 0;  // bit n: trap n (Minotaur = 0) counts down before going off
-+		int trap_countdown = 10;      // seconds
 +		int polymorph_trap_duration = 30;
 +		int blindness_trap_duration = 15;
 +		int minotaur_time = 100;      // percent of the normal time before the Minotaur arrives
@@ -1916,7 +1937,7 @@ index 0000000..d5d1e82
 +	bool isItemMessage(const std::string& t)
 +	{
 +		static const char* const keys[] = { "Received", "Found an Archipelago", "Trap", " sent to ", " found their ",
-+			"Marked enemy", "Stair Key", "Extra Life", "Lives:", " died", "lose a life" };
++			"Marked enemy", "Extra Life", "Lives:", " died", "lose a life" };
 +		for ( const char* k : keys ) { if ( t.find(k) != std::string::npos ) { return true; } }
 +		return false;
 +	}
@@ -2000,6 +2021,7 @@ index 0000000..d5d1e82
 +		out << "darknessQueue=" << g_save.darknessQueue << "\n";
 +		out << "goalBossesKilled=" << g_save.goalBossesKilled << "\n";
 +		out << "goalSent=" << (g_save.goalSent ? 1 : 0) << "\n";
++		out << "carryPickups=" << g_carryPickups << "\nfloorUnfound=" << g_floorApUnfound << "\n";
 +		out << "rushSeq=" << g_save.rushSeq << "\nrushPhase=" << g_save.rushPhase << "\nrushLevel=" << g_save.rushLevel
 +			<< "\nrushRunKey=" << g_save.rushRunKey << "\n";
 +		for ( auto& d : g_save.deaths ) { out << "death:" << d.first << "=" << d.second << "\n"; }
@@ -2033,6 +2055,8 @@ index 0000000..d5d1e82
 +			else if ( key == "goalBossesKilled" ) { g_save.goalBossesKilled = (int)value; }
 +			else if ( key == "goalSent" ) { g_save.goalSent = value != 0; }
 +			else if ( key == "rushPhase" ) { g_save.rushPhase = (int)value; }
++			else if ( key == "carryPickups" ) { g_carryPickups = (int)value; }
++			else if ( key == "floorUnfound" ) { g_floorApUnfound = (int)value; }
 +			else if ( key == "rushLevel" ) { g_save.rushLevel = (int)value; }
 +			else if ( key == "rushRunKey" ) { g_save.rushRunKey = (Uint32)value; }
 +			else if ( key.size() == 5 && key.compare(0, 4, "perm") == 0 && key[4] >= '0' && key[4] <= '7' )
@@ -2088,13 +2112,25 @@ index 0000000..d5d1e82
 +		});
 +	}
 +
-+	void disconnect()
++	bool g_resendChecks = false; // after a reconnect that kept the run going: send every check again
++
++	void disconnect(bool keepRun = false)
 +	{
 +		if ( g_started )
 +		{
 +			AP_Shutdown();
 +		}
 +		g_started = false;
++		if ( keepRun )
++		{
++			// Same slot, new address (the room came back on a new port): the run keeps going with
++			// its slot data and save; the server resends the items and we resend the checks.
++			g_resendChecks = true;
++			std::lock_guard<std::mutex> lock(g_netMutex);
++			g_inbox.clear();
++			g_serverChecked.clear();
++			return;
++		}
 +		g_ready = false;
 +		g_received.clear();
 +		g_sent.clear();
@@ -2108,7 +2144,9 @@ index 0000000..d5d1e82
 +
 +	void connect(const std::string& server, const std::string& slot, const std::string& password)
 +	{
-+		disconnect();
++		bool keepRun = g_ready && slot == g_slotName;
++		if ( keepRun ) { writeSave(); }
++		disconnect(keepRun);
 +		g_server = server;
 +		g_slotName = slot;
 +		g_password = password;
@@ -2134,7 +2172,9 @@ index 0000000..d5d1e82
 +				g_deathSources.push_back(source);
 +				// The log shows who died (and how, when their game says): "Herx died: fell in lava".
 +				std::string line = source.empty() ? std::string("Someone died") : source + " died";
-+				if ( !cause.empty() && cause != source ) { line += ": " + cause; }
++				// Most games already write the whole line ("Herx was eaten by a grue"): show that as is.
++				if ( !cause.empty() && !source.empty() && cause.find(source) != std::string::npos ) { line = cause; }
++				else if ( !cause.empty() && cause != source ) { line += ": " + cause; }
 +				g_deathTexts.push_back(line);
 +			}
 +			g_deathLinkIn = true;
@@ -2154,7 +2194,6 @@ index 0000000..d5d1e82
 +		registerSlotInt("shop_checks", &SlotOptions::shop_checks);
 +		registerSlotInt("boss_checks", &SlotOptions::boss_checks);
 +		registerSlotInt("special_area_checks", &SlotOptions::special_area_checks);
-+		registerSlotInt("stair_keys", &SlotOptions::stair_keys);
 +		registerSlotInt("floor_keys", &SlotOptions::floor_keys);
 +		registerSlotInt("key_compass_time", &SlotOptions::key_compass_time);
 +		registerSlotInt("floor_key_requirement", &SlotOptions::floor_key_requirement);
@@ -2191,8 +2230,6 @@ index 0000000..d5d1e82
 +		registerSlotInt("layout_seed", &SlotOptions::layout_seed);
 +		registerSlotInt("enemy_level_scaling", &SlotOptions::enemy_level_scaling);
 +		registerSlotInt("boss_level_scaling", &SlotOptions::boss_level_scaling);
-+		registerSlotInt("trap_countdown_mask", &SlotOptions::trap_countdown_mask);
-+		registerSlotInt("trap_countdown", &SlotOptions::trap_countdown);
 +		registerSlotInt("polymorph_trap_duration", &SlotOptions::polymorph_trap_duration);
 +		registerSlotInt("blindness_trap_duration", &SlotOptions::blindness_trap_duration);
 +		registerSlotInt("minotaur_time", &SlotOptions::minotaur_time);
@@ -2247,7 +2284,8 @@ index 0000000..d5d1e82
 +		g_lastCharLevelSent = 1;
 +		launchTracker();
 +		say(COLOR_AP, "Archipelago: connected. Goal: %s.",
-+			g_slot.goal == 0 ? "defeat Baron Herx" : g_slot.goal == 1 ? "defeat the Devil" : "defeat the twin liches");
++			g_slot.goal == 0 ? "defeat Baron Herx" : g_slot.goal == 1 ? "defeat the Devil"
++			: g_slot.goal == 3 ? "Boss Rush" : "defeat the twin liches");
 +	}
 +
 +	// ----------------------------------------------------------- items
@@ -2380,7 +2418,7 @@ index 0000000..d5d1e82
 +		}
 +	}
 +
-+	// Traps wait here until they can go off: after their countdown, and only while a player is
++	// Traps wait here until they can go off: only while a player is
 +	// alive and on a floor (not between floors or on the death screen).
 +	struct PendingTrap { int64_t item; Uint32 fireAt; bool warned3; };
 +	std::vector<PendingTrap> g_pendingTraps;
@@ -2487,18 +2525,7 @@ index 0000000..d5d1e82
 +
 +	void applyTrap(int64_t item)
 +	{
-+		int bit = (int)(item - ap_ids::ITEM_TRAP_MINOTAUR);
-+		bool countdown = bit >= 0 && bit < 31 && (g_slot.trap_countdown_mask & (1 << bit));
-+		if ( countdown )
-+		{
-+			int secs = std::max(1, g_slot.trap_countdown);
-+			say(COLOR_TRAP, "%s incoming in %d seconds!", trapName(item), secs);
-+			g_pendingTraps.push_back(PendingTrap{ item, ticks + (Uint32)(secs * TICKS_PER_SECOND), secs <= 3 });
-+		}
-+		else
-+		{
-+			g_pendingTraps.push_back(PendingTrap{ item, 0, true });
-+		}
++		g_pendingTraps.push_back(PendingTrap{ item, 0, true });
 +	}
 +
 +	void updatePendingTraps()
@@ -2617,13 +2644,9 @@ index 0000000..d5d1e82
 +				say(COLOR_AP, "Received a Progressive Compass (%d).", (int)std::count(g_received.begin(), g_received.begin() + i + 1, g_received[i]));
 +				giveCompassIfMissing();
 +			}
-+			else if ( g_received[i] != ap_ids::ITEM_STAIR_KEY )
++			else if ( g_received[i] != ap_ids::ITEM_STAIR_KEY ) // Stair Keys aren't placed any more
 +			{
 +				applyNewItem(g_received[i]);
-+			}
-+			else
-+			{
-+				say(COLOR_AP, "Received a Progressive Stair Key (%d).", (int)std::count(g_received.begin(), g_received.begin() + i + 1, g_received[i]));
 +			}
 +		}
 +		g_save.processedItems = (int)g_received.size();
@@ -4046,6 +4069,27 @@ index 0000000..d5d1e82
 +		return t;
 +	}
 +
++	// Writes a file the tracker reads in one go (a temp file renamed over it), so the tracker
++	// never sees half of it.
++	bool writeWhole(const std::string& path, const std::string& text)
++	{
++		std::string tmp = path + ".tmp";
++		{
++			std::ofstream file(tmp, std::ios::trunc | std::ios::binary);
++			if ( !file ) { return false; }
++			file << text;
++		}
++		std::error_code ec;
++		std::filesystem::rename(tmp, path, ec);
++		if ( !ec ) { return true; }
++		// The tracker has it open right now: write it in place instead.
++		std::filesystem::remove(tmp, ec);
++		std::ofstream file(path, std::ios::trunc | std::ios::binary);
++		if ( !file ) { return false; }
++		file << text;
++		return true;
++	}
++
 +	FloorCounts g_floorCounts;
 +	int g_logPanel = 0; // 0 hidden, 1 items only (F1), 2 everything (F2), 3 death counter (F3)
 +
@@ -4065,7 +4109,7 @@ index 0000000..d5d1e82
 +		out << "floor=" << currentlevel << "\n";
 +		out << "ground=" << g_floorCounts.ground << "\nchests=" << g_floorCounts.chests << "\nshop=" << g_floorCounts.shop
 +			<< "\nmarked=" << g_floorCounts.marked << "\n";
-+		out << "lives=" << g_save.livesLeft << "\nkeys=" << countReceived(ap_ids::ITEM_STAIR_KEY) << "\n";
++		out << "lives=" << g_save.livesLeft << "\n";
 +		out << "pickups_left=" << uncheckedCount(ap_ids::PICKUP_OFFSET, g_slot.archipelago_pickups) << "\n";
 +		out << "deaths_total=" << totalDeaths() << "\n";
 +		out << "minotaur=" << g_minotaurSecs << "\n";
@@ -4096,17 +4140,15 @@ index 0000000..d5d1e82
 +		}
 +		std::string text = out.str();
 +		if ( text == lastWritten ) { return; }
-+		std::ofstream file("archipelago/tracker.txt", std::ios::trunc | std::ios::binary);
-+		if ( !file ) { return; }
-+		file << text;
-+		lastWritten = text;
++		if ( writeWhole("archipelago/tracker.txt", text) ) { lastWritten = text; }
 +	}
 +
 +	// ------------------------------------------------------- Boss Rush (Goal)
 +	// The dungeon down to Boss Rush Floors, then the bosses you picked back to back (Herx, the
 +	// Devil, the Twin Liches), with a rest in the town between them if you like. Bosses you've
 +	// already beaten (in any run) are skipped.
-+	bool bossRushOn() { return g_ready && g_slot.goal == 3 && multiplayer != CLIENT; }
++	bool bossRushOn() { return g_ready && g_slot.goal == 3 && multiplayer == SINGLE; } // single player only
++	bool g_rushSaveDirty = false; // the rush state changed while a floor was loading: save it on the next tick
 +
 +	int bossRushGoalMask()
 +	{
@@ -4162,7 +4204,7 @@ index 0000000..d5d1e82
 +			g_save.rushPhase = std::min((int)seq.size(), g_save.rushPhase + 1);
 +			g_save.rushLevel = level;
 +		}
-+		writeSave();
++		g_rushSaveDirty = true; // may run on the loading thread: the save is written on the next tick
 +		const std::string& map = seq[g_save.rushPhase - 1];
 +		printlog("[Archipelago] Boss Rush: stop %d of %d (%s).", g_save.rushPhase, (int)seq.size(), map.c_str());
 +		return map;
@@ -4310,10 +4352,7 @@ index 0000000..d5d1e82
 +		}
 +		std::string text = out.str();
 +		if ( text == lastWritten ) { return; }
-+		std::ofstream file("archipelago/trackermap.txt", std::ios::trunc | std::ios::binary);
-+		if ( !file ) { return; }
-+		file << text;
-+		lastWritten = text;
++		if ( writeWhole("archipelago/trackermap.txt", text) ) { lastWritten = text; }
 +	}
 +
 +	void launchTracker()
@@ -4381,10 +4420,7 @@ index 0000000..d5d1e82
 +		std::string text = out.str();
 +		if ( text == lastWritten ) { return; }
 +		std::filesystem::create_directories("archipelago");
-+		std::ofstream file("archipelago/tracker.txt", std::ios::trunc | std::ios::binary);
-+		if ( !file ) { return; }
-+		file << text;
-+		lastWritten = text;
++		if ( writeWhole("archipelago/tracker.txt", text) ) { lastWritten = text; }
 +	}
 +
 +	// ----------------------------------------------------------- console commands
@@ -4463,6 +4499,13 @@ index 0000000..d5d1e82
 +	if ( !g_started ) { return; }
 +	checkReady();
 +	if ( !g_ready ) { return; }
++	if ( g_resendChecks && AP_GetConnectionStatus() == AP_ConnectionStatus::Authenticated )
++	{
++		g_resendChecks = false;
++		for ( int64_t loc : g_sent ) { AP_SendItem(loc); }
++		if ( g_save.goalSent ) { AP_StoryComplete(); }
++		printlog("[Archipelago] Reconnected; %d checks sent again.", (int)g_sent.size());
++	}
 +
 +	// The death screen works even while the connection is down.
 +	if ( g_deathScreen && inGame() )
@@ -4488,6 +4531,7 @@ index 0000000..d5d1e82
 +	if ( keystatus[SDLK_F4] ) { keystatus[SDLK_F4] = 0; ++g_lootToggles; } // tracker: full or short loot list
 +	pullDeathSources();
 +	if ( g_floorReady && inGame() ) { g_floorApUnfound = std::max(0, g_floorApTotal - g_floorApFound); }
++	if ( g_rushSaveDirty ) { g_rushSaveDirty = false; writeSave(); }
 +	if ( ticks % TICKS_PER_SECOND == 0 ) { writeTrackerFile(); writeTrackerMap(); }
 +	if ( !inGame() )
 +	{
@@ -4958,16 +5002,7 @@ index 0000000..d5d1e82
 +			floorCountsText(c).c_str());
 +		return false;
 +	}
-+	if ( !g_slot.stair_keys ) { return true; }
-+	int nextFloor = currentlevel + 1;
-+	int section = (nextFloor - 1) / ap_ids::FLOORS_PER_SECTION + 1;
-+	int needed = section - 1;
-+	int have = countReceived(ap_ids::ITEM_STAIR_KEY);
-+	if ( have >= needed ) { return true; }
-+	messagePlayerColor(player, MESSAGE_HINT, COLOR_AP,
-+		"The stairs are sealed. You need %d Progressive Stair Key%s to go deeper (you have %d).",
-+		needed, needed == 1 ? "" : "s", have);
-+	return false;
++	return true;
 +}
 +
 +uint32_t lockedMapSeed(uint32_t seed)
@@ -5735,6 +5770,13 @@ index 0000000..d5d1e82
 +	return chosen.empty() ? nullptr : chosen.c_str();
 +}
 +
++bool bossRushHideMidPortal()
++{
++	// The last boss of the rush: only the victory portal, so the run ends there.
++	if ( !bossRushOn() || g_save.rushRunKey != uniqueGameKey || g_save.rushPhase <= 0 ) { return false; }
++	return g_save.rushPhase >= (int)splitCommas(g_save.rushSeq).size();
++}
++
 +bool bossRushSkipVictory()
 +{
 +	// Not the last boss yet: the victory portal takes you on to the next stop instead of ending.
@@ -5825,8 +5867,8 @@ index 0000000..d5d1e82
 +	if ( !g_started ) { return "Archipelago: not connected. Use /ap_connect host:port slot [password]."; }
 +	if ( !g_ready ) { return "Archipelago: connecting to " + g_server + "..."; }
 +	char buf[256];
-+	snprintf(buf, sizeof(buf), "Archipelago: %s as %s | stair keys %d | lives %d | kills %ld | queued: %d Minotaur, %d darkness",
-+		isConnected() ? "connected" : "reconnecting", g_slotName.c_str(), countReceived(ap_ids::ITEM_STAIR_KEY),
++	snprintf(buf, sizeof(buf), "Archipelago: %s as %s | lives %d | kills %ld | queued: %d Minotaur, %d darkness",
++		isConnected() ? "connected" : "reconnecting", g_slotName.c_str(),
 +		g_save.livesLeft, g_save.totalKills, g_save.minotaurQueue, g_save.darknessQueue);
 +	return buf;
 +}
@@ -5834,10 +5876,10 @@ index 0000000..d5d1e82
 +} // namespace AP
 diff --git a/src/archipelago_barony.hpp b/src/archipelago_barony.hpp
 new file mode 100644
-index 0000000..adfeb69
+index 0000000..185908d
 --- /dev/null
 +++ b/src/archipelago_barony.hpp
-@@ -0,0 +1,122 @@
+@@ -0,0 +1,123 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client.
@@ -5952,7 +5994,8 @@ index 0000000..adfeb69
 +	// play, which may be a mod's version of the same track.
 +	void* pickMusicVersion(void* sound);
 +	const char* bossRushNextMap();  // Boss Rush: the map to load in place of this floor, or nullptr
-+	bool bossRushSkipVictory();     // Boss Rush: true = this victory portal goes on to the next boss
++	bool bossRushSkipVictory();
++	bool bossRushHideMidPortal();   // Boss Rush: the last boss's arena only has the victory portal     // Boss Rush: true = this victory portal goes on to the next boss
 +	bool launcherGate();        // start of main(): the launcher window first; false = quit
 +	bool holidayThemeAllowed(); // Barony's Halloween/Christmas themes, off unless archipelago.cfg says holiday_theme=1
 +
@@ -6257,7 +6300,7 @@ index 12ae3dd..31c3dcc 100644
  		if ( levelToLoad > 0 ) // if level == 0, then load up the first map.
  		{
 diff --git a/src/game.cpp b/src/game.cpp
-index 7837966..7b958b0 100644
+index 7837966..2db6fb4 100644
 --- a/src/game.cpp
 +++ b/src/game.cpp
 @@ -12,6 +12,7 @@
@@ -6277,7 +6320,7 @@ index 7837966..7b958b0 100644
  #ifdef NINTENDO
  	(void)nxUpdateCrashMessage();
  #endif
-@@ -2106,6 +2109,7 @@ void gameLogic(void)
+@@ -2106,11 +2109,17 @@ void gameLogic(void)
  						mapseed = map_sequence_rng.rand();
  					}
  					lastEntityUIDs = entity_uids;
@@ -6285,7 +6328,17 @@ index 7837966..7b958b0 100644
  					if ( forceMapSeed > 0 )
  					{
  						mapseed = forceMapSeed;
-@@ -7093,6 +7097,7 @@ int main(int argc, char** argv)
+ 						forceMapSeed = 0;
+ 					}
++					if ( !secretlevel && loadCustomNextMap.compare("") == 0 )
++					{
++						// Archipelago: Boss Rush picks the next arena here, before clients are told the map
++						if ( const char* rush = AP::bossRushNextMap() ) { loadCustomNextMap = rush; }
++					}
+ 
+ 					if ( !secretlevel )
+ 					{
+@@ -7093,6 +7102,7 @@ int main(int argc, char** argv)
  {
  #ifdef WINDOWS
  	SetUnhandledExceptionFilter(unhandled_handler);
@@ -6293,7 +6346,7 @@ index 7837966..7b958b0 100644
  #ifdef _DEBUG
  	//_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
  #endif
-@@ -7663,6 +7668,7 @@ int main(int argc, char** argv)
+@@ -7663,6 +7673,7 @@ int main(int argc, char** argv)
  						MainMenu::doMainMenu(!intro);
  						UIToastNotificationManager.drawNotifications(MainMenu::isCutsceneActive(), true); // draw this before the cursor
                          framesProcResult = doFrames();
@@ -6301,7 +6354,7 @@ index 7837966..7b958b0 100644
  
  #ifdef USE_IMGUI
  						ImGui_t::render();
-@@ -7981,6 +7987,7 @@ int main(int argc, char** argv)
+@@ -7981,6 +7992,7 @@ int main(int argc, char** argv)
  				framesProcResult = doFrames();
  				DebugStats.t6Messages = std::chrono::high_resolution_clock::now();
  				ingameHud();

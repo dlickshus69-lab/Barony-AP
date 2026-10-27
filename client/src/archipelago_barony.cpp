@@ -81,7 +81,6 @@ namespace
 		int shop_checks = 0;
 		int boss_checks = 0;
 		int special_area_checks = 0;
-		int stair_keys = 0;           // old seeds only
 		int floor_keys = 0;           // a key on every floor opens its stairs
 		int key_compass_time = 30;
 		int floor_key_requirement = 0; // 0 key or all enemies, 1 key only, 2 all enemies only
@@ -118,8 +117,6 @@ namespace
 		int layout_seed = 0;          // 0 locked (each floor's map comes from the seed), 1 random
 		int enemy_level_scaling = 0;  // 0 off, 1 stronger only, 2 match your level both ways
 		int boss_level_scaling = 0;   // the same, for bosses
-		int trap_countdown_mask = 0;  // bit n: trap n (Minotaur = 0) counts down before going off
-		int trap_countdown = 10;      // seconds
 		int polymorph_trap_duration = 30;
 		int blindness_trap_duration = 15;
 		int minotaur_time = 100;      // percent of the normal time before the Minotaur arrives
@@ -295,7 +292,7 @@ namespace
 	bool isItemMessage(const std::string& t)
 	{
 		static const char* const keys[] = { "Received", "Found an Archipelago", "Trap", " sent to ", " found their ",
-			"Marked enemy", "Stair Key", "Extra Life", "Lives:", " died", "lose a life" };
+			"Marked enemy", "Extra Life", "Lives:", " died", "lose a life" };
 		for ( const char* k : keys ) { if ( t.find(k) != std::string::npos ) { return true; } }
 		return false;
 	}
@@ -379,6 +376,7 @@ namespace
 		out << "darknessQueue=" << g_save.darknessQueue << "\n";
 		out << "goalBossesKilled=" << g_save.goalBossesKilled << "\n";
 		out << "goalSent=" << (g_save.goalSent ? 1 : 0) << "\n";
+		out << "carryPickups=" << g_carryPickups << "\nfloorUnfound=" << g_floorApUnfound << "\n";
 		out << "rushSeq=" << g_save.rushSeq << "\nrushPhase=" << g_save.rushPhase << "\nrushLevel=" << g_save.rushLevel
 			<< "\nrushRunKey=" << g_save.rushRunKey << "\n";
 		for ( auto& d : g_save.deaths ) { out << "death:" << d.first << "=" << d.second << "\n"; }
@@ -412,6 +410,8 @@ namespace
 			else if ( key == "goalBossesKilled" ) { g_save.goalBossesKilled = (int)value; }
 			else if ( key == "goalSent" ) { g_save.goalSent = value != 0; }
 			else if ( key == "rushPhase" ) { g_save.rushPhase = (int)value; }
+			else if ( key == "carryPickups" ) { g_carryPickups = (int)value; }
+			else if ( key == "floorUnfound" ) { g_floorApUnfound = (int)value; }
 			else if ( key == "rushLevel" ) { g_save.rushLevel = (int)value; }
 			else if ( key == "rushRunKey" ) { g_save.rushRunKey = (Uint32)value; }
 			else if ( key.size() == 5 && key.compare(0, 4, "perm") == 0 && key[4] >= '0' && key[4] <= '7' )
@@ -467,13 +467,25 @@ namespace
 		});
 	}
 
-	void disconnect()
+	bool g_resendChecks = false; // after a reconnect that kept the run going: send every check again
+
+	void disconnect(bool keepRun = false)
 	{
 		if ( g_started )
 		{
 			AP_Shutdown();
 		}
 		g_started = false;
+		if ( keepRun )
+		{
+			// Same slot, new address (the room came back on a new port): the run keeps going with
+			// its slot data and save; the server resends the items and we resend the checks.
+			g_resendChecks = true;
+			std::lock_guard<std::mutex> lock(g_netMutex);
+			g_inbox.clear();
+			g_serverChecked.clear();
+			return;
+		}
 		g_ready = false;
 		g_received.clear();
 		g_sent.clear();
@@ -487,7 +499,9 @@ namespace
 
 	void connect(const std::string& server, const std::string& slot, const std::string& password)
 	{
-		disconnect();
+		bool keepRun = g_ready && slot == g_slotName;
+		if ( keepRun ) { writeSave(); }
+		disconnect(keepRun);
 		g_server = server;
 		g_slotName = slot;
 		g_password = password;
@@ -513,7 +527,9 @@ namespace
 				g_deathSources.push_back(source);
 				// The log shows who died (and how, when their game says): "Herx died: fell in lava".
 				std::string line = source.empty() ? std::string("Someone died") : source + " died";
-				if ( !cause.empty() && cause != source ) { line += ": " + cause; }
+				// Most games already write the whole line ("Herx was eaten by a grue"): show that as is.
+				if ( !cause.empty() && !source.empty() && cause.find(source) != std::string::npos ) { line = cause; }
+				else if ( !cause.empty() && cause != source ) { line += ": " + cause; }
 				g_deathTexts.push_back(line);
 			}
 			g_deathLinkIn = true;
@@ -533,7 +549,6 @@ namespace
 		registerSlotInt("shop_checks", &SlotOptions::shop_checks);
 		registerSlotInt("boss_checks", &SlotOptions::boss_checks);
 		registerSlotInt("special_area_checks", &SlotOptions::special_area_checks);
-		registerSlotInt("stair_keys", &SlotOptions::stair_keys);
 		registerSlotInt("floor_keys", &SlotOptions::floor_keys);
 		registerSlotInt("key_compass_time", &SlotOptions::key_compass_time);
 		registerSlotInt("floor_key_requirement", &SlotOptions::floor_key_requirement);
@@ -570,8 +585,6 @@ namespace
 		registerSlotInt("layout_seed", &SlotOptions::layout_seed);
 		registerSlotInt("enemy_level_scaling", &SlotOptions::enemy_level_scaling);
 		registerSlotInt("boss_level_scaling", &SlotOptions::boss_level_scaling);
-		registerSlotInt("trap_countdown_mask", &SlotOptions::trap_countdown_mask);
-		registerSlotInt("trap_countdown", &SlotOptions::trap_countdown);
 		registerSlotInt("polymorph_trap_duration", &SlotOptions::polymorph_trap_duration);
 		registerSlotInt("blindness_trap_duration", &SlotOptions::blindness_trap_duration);
 		registerSlotInt("minotaur_time", &SlotOptions::minotaur_time);
@@ -626,7 +639,8 @@ namespace
 		g_lastCharLevelSent = 1;
 		launchTracker();
 		say(COLOR_AP, "Archipelago: connected. Goal: %s.",
-			g_slot.goal == 0 ? "defeat Baron Herx" : g_slot.goal == 1 ? "defeat the Devil" : "defeat the twin liches");
+			g_slot.goal == 0 ? "defeat Baron Herx" : g_slot.goal == 1 ? "defeat the Devil"
+			: g_slot.goal == 3 ? "Boss Rush" : "defeat the twin liches");
 	}
 
 	// ----------------------------------------------------------- items
@@ -759,7 +773,7 @@ namespace
 		}
 	}
 
-	// Traps wait here until they can go off: after their countdown, and only while a player is
+	// Traps wait here until they can go off: only while a player is
 	// alive and on a floor (not between floors or on the death screen).
 	struct PendingTrap { int64_t item; Uint32 fireAt; bool warned3; };
 	std::vector<PendingTrap> g_pendingTraps;
@@ -866,18 +880,7 @@ namespace
 
 	void applyTrap(int64_t item)
 	{
-		int bit = (int)(item - ap_ids::ITEM_TRAP_MINOTAUR);
-		bool countdown = bit >= 0 && bit < 31 && (g_slot.trap_countdown_mask & (1 << bit));
-		if ( countdown )
-		{
-			int secs = std::max(1, g_slot.trap_countdown);
-			say(COLOR_TRAP, "%s incoming in %d seconds!", trapName(item), secs);
-			g_pendingTraps.push_back(PendingTrap{ item, ticks + (Uint32)(secs * TICKS_PER_SECOND), secs <= 3 });
-		}
-		else
-		{
-			g_pendingTraps.push_back(PendingTrap{ item, 0, true });
-		}
+		g_pendingTraps.push_back(PendingTrap{ item, 0, true });
 	}
 
 	void updatePendingTraps()
@@ -996,13 +999,9 @@ namespace
 				say(COLOR_AP, "Received a Progressive Compass (%d).", (int)std::count(g_received.begin(), g_received.begin() + i + 1, g_received[i]));
 				giveCompassIfMissing();
 			}
-			else if ( g_received[i] != ap_ids::ITEM_STAIR_KEY )
+			else if ( g_received[i] != ap_ids::ITEM_STAIR_KEY ) // Stair Keys aren't placed any more
 			{
 				applyNewItem(g_received[i]);
-			}
-			else
-			{
-				say(COLOR_AP, "Received a Progressive Stair Key (%d).", (int)std::count(g_received.begin(), g_received.begin() + i + 1, g_received[i]));
 			}
 		}
 		g_save.processedItems = (int)g_received.size();
@@ -2425,6 +2424,27 @@ namespace
 		return t;
 	}
 
+	// Writes a file the tracker reads in one go (a temp file renamed over it), so the tracker
+	// never sees half of it.
+	bool writeWhole(const std::string& path, const std::string& text)
+	{
+		std::string tmp = path + ".tmp";
+		{
+			std::ofstream file(tmp, std::ios::trunc | std::ios::binary);
+			if ( !file ) { return false; }
+			file << text;
+		}
+		std::error_code ec;
+		std::filesystem::rename(tmp, path, ec);
+		if ( !ec ) { return true; }
+		// The tracker has it open right now: write it in place instead.
+		std::filesystem::remove(tmp, ec);
+		std::ofstream file(path, std::ios::trunc | std::ios::binary);
+		if ( !file ) { return false; }
+		file << text;
+		return true;
+	}
+
 	FloorCounts g_floorCounts;
 	int g_logPanel = 0; // 0 hidden, 1 items only (F1), 2 everything (F2), 3 death counter (F3)
 
@@ -2444,7 +2464,7 @@ namespace
 		out << "floor=" << currentlevel << "\n";
 		out << "ground=" << g_floorCounts.ground << "\nchests=" << g_floorCounts.chests << "\nshop=" << g_floorCounts.shop
 			<< "\nmarked=" << g_floorCounts.marked << "\n";
-		out << "lives=" << g_save.livesLeft << "\nkeys=" << countReceived(ap_ids::ITEM_STAIR_KEY) << "\n";
+		out << "lives=" << g_save.livesLeft << "\n";
 		out << "pickups_left=" << uncheckedCount(ap_ids::PICKUP_OFFSET, g_slot.archipelago_pickups) << "\n";
 		out << "deaths_total=" << totalDeaths() << "\n";
 		out << "minotaur=" << g_minotaurSecs << "\n";
@@ -2475,17 +2495,15 @@ namespace
 		}
 		std::string text = out.str();
 		if ( text == lastWritten ) { return; }
-		std::ofstream file("archipelago/tracker.txt", std::ios::trunc | std::ios::binary);
-		if ( !file ) { return; }
-		file << text;
-		lastWritten = text;
+		if ( writeWhole("archipelago/tracker.txt", text) ) { lastWritten = text; }
 	}
 
 	// ------------------------------------------------------- Boss Rush (Goal)
 	// The dungeon down to Boss Rush Floors, then the bosses you picked back to back (Herx, the
 	// Devil, the Twin Liches), with a rest in the town between them if you like. Bosses you've
 	// already beaten (in any run) are skipped.
-	bool bossRushOn() { return g_ready && g_slot.goal == 3 && multiplayer != CLIENT; }
+	bool bossRushOn() { return g_ready && g_slot.goal == 3 && multiplayer == SINGLE; } // single player only
+	bool g_rushSaveDirty = false; // the rush state changed while a floor was loading: save it on the next tick
 
 	int bossRushGoalMask()
 	{
@@ -2541,7 +2559,7 @@ namespace
 			g_save.rushPhase = std::min((int)seq.size(), g_save.rushPhase + 1);
 			g_save.rushLevel = level;
 		}
-		writeSave();
+		g_rushSaveDirty = true; // may run on the loading thread: the save is written on the next tick
 		const std::string& map = seq[g_save.rushPhase - 1];
 		printlog("[Archipelago] Boss Rush: stop %d of %d (%s).", g_save.rushPhase, (int)seq.size(), map.c_str());
 		return map;
@@ -2689,10 +2707,7 @@ namespace
 		}
 		std::string text = out.str();
 		if ( text == lastWritten ) { return; }
-		std::ofstream file("archipelago/trackermap.txt", std::ios::trunc | std::ios::binary);
-		if ( !file ) { return; }
-		file << text;
-		lastWritten = text;
+		if ( writeWhole("archipelago/trackermap.txt", text) ) { lastWritten = text; }
 	}
 
 	void launchTracker()
@@ -2760,10 +2775,7 @@ namespace
 		std::string text = out.str();
 		if ( text == lastWritten ) { return; }
 		std::filesystem::create_directories("archipelago");
-		std::ofstream file("archipelago/tracker.txt", std::ios::trunc | std::ios::binary);
-		if ( !file ) { return; }
-		file << text;
-		lastWritten = text;
+		if ( writeWhole("archipelago/tracker.txt", text) ) { lastWritten = text; }
 	}
 
 	// ----------------------------------------------------------- console commands
@@ -2842,6 +2854,13 @@ void tick()
 	if ( !g_started ) { return; }
 	checkReady();
 	if ( !g_ready ) { return; }
+	if ( g_resendChecks && AP_GetConnectionStatus() == AP_ConnectionStatus::Authenticated )
+	{
+		g_resendChecks = false;
+		for ( int64_t loc : g_sent ) { AP_SendItem(loc); }
+		if ( g_save.goalSent ) { AP_StoryComplete(); }
+		printlog("[Archipelago] Reconnected; %d checks sent again.", (int)g_sent.size());
+	}
 
 	// The death screen works even while the connection is down.
 	if ( g_deathScreen && inGame() )
@@ -2867,6 +2886,7 @@ void tick()
 	if ( keystatus[SDLK_F4] ) { keystatus[SDLK_F4] = 0; ++g_lootToggles; } // tracker: full or short loot list
 	pullDeathSources();
 	if ( g_floorReady && inGame() ) { g_floorApUnfound = std::max(0, g_floorApTotal - g_floorApFound); }
+	if ( g_rushSaveDirty ) { g_rushSaveDirty = false; writeSave(); }
 	if ( ticks % TICKS_PER_SECOND == 0 ) { writeTrackerFile(); writeTrackerMap(); }
 	if ( !inGame() )
 	{
@@ -3337,16 +3357,7 @@ bool canDescend(int player)
 			floorCountsText(c).c_str());
 		return false;
 	}
-	if ( !g_slot.stair_keys ) { return true; }
-	int nextFloor = currentlevel + 1;
-	int section = (nextFloor - 1) / ap_ids::FLOORS_PER_SECTION + 1;
-	int needed = section - 1;
-	int have = countReceived(ap_ids::ITEM_STAIR_KEY);
-	if ( have >= needed ) { return true; }
-	messagePlayerColor(player, MESSAGE_HINT, COLOR_AP,
-		"The stairs are sealed. You need %d Progressive Stair Key%s to go deeper (you have %d).",
-		needed, needed == 1 ? "" : "s", have);
-	return false;
+	return true;
 }
 
 uint32_t lockedMapSeed(uint32_t seed)
@@ -4114,6 +4125,13 @@ const char* bossRushNextMap()
 	return chosen.empty() ? nullptr : chosen.c_str();
 }
 
+bool bossRushHideMidPortal()
+{
+	// The last boss of the rush: only the victory portal, so the run ends there.
+	if ( !bossRushOn() || g_save.rushRunKey != uniqueGameKey || g_save.rushPhase <= 0 ) { return false; }
+	return g_save.rushPhase >= (int)splitCommas(g_save.rushSeq).size();
+}
+
 bool bossRushSkipVictory()
 {
 	// Not the last boss yet: the victory portal takes you on to the next stop instead of ending.
@@ -4204,8 +4222,8 @@ std::string statusLine()
 	if ( !g_started ) { return "Archipelago: not connected. Use /ap_connect host:port slot [password]."; }
 	if ( !g_ready ) { return "Archipelago: connecting to " + g_server + "..."; }
 	char buf[256];
-	snprintf(buf, sizeof(buf), "Archipelago: %s as %s | stair keys %d | lives %d | kills %ld | queued: %d Minotaur, %d darkness",
-		isConnected() ? "connected" : "reconnecting", g_slotName.c_str(), countReceived(ap_ids::ITEM_STAIR_KEY),
+	snprintf(buf, sizeof(buf), "Archipelago: %s as %s | lives %d | kills %ld | queued: %d Minotaur, %d darkness",
+		isConnected() ? "connected" : "reconnecting", g_slotName.c_str(),
 		g_save.livesLeft, g_save.totalKills, g_save.minotaurQueue, g_save.darknessQueue);
 	return buf;
 }

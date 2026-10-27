@@ -30,7 +30,7 @@ git am path\to\barony-archipelago.patch
 git clone https://github.com/N00byKing/APCpp.git extern\APCpp
 ```
 
-`git am` adds the three Archipelago files to `src\` and the hooks listed in `client\PATCHES.md`.
+`git am` adds the four Archipelago files to `src\` and the hooks listed in `client\PATCHES.md`.
 
 ## 3. Build
 
@@ -54,10 +54,11 @@ Don't overwrite your Steam install. Make a separate copy:
 
 1. Copy your whole Barony folder
    (`C:\Program Files (x86)\Steam\steamapps\common\Barony`) to `C:\Games\BaronyAP`.
-2. From `build\Release`, copy `barony.exe`, `APCpp.dll` and the SDL/libpng/zlib/physfs/openal
-   DLLs into `C:\Games\BaronyAP`, replacing the old `barony.exe`.
-3. Put `archipelago.cfg` in `C:\Games\BaronyAP` and fill in your server and slot.
-4. Run `C:\Games\BaronyAP\barony.exe`.
+2. From `build\Release`, copy `barony.exe`, `BaronyAPTracker.exe`, `APCpp.dll` and the
+   SDL/libpng/zlib/physfs/openal DLLs into `C:\Games\BaronyAP`, replacing the old `barony.exe`.
+3. Copy everything in `client\game-files` into `C:\Games\BaronyAP` (images, item icons, models).
+4. Run `C:\Games\BaronyAP\barony.exe`. The Barony Archipelago window opens first: type the
+   room's port (or paste the room link) and your name, then Connect & Play.
 
 This build has no Steam features (achievements, Steam lobbies). Solo play works normally.
 
@@ -65,7 +66,7 @@ This build has no Steam features (achievements, Steam lobbies). Solo play works 
 
 1. Install `barony.apworld` (double-click it, or put it in Archipelago's `custom_worlds`
    folder), generate a game with your YAML, and host it (archipelago.gg or locally).
-2. Start the game. The message log should say **Archipelago: connected**.
+2. Start the game and connect from the window. The message log should say **Archipelago: connected**.
 3. Start a run and go down to floor 2: the server should show your floor check.
 4. Type `/ap_trap minotaur` in chat to see the Minotaur warning start.
 5. `/ap_status` shows your keys, lives and kills.
