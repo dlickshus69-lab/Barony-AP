@@ -222,7 +222,21 @@ namespace
 				y += 128;
 				swprintf(buf, 256, L"Archipelago pickups still to find: %d", num("pickups_left"));
 				text(dc, 14, y, buf, DIM, g_bodyFont);
-				y += 30;
+				y += 22;
+				// Enemy Sanity progress: green kills toward the next check, or checks left.
+				if ( num("es_mode") == 1 && num("es_left") > 0 )
+				{
+					swprintf(buf, 256, L"Enemy Sanity: %d / %d green kills  (%d checks left)", num("es_progress"), num("es_per"), num("es_left"));
+					text(dc, 14, y, buf, GOOD, g_bodyFont);
+					y += 22;
+				}
+				else if ( num("es_mode") == 2 && num("es_left") > 0 )
+				{
+					swprintf(buf, 256, L"Enemy Sanity: %d green enemies left to kill", num("es_left"));
+					text(dc, 14, y, buf, GOOD, g_bodyFont);
+					y += 22;
+				}
+				y += 8;
 
 				// Other (ordinary) loot lying on the floor: full list, or just the total (F4 / L / click).
 				struct Row { const wchar_t* name; int n; };

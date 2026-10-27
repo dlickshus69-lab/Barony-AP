@@ -111,6 +111,7 @@ namespace
 	{
 		int processedItems = 0;       // received items already used (one-shot items)
 		long totalKills = 0;
+		long greenKills = 0;          // Enemy Sanity Kill Count: green (marked) enemies killed, across runs
 		Uint32 runKey = 0;            // uniqueGameKey of the run permanent items were applied to
 		int livesLeft = 0;
 		int minotaurQueue = 0;
@@ -331,6 +332,7 @@ namespace
 		if ( !out ) { return; }
 		out << "processedItems=" << g_save.processedItems << "\n";
 		out << "totalKills=" << g_save.totalKills << "\n";
+		out << "greenKills=" << g_save.greenKills << "\n";
 		out << "runKey=" << g_save.runKey << "\n";
 		out << "livesLeft=" << g_save.livesLeft << "\n";
 		out << "minotaurQueue=" << g_save.minotaurQueue << "\n";
@@ -359,6 +361,7 @@ namespace
 			long long value = atoll(line.c_str() + eq + 1);
 			if ( key == "processedItems" ) { g_save.processedItems = (int)value; }
 			else if ( key == "totalKills" ) { g_save.totalKills = (long)value; }
+			else if ( key == "greenKills" ) { g_save.greenKills = (long)value; }
 			else if ( key == "runKey" ) { g_save.runKey = (Uint32)value; }
 			else if ( key == "livesLeft" ) { g_save.livesLeft = (int)value; }
 			else if ( key == "minotaurQueue" ) { g_save.minotaurQueue = (int)value; }
@@ -1121,7 +1124,7 @@ namespace
 		int interval = std::max(1, g_slot.kill_check_interval);
 		for ( int k = 1; k <= g_slot.kill_checks; ++k )
 		{
-			if ( g_save.totalKills >= (long)k * interval )
+			if ( g_save.greenKills >= (long)k * interval )
 			{
 				sendLocation(ap_ids::BASE_ID + ap_ids::KILL_OFFSET + k);
 			}
@@ -1563,6 +1566,48 @@ namespace
 		}
 	}
 
+	bool isMarkableEnemy(Entity* e)
+	{
+		if ( !e || e->behavior != &actMonster ) { return false; }
+		Stat* st = e->getStats();
+		if ( !st ) { return false; } // (HP isn't set until the monster's first tick)
+		int t = st->type;
+		if ( t == SHOPKEEPER || t == MINOTAUR || t == LICH || t == DEVIL || t == LICH_ICE || t == LICH_FIRE || t == NOTHING )
+		{
+			return false;
+		}
+		return e->monsterAllySummonRank == 0 && !e->monsterAllyGetPlayerLeader() && st->leader_uid == 0;
+	}
+
+	// Enemy Sanity (both modes): random enemies on the floor glow green. Marked Enemies: each green
+	// kill is a check. Kill Count: green kills count toward the next check.
+	void pickMarkedEnemies()
+	{
+		g_markedEnemies.clear();
+		g_markedThisFloor = 0;
+		if ( g_slot.enemy_sanity == 0 || g_slot.kill_checks <= 0 || !map.creatures ) { return; }
+		int left = uncheckedCount(ap_ids::KILL_OFFSET, g_slot.kill_checks);
+		if ( left <= 0 ) { return; }
+		int want = std::max(1, g_slot.enemy_sanity_per_floor);
+		if ( g_slot.enemy_sanity == 2 ) { want = std::min(want, left); }
+		std::vector<Entity*> pool;
+		for ( node_t* node = map.creatures->first; node; node = node->next )
+		{
+			Entity* e = (Entity*)node->element;
+			if ( isMarkableEnemy(e) ) { pool.push_back(e); }
+		}
+		for ( size_t i = 0; i + 1 < pool.size(); ++i ) // shuffle
+		{
+			size_t j = i + local_rng.rand() % (pool.size() - i);
+			std::swap(pool[i], pool[j]);
+		}
+		for ( int i = 0; i < want && i < (int)pool.size(); ++i )
+		{
+			g_markedEnemies.insert(pool[i]->getUID());
+			++g_markedThisFloor;
+		}
+	}
+
 	void onNewFloor()
 	{
 		bool restarted = g_restartPending;
@@ -1587,9 +1632,11 @@ namespace
 		sendSpecialAreaCheck();
 		spawnFloorPickups();
 		giveSecretAreaTools();
-		if ( g_slot.enemy_sanity == 2 && uncheckedCount(ap_ids::KILL_OFFSET, g_slot.kill_checks) > 0 )
+		pickMarkedEnemies();
+		if ( g_markedThisFloor > 0 )
 		{
-			say(COLOR_AP, "Enemies glowing green are Archipelago checks.");
+			say(COLOR_AP, g_slot.enemy_sanity == 2 ? "Enemies glowing green are Archipelago checks."
+				: "Kill the enemies glowing green for Enemy Sanity.");
 		}
 		g_restartPending = false;
 		g_floorReady = true;
@@ -1752,6 +1799,11 @@ namespace
 		out << "pickups_left=" << uncheckedCount(ap_ids::PICKUP_OFFSET, g_slot.archipelago_pickups) << "\n";
 		out << "deaths_total=" << totalDeaths() << "\n";
 		out << "minotaur=" << g_minotaurSecs << "\n";
+		{
+			int per = std::max(1, g_slot.kill_check_interval);
+			out << "es_mode=" << g_slot.enemy_sanity << "\nes_left=" << uncheckedCount(ap_ids::KILL_OFFSET, g_slot.kill_checks)
+				<< "\nes_progress=" << (g_save.greenKills % per) << "\nes_per=" << per << "\n";
+		}
 		out << "loot_toggle=" << g_lootToggles << "\nloot_total=" << g_loot.total << "\nloot_gold=" << g_loot.gold
 			<< "\nloot_chests=" << g_loot.chests << "\n";
 		static const char* const CAT_KEYS[] = { "weapon", "armor", "amulet", "potion", "scroll", "staff", "ring",
@@ -2072,16 +2124,6 @@ void onMonsterInit(Entity* my, Stat* myStats)
 	bool isBoss = myStats->type == LICH || myStats->type == DEVIL || myStats->type == LICH_ICE
 		|| myStats->type == LICH_FIRE;
 
-	// Enemy Sanity, Marked Enemies: mark the first few enemies on the floor, while checks remain.
-	if ( g_slot.enemy_sanity == 2 && g_slot.kill_checks > 0 && !isBoss
-		&& myStats->type != MINOTAUR && myStats->type != SHOPKEEPER && myStats->type != NOTHING
-		&& my->monsterAllySummonRank == 0 && !my->monsterAllyGetPlayerLeader() && myStats->leader_uid == 0
-		&& g_markedThisFloor < g_slot.enemy_sanity_per_floor
-		&& (int)g_markedEnemies.size() < uncheckedCount(ap_ids::KILL_OFFSET, g_slot.kill_checks) )
-	{
-		g_markedEnemies.insert(my->getUID());
-		++g_markedThisFloor;
-	}
 
 	// Enemy / Boss Level Scaling: bring monsters up to (or toward) the strongest player's level.
 	int scaling = isBoss ? g_slot.boss_level_scaling : g_slot.enemy_level_scaling;
@@ -2153,8 +2195,19 @@ void onMonsterDeath(Entity* my, Stat* myStats)
 	{
 		++g_floorKills;
 	}
-	sendKillChecks();
-	if ( g_markedEnemies.erase(my->getUID()) )
+	bool wasMarked = g_markedEnemies.erase(my->getUID()) > 0;
+	if ( wasMarked && g_slot.enemy_sanity == 1 )
+	{
+		++g_save.greenKills;
+		int per = std::max(1, g_slot.kill_check_interval);
+		int toNext = per - (int)(g_save.greenKills % per);
+		if ( toNext == per ) { toNext = 0; }
+		sendKillChecks();
+		if ( toNext > 0 ) { say(COLOR_AP, "Green enemy defeated! %d more for the next Enemy Sanity check.", toNext); }
+		else { say(COLOR_AP, "Green enemy defeated! Enemy Sanity check sent."); }
+		writeSave();
+	}
+	if ( wasMarked && g_slot.enemy_sanity == 2 )
 	{
 		int index = nextUnchecked(ap_ids::KILL_OFFSET, g_slot.kill_checks);
 		if ( index > 0 )

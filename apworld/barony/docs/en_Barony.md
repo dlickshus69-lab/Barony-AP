@@ -6,7 +6,8 @@ Barony is a roguelike, so instead of fixed chests, checks come from things you d
 
 - Reaching floors (every floor, or every 2nd, 3rd ... 10th floor)
 - Reaching character levels
-- Enemy Sanity: every few kills (counted across all runs), or killing enemies marked green
+- Enemy Sanity: random enemies on each floor glow green; every few green kills (Kill Count, counted
+  across runs) or every green kill (Marked Enemies) is a check
 - First kill of each monster type (bestiary)
 - Archipelago pickups lying on the dungeon floor
 - Archipelago items sold by shopkeepers

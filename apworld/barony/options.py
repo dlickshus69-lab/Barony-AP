@@ -35,7 +35,9 @@ class FloorCheckInterval(Range):
 
 class LevelChecks(Range):
     """
-    Reaching each character level from 2 up to this number is a check. 0 turns them off.
+    Reaching each character level from 2 up to this number is a check (a new character counts its
+    levels again, but each level only sends its check once). 0 turns them off. Higher levels take much
+    longer to reach, so very high numbers put checks late in the game.
     """
     display_name = "Character Level Checks"
     range_start = 0
@@ -45,11 +47,12 @@ class LevelChecks(Range):
 
 class EnemySanity(Choice):
     """
-    Killing enemies sends checks.
+    Killing enemies sends checks. Random enemies on each floor glow green (see Marked Enemies Per
+    Floor); only green ones count. Bosses, shopkeepers and the Minotaur are never marked.
     Off: no enemy checks.
-    Kill Count: every few kills is a check (see Kills Per Check). Kills count across all your runs.
-    Marked Enemies: some enemies on each floor glow green (see Marked Enemies Per Floor). Killing a
-    green one is a check. Bosses, shopkeepers and the Minotaur are never marked.
+    Kill Count: every few green kills is a check (see Kills Per Check). Green kills count across all
+    your runs.
+    Marked Enemies: every green kill is a check.
     """
     display_name = "Enemy Sanity"
     option_off = 0
@@ -60,7 +63,11 @@ class EnemySanity(Choice):
 
 class EnemySanityChecks(Range):
     """
-    How many Enemy Sanity checks there are in total.
+    How many Enemy Sanity checks there are in total (ignored when Enemy Sanity is Off).
+    Kill Count: a check is sent every Kills Per Check green kills, so 10 checks with 3 kills per check
+    means 30 green kills for all of them.
+    Marked Enemies: each green kill sends the next check until all of them are found; after that no
+    more enemies are marked. With 2 green enemies per floor, that's about half as many floors as checks.
     """
     display_name = "Enemy Sanity Checks"
     range_start = 1
@@ -70,17 +77,19 @@ class EnemySanityChecks(Range):
 
 class EnemySanityKillsPerCheck(Range):
     """
-    For Kill Count: how many kills each check takes.
+    For Kill Count: how many green (marked) enemies you kill for each check. Green kills add up across
+    all your runs, so dying doesn't lose progress. With 2 green enemies per floor, 3 kills per check is
+    a check about every one and a half floors. Ignored for Marked Enemies.
     """
     display_name = "Kills Per Check"
     range_start = 1
     range_end = 100
-    default = 10
+    default = 3
 
 
 class EnemySanityPerFloor(Range):
     """
-    For Marked Enemies: how many enemies on each floor are marked green. A normal floor starts with
+    How many random enemies on each floor are marked green. A normal floor starts with
     about 5 to 8 enemies, so higher numbers mark most of them.
     """
     display_name = "Marked Enemies Per Floor"
@@ -126,7 +135,9 @@ class PickupsPerFloor(Range):
 
 class ShopChecks(Range):
     """
-    Shopkeepers sell Archipelago items. Buying one sends a check. 0 turns them off.
+    How many Archipelago items shopkeepers sell in total. Every shopkeeper you find stocks one (shown
+    with the Archipelago logo) until all of them are bought; buying one sends a check. If you leave one
+    in a shop, the next shopkeeper will have it. 0 turns them off.
     """
     display_name = "Shop Checks"
     range_start = 0
@@ -136,7 +147,8 @@ class ShopChecks(Range):
 
 class BossChecks(DefaultOnToggle):
     """
-    Defeating a Minotaur and any boss before your goal boss is a check.
+    Defeating a Minotaur, and each boss you fight before your goal boss (like Baron Herx when the goal
+    is the Devil), is a check. The goal boss itself only completes the goal.
     """
     display_name = "Boss Checks"
 
@@ -351,7 +363,8 @@ class Lives(Range):
 
 class ExtraLivesInPool(Range):
     """
-    Number of "Extra Life" items in the item pool. Each one adds a life to your current run.
+    How many "Extra Life" items are in the item pool. Each one adds a life to your current run when
+    you receive it (they don't carry over to a new run after a game over). Only matters with Lives on.
     """
     display_name = "Extra Lives In Pool"
     range_start = 0
@@ -427,7 +440,8 @@ class BaronyDeathLink(DeathLink):
 # ---------------------------------------------------------------- traps & players
 class TrapChance(Range):
     """
-    Percent chance that each filler item is replaced with a trap.
+    Percent chance that each filler item is replaced with a trap. 0 = no traps, 100 = every filler item
+    is a trap. Only the traps in Enabled Traps are used.
     """
     display_name = "Trap Chance"
     range_start = 0
@@ -437,7 +451,11 @@ class TrapChance(Range):
 
 class EnabledTraps(OptionSet):
     """
-    Which traps can appear.
+    Which traps can appear. Minotaur: the Minotaur hunts you (on the next normal floor if one is already
+    coming). Ambush: a few monsters appear around you. Polymorph: you turn into a random creature for a
+    while. Fumble: you drop your weapon. Blindness: you can't see for a while. Teleport: you're sent to a
+    random spot on the floor. Hunger: you become very hungry. Darkness: the next floor is dark. Curse:
+    one piece of your gear becomes cursed.
     """
     display_name = "Enabled Traps"
     valid_keys = frozenset(TRAP_ITEMS)
@@ -450,31 +468,47 @@ class FillerWeight(Range):
 
 
 class XPBoostWeight(FillerWeight):
-    """How often XP Boost shows up as filler, compared to the other filler weights. 0 = never."""
+    """
+    How often XP Boost shows up as filler, compared to the other filler weights: an item's chance is
+    its weight divided by all the weights added up (30 out of 100 = 30% of filler). 0 = never. If every
+    weight is 0, the default weights are used. XP Boost gives 50 experience (half a level).
+    """
     display_name = "XP Boost Weight"
     default = 30
 
 
 class GoldPouchWeight(FillerWeight):
-    """How often Gold Pouch shows up as filler. 0 = never."""
+    """
+    How often Gold Pouch shows up as filler, compared to the other filler weights. 0 = never.
+    Gold Pouch gives 25 gold plus 10 per floor deep you are.
+    """
     display_name = "Gold Pouch Weight"
     default = 25
 
 
 class HealingPotionWeight(FillerWeight):
-    """How often Healing Potion shows up as filler. 0 = never."""
+    """
+    How often Healing Potion shows up as filler, compared to the other filler weights. 0 = never.
+    Healing Potion puts a potion of healing in your inventory.
+    """
     display_name = "Healing Potion Weight"
     default = 20
 
 
 class FoodRationWeight(FillerWeight):
-    """How often Food Ration shows up as filler. 0 = never."""
+    """
+    How often Food Ration shows up as filler, compared to the other filler weights. 0 = never.
+    Food Ration puts a loaf of bread in your inventory.
+    """
     display_name = "Food Ration Weight"
     default = 15
 
 
 class RandomItemWeight(FillerWeight):
-    """How often Random Item shows up as filler. 0 = never."""
+    """
+    How often Random Item shows up as filler, compared to the other filler weights. 0 = never.
+    Random Item gives you a random item suited to your current floor.
+    """
     display_name = "Random Item Weight"
     default = 10
 
@@ -490,7 +524,10 @@ class TrapCountdownTraps(OptionSet):
 
 
 class TrapCountdown(Range):
-    """Seconds of countdown for the traps in Trap Countdown Traps."""
+    """
+    How many seconds the countdown lasts for the traps in Trap Countdown Traps. You get a warning when
+    it starts and another at 3 seconds.
+    """
     display_name = "Trap Countdown"
     range_start = 1
     range_end = 60
@@ -498,7 +535,9 @@ class TrapCountdown(Range):
 
 
 class PolymorphTrapDuration(Range):
-    """How many seconds a Polymorph Trap lasts."""
+    """
+    How many seconds a Polymorph Trap lasts before you change back.
+    """
     display_name = "Polymorph Trap Duration"
     range_start = 5
     range_end = 300
@@ -506,7 +545,9 @@ class PolymorphTrapDuration(Range):
 
 
 class BlindnessTrapDuration(Range):
-    """How many seconds a Blindness Trap lasts."""
+    """
+    How many seconds a Blindness Trap lasts.
+    """
     display_name = "Blindness Trap Duration"
     range_start = 5
     range_end = 300
