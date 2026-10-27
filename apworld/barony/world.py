@@ -291,7 +291,8 @@ class BaronyWorld(World):
             "enemy_randomizer_secret": int(bool(o.enemy_randomizer_secret_areas)),
             "skill_check_max_rank": o.skill_check_max_rank.value,
             "lock_class": int(bool(o.lock_class)),
-            "floor_size": o.floor_size.value,
+            "floor_size_mask": sum(bit for name, bit in (("Normal", 1), ("Bigger", 2), ("Much Bigger", 4))
+                                   if name in o.floor_size.value),
             "music_mods": o.music_mods.value,
             "extra_monsters": o.extra_monsters.value,
             "floor_shuffle": o.floor_shuffle.value,

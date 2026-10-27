@@ -43,7 +43,8 @@ Barony:
   difficulty: normal
 
   # Extras
-  floor_size: normal
+  floor_size:
+  - Normal
   extra_monsters: 0
   music_mods: mixed
 

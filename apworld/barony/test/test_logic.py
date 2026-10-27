@@ -100,3 +100,10 @@ class TestSkillChecksAnyClass(BaronyTestBase):
     def test_universal_only(self) -> None:
         skills = [loc.name for loc in self.multiworld.get_locations(self.player) if loc.name.startswith("Skill: ")]
         self.assertEqual(len(skills), 15)  # Lore, Trading, Stealth x 5 ranks
+
+
+class TestFloorSizeMix(BaronyTestBase):
+    options = {"floor_size": ["Normal", "Much Bigger"]}
+
+    def test_mask(self) -> None:
+        self.assertEqual(self.world.fill_slot_data()["floor_size_mask"], 1 | 4)

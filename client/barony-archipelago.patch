@@ -1,4 +1,4 @@
-From 78a9abcd001bed960e33e51f0f5daaa6bcea5782 Mon Sep 17 00:00:00 2001
+From dc07765dfddbe3f3255448f93c4ecbbf433e005c Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -12,7 +12,7 @@ Subject: [PATCH] Archipelago client hooks
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 3335 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 3344 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |  114 +
  src/archipelago_ids.hpp           |  133 ++
  src/charclass.cpp                 |    4 +
@@ -29,7 +29,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   10 +
  src/ui/MainMenu.cpp               |    5 +-
- 25 files changed, 4208 insertions(+), 4 deletions(-)
+ 25 files changed, 4217 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -650,10 +650,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..8283a6a
+index 0000000..334e894
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,3335 @@
+@@ -0,0 +1,3344 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -742,7 +742,7 @@ index 0000000..8283a6a
 +		int skill_checks = 0;         // 0 off, 1 any class, 2.. a class (Barony class index + 2)
 +		int skill_check_max_rank = 3; // 1 Basic .. 5 Legendary
 +		int lock_class = 0;
-+		int floor_size = 0;           // 0 normal, 1 bigger, 2 much bigger
++		int floor_size_mask = 1;      // Floor Size: bit 1 Normal, 2 Bigger, 4 Much Bigger
 +		int music_mods = 0;           // 0 off, 1 mixed with the original, 2 mods only
 +		int extra_monsters = 0;       // how many more monsters per floor (0 to 20)           // new characters always get the Skill Checks class    // Minotaur floors: seconds before he arrives that the key compass turns on
 +		int floor_shuffle = 0;        // 0 off, 1 sections, 2 full
@@ -1157,7 +1157,7 @@ index 0000000..8283a6a
 +		registerSlotInt("enemy_randomizer_secret", &SlotOptions::enemy_randomizer_secret);
 +		registerSlotInt("skill_check_max_rank", &SlotOptions::skill_check_max_rank);
 +		registerSlotInt("lock_class", &SlotOptions::lock_class);
-+		registerSlotInt("floor_size", &SlotOptions::floor_size);
++		registerSlotInt("floor_size_mask", &SlotOptions::floor_size_mask);
 +		registerSlotInt("music_mods", &SlotOptions::music_mods);
 +		registerSlotInt("extra_monsters", &SlotOptions::extra_monsters);
 +		registerSlotInt("floor_shuffle", &SlotOptions::floor_shuffle);
@@ -3414,7 +3414,16 @@ index 0000000..8283a6a
 +static int floorSizePercent()
 +{
 +	if ( !g_ready || multiplayer == CLIENT ) { return 100; }
-+	switch ( g_slot.floor_size ) { case 1: return 120; case 2: return 140; default: return 100; }
++	// Floor Size: the sizes ticked in the options (bit 1 Normal, 2 Bigger, 4 Much Bigger). With several,
++	// each floor's size comes from the seed and the floor, so it's the same every time you're there.
++	static const int SIZES[] = { 100, 120, 140 };
++	std::vector<int> pool;
++	for ( int b = 0; b < 3; ++b ) { if ( g_slot.floor_size_mask & (1 << b) ) { pool.push_back(SIZES[b]); } }
++	if ( pool.empty() ) { return 100; }
++	if ( pool.size() == 1 ) { return pool[0]; }
++	Uint32 h = (Uint32)g_slot.floor_shuffle_seed * 2654435761u ^ (Uint32)(currentlevel + 1) * 40503u ^ (secretlevel ? 0x9E37u : 0u);
++	h ^= h >> 13; h *= 2246822519u; h ^= h >> 16;
++	return pool[h % pool.size()];
 +}
 +
 +void requestFloorSize()

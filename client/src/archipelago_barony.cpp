@@ -86,7 +86,7 @@ namespace
 		int skill_checks = 0;         // 0 off, 1 any class, 2.. a class (Barony class index + 2)
 		int skill_check_max_rank = 3; // 1 Basic .. 5 Legendary
 		int lock_class = 0;
-		int floor_size = 0;           // 0 normal, 1 bigger, 2 much bigger
+		int floor_size_mask = 1;      // Floor Size: bit 1 Normal, 2 Bigger, 4 Much Bigger
 		int music_mods = 0;           // 0 off, 1 mixed with the original, 2 mods only
 		int extra_monsters = 0;       // how many more monsters per floor (0 to 20)           // new characters always get the Skill Checks class    // Minotaur floors: seconds before he arrives that the key compass turns on
 		int floor_shuffle = 0;        // 0 off, 1 sections, 2 full
@@ -501,7 +501,7 @@ namespace
 		registerSlotInt("enemy_randomizer_secret", &SlotOptions::enemy_randomizer_secret);
 		registerSlotInt("skill_check_max_rank", &SlotOptions::skill_check_max_rank);
 		registerSlotInt("lock_class", &SlotOptions::lock_class);
-		registerSlotInt("floor_size", &SlotOptions::floor_size);
+		registerSlotInt("floor_size_mask", &SlotOptions::floor_size_mask);
 		registerSlotInt("music_mods", &SlotOptions::music_mods);
 		registerSlotInt("extra_monsters", &SlotOptions::extra_monsters);
 		registerSlotInt("floor_shuffle", &SlotOptions::floor_shuffle);
@@ -2758,7 +2758,16 @@ namespace { int g_floorSizePending = 100; int g_currentFloorScale = 100; }
 static int floorSizePercent()
 {
 	if ( !g_ready || multiplayer == CLIENT ) { return 100; }
-	switch ( g_slot.floor_size ) { case 1: return 120; case 2: return 140; default: return 100; }
+	// Floor Size: the sizes ticked in the options (bit 1 Normal, 2 Bigger, 4 Much Bigger). With several,
+	// each floor's size comes from the seed and the floor, so it's the same every time you're there.
+	static const int SIZES[] = { 100, 120, 140 };
+	std::vector<int> pool;
+	for ( int b = 0; b < 3; ++b ) { if ( g_slot.floor_size_mask & (1 << b) ) { pool.push_back(SIZES[b]); } }
+	if ( pool.empty() ) { return 100; }
+	if ( pool.size() == 1 ) { return pool[0]; }
+	Uint32 h = (Uint32)g_slot.floor_shuffle_seed * 2654435761u ^ (Uint32)(currentlevel + 1) * 40503u ^ (secretlevel ? 0x9E37u : 0u);
+	h ^= h >> 13; h *= 2246822519u; h ^= h >> 16;
+	return pool[h % pool.size()];
 }
 
 void requestFloorSize()

@@ -174,22 +174,20 @@ class FloorKeys(DefaultOnToggle):
     display_name = "Floor Keys"
 
 
-class FloorSize(Choice):
+class FloorSize(OptionSet):
     """
-    Makes the generated floors bigger, with more rooms to explore and more monsters, items and loot to
-    match. Hand-made floors (the start, transitions, the town, boss arenas, secret areas) keep their size.
+    How big the generated floors are. Tick one size, or several to mix them: each floor is picked at
+    random from the ones you tick (and keeps its size when you restart it).
     Normal: the usual size.
     Bigger: about 1.4 times the area.
     Much Bigger: about twice the area.
-    On a bigger floor the Minotaur's timer and the Floor Key compass stretch to match (1.2 or 1.4 times),
-    so Minotaur floors feel the same as on a normal floor.
+    Bigger floors have more rooms, monsters, items and loot to match. Hand-made floors (the start,
+    transitions, the town, boss arenas, secret areas) keep their size. On a bigger floor the Minotaur's
+    timer and the Floor Key compass stretch to match (1.2 or 1.4 times). Nothing ticked = Normal.
     """
     display_name = "Floor Size"
-    option_normal = 0
-    option_bigger = 1
-    option_much_bigger = 2
-    default = option_normal
-
+    valid_keys = frozenset({"Normal", "Bigger", "Much Bigger"})
+    default = frozenset({"Normal"})
 
 class KeyCompassTime(Range):
     """
