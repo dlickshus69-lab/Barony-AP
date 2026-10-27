@@ -3289,21 +3289,23 @@ void drawHud()
 		}
 	}
 
-	// Top right: lives.
+	// Top right, under Barony's player bar: lives, then the death counter.
+	constexpr int HUD_RIGHT_TOP = 60;
 	if ( g_ready && inGame() && (g_slot.lives > 0 || g_save.livesLeft > 0) )
 	{
 		char buf[16];
 		snprintf(buf, sizeof(buf), "x %d", g_save.livesLeft);
 		const int right = Frame::virtualScreenX - 12;
-		int w = drawText(buf, BIG_FONT, makeColorRGB(255, 255, 255), right, 10, 2);
-		drawImage("*images/ui/Archipelago/AP_Life.png", right - w - 32, 6, 26, 24);
+		const int top = HUD_RIGHT_TOP; // under Barony's own player bar in the top right
+		int w = drawText(buf, BIG_FONT, makeColorRGB(255, 255, 255), right, top, 2);
+		drawImage("*images/ui/Archipelago/AP_Life.png", right - w - 32, top - 4, 26, 24);
 	}
 	if ( g_ready && inGame() )
 	{
 		char buf[16];
 		snprintf(buf, sizeof(buf), "x %d", totalDeaths());
 		const int right = Frame::virtualScreenX - 12;
-		const int top = (g_slot.lives > 0 || g_save.livesLeft > 0) ? 38 : 10;
+		const int top = HUD_RIGHT_TOP + ((g_slot.lives > 0 || g_save.livesLeft > 0) ? 28 : 0);
 		int w = drawText(buf, BIG_FONT, makeColorRGB(255, 255, 255), right, top, 2);
 		drawImage("*images/ui/Archipelago/AP_Skull.png", right - w - 32, top - 3, 24, 24);
 	}

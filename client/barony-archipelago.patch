@@ -1,4 +1,4 @@
-From 6e2aef04a4b1040d75352bd2034ae7886a48ab82 Mon Sep 17 00:00:00 2001
+From 78a9abcd001bed960e33e51f0f5daaa6bcea5782 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -12,7 +12,7 @@ Subject: [PATCH] Archipelago client hooks
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 3333 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 3335 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |  114 +
  src/archipelago_ids.hpp           |  133 ++
  src/charclass.cpp                 |    4 +
@@ -29,7 +29,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   10 +
  src/ui/MainMenu.cpp               |    5 +-
- 25 files changed, 4206 insertions(+), 4 deletions(-)
+ 25 files changed, 4208 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -650,10 +650,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..7358ec9
+index 0000000..8283a6a
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,3333 @@
+@@ -0,0 +1,3335 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -3945,21 +3945,23 @@ index 0000000..7358ec9
 +		}
 +	}
 +
-+	// Top right: lives.
++	// Top right, under Barony's player bar: lives, then the death counter.
++	constexpr int HUD_RIGHT_TOP = 60;
 +	if ( g_ready && inGame() && (g_slot.lives > 0 || g_save.livesLeft > 0) )
 +	{
 +		char buf[16];
 +		snprintf(buf, sizeof(buf), "x %d", g_save.livesLeft);
 +		const int right = Frame::virtualScreenX - 12;
-+		int w = drawText(buf, BIG_FONT, makeColorRGB(255, 255, 255), right, 10, 2);
-+		drawImage("*images/ui/Archipelago/AP_Life.png", right - w - 32, 6, 26, 24);
++		const int top = HUD_RIGHT_TOP; // under Barony's own player bar in the top right
++		int w = drawText(buf, BIG_FONT, makeColorRGB(255, 255, 255), right, top, 2);
++		drawImage("*images/ui/Archipelago/AP_Life.png", right - w - 32, top - 4, 26, 24);
 +	}
 +	if ( g_ready && inGame() )
 +	{
 +		char buf[16];
 +		snprintf(buf, sizeof(buf), "x %d", totalDeaths());
 +		const int right = Frame::virtualScreenX - 12;
-+		const int top = (g_slot.lives > 0 || g_save.livesLeft > 0) ? 38 : 10;
++		const int top = HUD_RIGHT_TOP + ((g_slot.lives > 0 || g_save.livesLeft > 0) ? 28 : 0);
 +		int w = drawText(buf, BIG_FONT, makeColorRGB(255, 255, 255), right, top, 2);
 +		drawImage("*images/ui/Archipelago/AP_Skull.png", right - w - 32, top - 3, 24, 24);
 +	}
