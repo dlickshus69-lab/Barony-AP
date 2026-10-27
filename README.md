@@ -24,7 +24,7 @@ start Barony from Steam: the Barony Archipelago window opens first to connect.
 
 ## Goals
 
-Baron Herx, the Devil, the Twin Liches of the Sanctum, or Boss Rush (a dungeon of 3 to 34 floors,
+Baron Herx, the Devil, the Twin Liches of the Sanctum, or Boss Rush (a dungeon of 10 to 34 floors,
 then the bosses you pick back to back, with an optional rest town between them).
 
 ## Checks

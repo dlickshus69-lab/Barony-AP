@@ -101,7 +101,7 @@ namespace
 		int spell_dlc = 0;            // DLC class spells are in the pool too
 		int floor_size_mask = 1;      // Floor Size: bit 1 Normal, 2 Bigger, 4 Much Bigger
 		int boss_rush_mask = 7;       // Boss Rush: 1 Herx, 2 Devil, 4 Twin Liches
-		int boss_rush_floors = 10;    // Boss Rush: dungeon floors before the rush
+		int dungeon_floors = 0;       // Custom Dungeon Length / Boss Rush: floors before the goal boss (0 = usual depth)
 		int boss_rush_town = 1;       // Boss Rush: rest in a town between bosses
 		int boss_rush_order = 0;      // Boss Rush: 0 game order, 1 random (same every run), 2 random each run
 		int boss_rush_seed = 0;       // Boss Rush: the seed's own shuffle
@@ -609,7 +609,7 @@ namespace
 		registerSlotInt("randomize_loot", &SlotOptions::randomize_loot);
 		registerSlotInt("floor_key_on_tracker_map", &SlotOptions::floor_key_on_tracker_map);
 		registerSlotInt("boss_rush_mask", &SlotOptions::boss_rush_mask);
-		registerSlotInt("boss_rush_floors", &SlotOptions::boss_rush_floors);
+		registerSlotInt("dungeon_floors", &SlotOptions::dungeon_floors);
 		registerSlotInt("boss_rush_town", &SlotOptions::boss_rush_town);
 		registerSlotInt("boss_rush_order", &SlotOptions::boss_rush_order);
 		registerSlotInt("boss_rush_seed", &SlotOptions::boss_rush_seed);
@@ -2749,7 +2749,9 @@ namespace
 	// The dungeon down to Boss Rush Floors, then the bosses you picked back to back (in game order:
 	// Herx, the Devil, the Twin Liches; or shuffled), with a rest in the town between them if you like. Bosses you've
 	// already beaten (in any run) are skipped.
-	bool bossRushOn() { return g_ready && g_slot.goal == 3 && multiplayer == SINGLE; } // single player only
+	// The end of the run comes from us: Boss Rush, or Dungeon Floors with any goal (a set number of
+	// floors, then the goal boss's arena). Single player only.
+	bool bossRushOn() { return g_ready && (g_slot.goal == 3 || g_slot.dungeon_floors > 0) && multiplayer == SINGLE; }
 	bool g_rushSaveDirty = false; // the rush state changed while a floor was loading: save it on the next tick
 
 	int bossRushGoalMask()
@@ -2770,6 +2772,10 @@ namespace
 
 	std::string makeRushSeq()
 	{
+		// A normal goal with Dungeon Floors: just its boss.
+		if ( g_slot.goal == 0 ) { return "boss,"; }
+		if ( g_slot.goal == 1 ) { return "hellboss,"; }
+		if ( g_slot.goal == 2 ) { return "sanctum,"; }
 		int m = bossRushGoalMask(), killed = g_save.goalBossesKilled;
 		std::vector<std::string> bosses;
 		if ( (m & 1) && !(killed & 1) ) { bosses.push_back("boss"); }
@@ -2796,7 +2802,7 @@ namespace
 	std::string bossRushMapFor(int level)
 	{
 		if ( !bossRushOn() || secretlevel ) { return ""; }
-		int start = std::max(1, g_slot.boss_rush_floors);
+		int start = std::max(1, g_slot.dungeon_floors > 0 ? g_slot.dungeon_floors : 10);
 		if ( level <= start ) { return ""; }
 		if ( g_save.rushRunKey != uniqueGameKey || g_save.rushSeq.empty() )
 		{
@@ -3224,7 +3230,7 @@ void tick()
 // before them is played instead); the bosses come in the rush at the end.
 static int skipRushBossLine(int line, const std::vector<std::string>& levelsList)
 {
-	if ( !g_ready || g_slot.goal != 3 || secretlevel || line < 1 || line >= (int)levelsList.size() ) { return line; }
+	if ( !bossRushOn() || secretlevel || line < 1 || line >= (int)levelsList.size() ) { return line; }
 	std::string text = levelsList[line];
 	while ( !text.empty() && (text.back() == '\r' || text.back() == ' ' || text.back() == '\t') ) { text.pop_back(); }
 	bool bossLine = text == "map: boss" || text == "map: hellboss" || text == "map: sanctum";

@@ -7,7 +7,8 @@ Barony:
 
   # Goal & Checks
   goal: devil
-  boss_rush_floors: 7
+  custom_dungeon_length: false
+  dungeon_floors: 10
   boss_rush_bosses:
   - Devil
   - Herx

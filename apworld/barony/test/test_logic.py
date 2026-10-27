@@ -131,17 +131,17 @@ class TestCompassItem(BaronyTestBase):
 
 class TestBossRush(BaronyTestBase):
     """Boss Rush: a short dungeon, then the picked bosses; nothing past the rush floors."""
-    options = {"goal": "boss_rush", "boss_rush_floors": 5, "boss_rush_bosses": ["Herx", "Twin Liches"],
+    options = {"goal": "boss_rush", "dungeon_floors": 12, "boss_rush_bosses": ["Herx", "Twin Liches"],
                "boss_rush_rest_town": False, "boss_checks": True}
 
     def test_rush_slot_data(self) -> None:
         sd = self.world.fill_slot_data()
         self.assertEqual(sd["goal"], 3)
-        self.assertEqual(sd["goal_floor"], 5)
+        self.assertEqual(sd["goal_floor"], 12)
         self.assertEqual(sd["boss_rush_mask"], 5)
         self.assertEqual(sd["boss_rush_town"], 0)
         names = {loc.name for loc in self.multiworld.get_locations(self.player)}
-        self.assertNotIn("Reach Floor 6", names)
+        self.assertNotIn("Reach Floor 13", names)
         self.assertNotIn("Defeat Baron Herx", names)
 
 
@@ -153,7 +153,7 @@ class TestBossRushEmptyBosses(BaronyTestBase):
 
 
 class TestBossRushLong(BaronyTestBase):
-    options = {"goal": "boss_rush", "boss_rush_floors": 34, "floor_shuffle": "full", "boss_checks": True}
+    options = {"goal": "boss_rush", "dungeon_floors": 34, "floor_shuffle": "full", "boss_checks": True}
 
     def test_long(self) -> None:
         self.assertEqual(self.world.fill_slot_data()["goal_floor"], 34)
@@ -200,3 +200,30 @@ class TestBounty(BaronyTestBase):
         self.assertIn("Bounty 8", locs)
         self.assertNotIn("Bounty 9", locs)
         self.assertEqual(self.world.fill_slot_data()["bounty_checks"], 8)
+
+
+class TestShortHerx(BaronyTestBase):
+    """Dungeon Floors with a normal goal: 8 floors, then Baron Herx."""
+    options = {"goal": "herx", "custom_dungeon_length": True, "dungeon_floors": 12, "boss_checks": True}
+
+    def test_short(self) -> None:
+        sd = self.world.fill_slot_data()
+        self.assertEqual((sd["goal_floor"], sd["dungeon_floors"]), (12, 12))
+        names = {loc.name for loc in self.multiworld.get_locations(self.player)}
+        self.assertIn("Reach Floor 12", names)
+        self.assertNotIn("Reach Floor 13", names)
+
+
+class TestBossRushDefaultFloors(BaronyTestBase):
+    options = {"goal": "boss_rush"}
+
+    def test_default(self) -> None:
+        self.assertEqual(self.world.fill_slot_data()["dungeon_floors"], 10)
+
+
+class TestNormalLength(BaronyTestBase):
+    options = {"goal": "devil", "dungeon_floors": 15}
+
+    def test_normal(self) -> None:
+        sd = self.world.fill_slot_data()
+        self.assertEqual((sd["goal_floor"], sd["dungeon_floors"]), (24, 0))

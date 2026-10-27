@@ -14,8 +14,8 @@ class Goal(Choice):
     Herx: Baron Herx on floor 20.
     Devil: the Devil at the bottom of Hell.
     Sanctum: both of the twin liches at the very end of the game (needs the expansion floors).
-    Boss Rush: play the dungeon down to Boss Rush Floors, then fight the bosses you pick in Boss Rush
-    Bosses back to back. Beat them all to win.
+    Boss Rush: play the dungeon (Dungeon Floors, 10 by default), then fight the bosses you pick in Boss
+    Rush Bosses back to back. Beat them all to win.
     """
     display_name = "Goal"
     option_herx = 0
@@ -25,17 +25,25 @@ class Goal(Choice):
     default = option_herx
 
 
-class BossRushFloors(Range):
+class CustomDungeonLength(Toggle):
     """
-    Boss Rush only: how many dungeon floors you play before the rush starts. Taking the stairs off
-    the last one starts the first boss.
-    7 is a short run, 15 a medium one, and up to 34 for a long one. Boss floors on the way down are
-    skipped (you play a normal floor there instead): the bosses all come in the rush at the end.
+    Pick how many floors the run has before your goal boss (Dungeon Floors), instead of the goal's
+    usual depth (Baron Herx on floor 20, the Devil on 24, the Twin Liches on 35). Taking the stairs off
+    the last floor takes you straight to the goal boss's arena. Boss Rush always uses Dungeon Floors.
     """
-    display_name = "Boss Rush Floors"
-    range_start = 3
+    display_name = "Custom Dungeon Length"
+
+
+class DungeonFloors(Range):
+    """
+    With Custom Dungeon Length (or the Boss Rush goal): how many dungeon floors the run has before the
+    goal boss. 10 is a short run, 20 a medium one, 34 a long one. Boss floors on the way down are
+    skipped (you play a normal floor there instead), so bosses only come at the end.
+    """
+    display_name = "Dungeon Floors"
+    range_start = 10
     range_end = 34
-    default = 7
+    default = 10
 
 
 class BossRushBosses(OptionSet):
@@ -988,7 +996,8 @@ class Players(Range):
 @dataclass
 class BaronyOptions(PerGameCommonOptions):
     goal: Goal
-    boss_rush_floors: BossRushFloors
+    custom_dungeon_length: CustomDungeonLength
+    dungeon_floors: DungeonFloors
     boss_rush_bosses: BossRushBosses
     boss_rush_order: BossRushOrder
     boss_rush_rest_town: BossRushRestTown
@@ -1070,7 +1079,7 @@ class BaronyOptions(PerGameCommonOptions):
 
 option_groups = [
     OptionGroup("Goal & Checks", [
-        Goal, BossRushFloors, BossRushBosses, BossRushOrder, BossRushRestTown, FloorCheckInterval, LevelChecks, EnemySanity, EnemySanityChecks, EnemySanityKillsPerCheck,
+        Goal, CustomDungeonLength, DungeonFloors, BossRushBosses, BossRushOrder, BossRushRestTown, FloorCheckInterval, LevelChecks, EnemySanity, EnemySanityChecks, EnemySanityKillsPerCheck,
         EnemySanityPerFloor, BestiaryChecks,
         ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),

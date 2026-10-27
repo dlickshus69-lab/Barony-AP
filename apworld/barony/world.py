@@ -18,7 +18,7 @@ MAX_SENSIBLE_LEVEL = {
     data.GOAL_HERX: 18,
     data.GOAL_DEVIL: 22,
     data.GOAL_SANCTUM: 30,
-    data.GOAL_BOSS_RUSH: 30,  # lowered below to fit Boss Rush Floors
+    data.GOAL_BOSS_RUSH: 30,  # lowered below to fit Dungeon Floors
 }
 
 CLASSIFICATION = {
@@ -77,6 +77,7 @@ class BaronyWorld(World):
     num_sections: int
     floor_shuffle_seed: int
     boss_rush_seed: int
+    short_dungeon: bool
     level_check_max: int
     pickup_count: int
     shop_count: int
@@ -85,15 +86,17 @@ class BaronyWorld(World):
     def generate_early(self) -> None:
         goal = self.options.goal.value
         self.goal_floor = data.GOAL_FLOOR[goal]
-        if goal == data.GOAL_BOSS_RUSH:
-            self.goal_floor = self.options.boss_rush_floors.value
+        # Custom Dungeon Length / Boss Rush: Dungeon Floors floors, then the goal boss.
+        self.short_dungeon = bool(self.options.custom_dungeon_length) or goal == data.GOAL_BOSS_RUSH
+        if self.short_dungeon:
+            self.goal_floor = self.options.dungeon_floors.value
         self.num_sections = data.section_of_floor(self.goal_floor)
         self.floor_shuffle_seed = self.random.randint(1, 2**31 - 1)
         self.boss_rush_seed = self.random.randint(1, 2**31 - 1)
 
         self.level_check_max = self.options.level_checks.value
         cap = MAX_SENSIBLE_LEVEL[goal]
-        if goal == data.GOAL_BOSS_RUSH:
+        if self.short_dungeon:
             cap = min(cap, max(5, self.goal_floor + 3))
         if self.level_check_max > cap:
             logger.warning(
@@ -309,7 +312,7 @@ class BaronyWorld(World):
         return {
             "goal": o.goal.value,
             "goal_floor": self.goal_floor,
-            "boss_rush_floors": o.boss_rush_floors.value,
+            "dungeon_floors": self.goal_floor if self.short_dungeon else 0,
             "boss_rush_mask": (sum(bit for name, bit in (("Herx", 1), ("Devil", 2), ("Twin Liches", 4))
                                    if name in o.boss_rush_bosses.value) or 7),
             "boss_rush_town": int(bool(o.boss_rush_rest_town)),

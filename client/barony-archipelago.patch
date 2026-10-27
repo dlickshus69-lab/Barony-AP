@@ -1,4 +1,4 @@
-From 9fed0893f3daa645d3d860543616764e65c581c5 Mon Sep 17 00:00:00 2001
+From bd1431b85b1f098c3340027e6b5e82083ba1c81a Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -12,7 +12,7 @@ Subject: [PATCH] Archipelago client hooks
  src/actladder.cpp                 |   25 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 4598 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 4604 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |  126 +
  src/archipelago_ids.hpp           |  245 ++
  src/charclass.cpp                 |    4 +
@@ -31,7 +31,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   15 +
  src/ui/MainMenu.cpp               |    5 +-
- 27 files changed, 6765 insertions(+), 4 deletions(-)
+ 27 files changed, 6771 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -1789,10 +1789,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..5bdad46
+index 0000000..606228e
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,4598 @@
+@@ -0,0 +1,4604 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -1896,7 +1896,7 @@ index 0000000..5bdad46
 +		int spell_dlc = 0;            // DLC class spells are in the pool too
 +		int floor_size_mask = 1;      // Floor Size: bit 1 Normal, 2 Bigger, 4 Much Bigger
 +		int boss_rush_mask = 7;       // Boss Rush: 1 Herx, 2 Devil, 4 Twin Liches
-+		int boss_rush_floors = 10;    // Boss Rush: dungeon floors before the rush
++		int dungeon_floors = 0;       // Custom Dungeon Length / Boss Rush: floors before the goal boss (0 = usual depth)
 +		int boss_rush_town = 1;       // Boss Rush: rest in a town between bosses
 +		int boss_rush_order = 0;      // Boss Rush: 0 game order, 1 random (same every run), 2 random each run
 +		int boss_rush_seed = 0;       // Boss Rush: the seed's own shuffle
@@ -2404,7 +2404,7 @@ index 0000000..5bdad46
 +		registerSlotInt("randomize_loot", &SlotOptions::randomize_loot);
 +		registerSlotInt("floor_key_on_tracker_map", &SlotOptions::floor_key_on_tracker_map);
 +		registerSlotInt("boss_rush_mask", &SlotOptions::boss_rush_mask);
-+		registerSlotInt("boss_rush_floors", &SlotOptions::boss_rush_floors);
++		registerSlotInt("dungeon_floors", &SlotOptions::dungeon_floors);
 +		registerSlotInt("boss_rush_town", &SlotOptions::boss_rush_town);
 +		registerSlotInt("boss_rush_order", &SlotOptions::boss_rush_order);
 +		registerSlotInt("boss_rush_seed", &SlotOptions::boss_rush_seed);
@@ -4544,7 +4544,9 @@ index 0000000..5bdad46
 +	// The dungeon down to Boss Rush Floors, then the bosses you picked back to back (in game order:
 +	// Herx, the Devil, the Twin Liches; or shuffled), with a rest in the town between them if you like. Bosses you've
 +	// already beaten (in any run) are skipped.
-+	bool bossRushOn() { return g_ready && g_slot.goal == 3 && multiplayer == SINGLE; } // single player only
++	// The end of the run comes from us: Boss Rush, or Dungeon Floors with any goal (a set number of
++	// floors, then the goal boss's arena). Single player only.
++	bool bossRushOn() { return g_ready && (g_slot.goal == 3 || g_slot.dungeon_floors > 0) && multiplayer == SINGLE; }
 +	bool g_rushSaveDirty = false; // the rush state changed while a floor was loading: save it on the next tick
 +
 +	int bossRushGoalMask()
@@ -4565,6 +4567,10 @@ index 0000000..5bdad46
 +
 +	std::string makeRushSeq()
 +	{
++		// A normal goal with Dungeon Floors: just its boss.
++		if ( g_slot.goal == 0 ) { return "boss,"; }
++		if ( g_slot.goal == 1 ) { return "hellboss,"; }
++		if ( g_slot.goal == 2 ) { return "sanctum,"; }
 +		int m = bossRushGoalMask(), killed = g_save.goalBossesKilled;
 +		std::vector<std::string> bosses;
 +		if ( (m & 1) && !(killed & 1) ) { bosses.push_back("boss"); }
@@ -4591,7 +4597,7 @@ index 0000000..5bdad46
 +	std::string bossRushMapFor(int level)
 +	{
 +		if ( !bossRushOn() || secretlevel ) { return ""; }
-+		int start = std::max(1, g_slot.boss_rush_floors);
++		int start = std::max(1, g_slot.dungeon_floors > 0 ? g_slot.dungeon_floors : 10);
 +		if ( level <= start ) { return ""; }
 +		if ( g_save.rushRunKey != uniqueGameKey || g_save.rushSeq.empty() )
 +		{
@@ -5019,7 +5025,7 @@ index 0000000..5bdad46
 +// before them is played instead); the bosses come in the rush at the end.
 +static int skipRushBossLine(int line, const std::vector<std::string>& levelsList)
 +{
-+	if ( !g_ready || g_slot.goal != 3 || secretlevel || line < 1 || line >= (int)levelsList.size() ) { return line; }
++	if ( !bossRushOn() || secretlevel || line < 1 || line >= (int)levelsList.size() ) { return line; }
 +	std::string text = levelsList[line];
 +	while ( !text.empty() && (text.back() == '\r' || text.back() == ' ' || text.back() == '\t') ) { text.pop_back(); }
 +	bool bossLine = text == "map: boss" || text == "map: hellboss" || text == "map: sanctum";
