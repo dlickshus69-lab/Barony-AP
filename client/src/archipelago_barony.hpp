@@ -72,6 +72,8 @@ namespace AP
 	const char* apItemName(bool withArticle);
 	// init.cpp, right after the game's models load: adds the Archipelago model.
 	void loadExtraModels();
+	// ui/MainMenu.cpp: the title image (Barony's logo with the Archipelago logo for the O).
+	const char* titleImagePath();
 
 	// actchest.cpp / actgeneral.cpp: Archipelago items in chests and breakable containers.
 	void onChestCreated(Entity* chest);

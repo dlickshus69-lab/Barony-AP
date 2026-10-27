@@ -1,19 +1,19 @@
-From 9f454ba33bc0925bdbf9072dc7da288221828733 Mon Sep 17 00:00:00 2001
+From f66b7bc43cf16365c68d9d7a74760b97630d6da5 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
 
 ---
  CMakeLists.txt                    |   32 +
- src/BaronyAPTracker.cpp           |  269 +++
+ src/BaronyAPTracker.cpp           |  345 ++++
  src/CMakeLists.txt                |    1 +
  src/actchest.cpp                  |    7 +
  src/actgeneral.cpp                |    2 +
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 2664 +++++++++++++++++++++++++++++
- src/archipelago_barony.hpp        |   97 ++
+ src/archipelago_barony.cpp        | 2719 +++++++++++++++++++++++++++++
+ src/archipelago_barony.hpp        |   99 ++
  src/archipelago_ids.hpp           |   95 +
  src/engine/audio/sound_game.cpp   |    2 +
  src/files.cpp                     |    6 +
@@ -26,14 +26,15 @@ Subject: [PATCH] Archipelago client hooks
  src/maps.cpp                      |   11 +
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   10 +
- 22 files changed, 3257 insertions(+), 2 deletions(-)
+ src/ui/MainMenu.cpp               |    5 +-
+ 23 files changed, 3393 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
  create mode 100644 src/archipelago_ids.hpp
 
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 4e9ed8f..b1f0a2c 100644
+index 4e9ed8f..c2b0e9a 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
 @@ -535,6 +535,38 @@ else()
@@ -68,7 +69,7 @@ index 4e9ed8f..b1f0a2c 100644
 +# Archipelago: the small tracker window that opens next to the game.
 +if (WIN32 AND GAME_ENABLED)
 +	add_executable(BaronyAPTracker WIN32 ${CMAKE_CURRENT_SOURCE_DIR}/src/BaronyAPTracker.cpp)
-+	target_link_libraries(BaronyAPTracker user32 gdi32)
++	target_link_libraries(BaronyAPTracker user32 gdi32 gdiplus)
 +	add_dependencies(barony BaronyAPTracker)
 +endif ()
 +
@@ -77,18 +78,22 @@ index 4e9ed8f..b1f0a2c 100644
      # Only for MinGW...
 diff --git a/src/BaronyAPTracker.cpp b/src/BaronyAPTracker.cpp
 new file mode 100644
-index 0000000..28a0bcc
+index 0000000..b09289c
 --- /dev/null
 +++ b/src/BaronyAPTracker.cpp
-@@ -0,0 +1,269 @@
+@@ -0,0 +1,345 @@
 +// Barony Archipelago tracker window.
 +//
 +// Barony (the Archipelago build) starts this when it connects, and writes
 +// archipelago/tracker.txt about once a second. This window shows that file:
 +// connection, floor, what's left on the floor, lives, keys, and the item log.
 +
-+#define WIN32_LEAN_AND_MEAN
++#define NOMINMAX
 +#include <windows.h>
++#include <algorithm>
++namespace Gdiplus { using std::min; using std::max; } // gdiplus.h needs these without the macros
++#include <objidl.h>
++#include <gdiplus.h>
 +
 +#include <algorithm>
 +#include <fstream>
@@ -110,6 +115,11 @@ index 0000000..28a0bcc
 +	TrackerState g_state;
 +	bool g_showAll = false;
 +	HFONT g_titleFont = nullptr, g_bodyFont = nullptr;
++	// Barony's own art, read from the Barony folder this program sits in.
++	Gdiplus::Image* g_backdrop = nullptr;
++	Gdiplus::Image* g_logo = nullptr;
++
++	Gdiplus::Image* loadImage(const std::string& relative);
 +
 +	const COLORREF BG = RGB(22, 18, 14);
 +	const COLORREF PANEL = RGB(38, 31, 24);
@@ -164,6 +174,52 @@ index 0000000..28a0bcc
 +		g_state = st;
 +	}
 +
++	Gdiplus::Image* loadImage(const std::string& relative)
++	{
++		std::string path = exeDir() + "\\" + relative;
++		std::wstring wpath(path.begin(), path.end());
++		Gdiplus::Image* img = Gdiplus::Image::FromFile(wpath.c_str());
++		if ( img && img->GetLastStatus() != Gdiplus::Ok ) { delete img; img = nullptr; }
++		return img;
++	}
++
++	// Fills the window with the backdrop (cropped to cover), darkened so text stays readable.
++	void drawBackdrop(HDC dc, const RECT& rc)
++	{
++		Gdiplus::Graphics g(dc);
++		if ( g_backdrop )
++		{
++			double iw = g_backdrop->GetWidth(), ih = g_backdrop->GetHeight();
++			double scale = std::max(rc.right / iw, rc.bottom / ih);
++			double w = iw * scale, h = ih * scale;
++			g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
++			g.DrawImage(g_backdrop, (Gdiplus::REAL)((rc.right - w) / 2), (Gdiplus::REAL)((rc.bottom - h) / 2),
++				(Gdiplus::REAL)w, (Gdiplus::REAL)h);
++			Gdiplus::SolidBrush shade(Gdiplus::Color(185, 14, 11, 8));
++			g.FillRectangle(&shade, 0, 0, (INT)rc.right, (INT)rc.bottom);
++		}
++	}
++
++	void drawPanel(HDC dc, int x, int y, int w, int h)
++	{
++		Gdiplus::Graphics g(dc);
++		Gdiplus::SolidBrush b(Gdiplus::Color(200, 30, 24, 18));
++		g.FillRectangle(&b, x, y, w, h);
++		Gdiplus::Pen pen(Gdiplus::Color(255, 74, 62, 48), 1.0f);
++		g.DrawRectangle(&pen, x, y, w - 1, h - 1);
++	}
++
++	int drawLogo(HDC dc, int x, int y)
++	{
++		if ( !g_logo ) { return 0; }
++		Gdiplus::Graphics g(dc);
++		g.SetInterpolationMode(Gdiplus::InterpolationModeNearestNeighbor);
++		g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
++		int w = (int)g_logo->GetWidth() * 2, h = (int)g_logo->GetHeight() * 2;
++		g.DrawImage(g_logo, x, y, w, h);
++		return h;
++	}
++
 +	int num(const char* key)
 +	{
 +		auto it = g_state.values.find(key);
@@ -195,10 +251,20 @@ index 0000000..28a0bcc
 +		HGDIOBJ oldBmp = SelectObject(dc, bmp);
 +		SetBkMode(dc, TRANSPARENT);
 +		fill(dc, rc, BG);
++		drawBackdrop(dc, rc);
 +
-+		int y = 12;
-+		text(dc, 14, y, L"Barony Archipelago", GOLD, g_titleFont);
-+		y += 34;
++		int y = 10;
++		int logoH = drawLogo(dc, 14, y);
++		if ( logoH > 0 )
++		{
++			text(dc, 14 + (int)g_logo->GetWidth() * 2 + 12, y + logoH / 2 - 13, L"Archipelago", GOLD, g_titleFont);
++			y += logoH + 8;
++		}
++		else
++		{
++			text(dc, 14, y, L"Barony Archipelago", GOLD, g_titleFont);
++			y += 34;
++		}
 +
 +		if ( !g_state.fileFound )
 +		{
@@ -231,8 +297,7 @@ index 0000000..28a0bcc
 +				}
 +				y += 6;
 +
-+				RECT panel{ 10, y, rc.right - 10, y + 118 };
-+				fill(dc, panel, PANEL);
++				drawPanel(dc, 10, y, rc.right - 20, 118);
 +				int ground = num("ground"), chests = num("chests"), shop = num("shop"), marked = num("marked");
 +				int total = ground + chests + shop + marked;
 +				text(dc, 20, y + 8, L"Left on this floor", GOLD, g_bodyFont);
@@ -258,6 +323,8 @@ index 0000000..28a0bcc
 +			}
 +
 +			{
++				int rowsH = 34 + 20 * (int)std::max<size_t>(1, g_state.deaths.size());
++				drawPanel(dc, 10, y - 4, rc.right - 20, rowsH);
 +				wchar_t buf[256];
 +				swprintf(buf, 256, L"Deaths: %d", num("deaths_total"));
 +				text(dc, 14, y, buf, GOLD, g_bodyFont);
@@ -272,7 +339,8 @@ index 0000000..28a0bcc
 +					text(dc, rc.right - 60, y, buf, me ? GOLD : TEXT, g_bodyFont);
 +					y += 20;
 +				}
-+				y += 10;
++				if ( rows.empty() ) { text(dc, 30, y, L"Nobody has died yet.", DIM, g_bodyFont); y += 20; }
++				y += 14;
 +			}
 +
 +			text(dc, 14, y, g_showAll ? L"Full log   (Tab: items only)" : L"Item log   (Tab: full log)", GOLD, g_bodyFont);
@@ -324,6 +392,12 @@ index 0000000..28a0bcc
 +	HANDLE mutex = CreateMutexA(nullptr, TRUE, "BaronyAPTrackerSingleInstance");
 +	if ( GetLastError() == ERROR_ALREADY_EXISTS ) { return 0; }
 +
++	Gdiplus::GdiplusStartupInput gdiplusInput;
++	ULONG_PTR gdiplusToken = 0;
++	Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusInput, nullptr);
++	g_backdrop = loadImage("images\\system\\backdrop_loading.png");
++	g_logo = loadImage("images\\system\\title.png");
++
 +	g_titleFont = CreateFontW(26, 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, 0, 0, NONANTIALIASED_QUALITY, 0, L"Consolas");
 +	g_bodyFont = CreateFontW(17, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Consolas");
 +
@@ -347,6 +421,9 @@ index 0000000..28a0bcc
 +		TranslateMessage(&m);
 +		DispatchMessageW(&m);
 +	}
++	delete g_backdrop;
++	delete g_logo;
++	Gdiplus::GdiplusShutdown(gdiplusToken);
 +	if ( mutex ) { CloseHandle(mutex); }
 +	return 0;
 +}
@@ -504,10 +581,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..f940cee
+index 0000000..ead1b31
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,2664 @@
+@@ -0,0 +1,2719 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -2805,8 +2882,65 @@ index 0000000..f940cee
 +const char* apItemIconPath() { return "items/images/AP_Item.png"; }
 +const char* apItemName(bool withArticle) { return withArticle ? "an Archipelago item" : "Archipelago item"; }
 +
++// The main-menu title: Barony's own logo with the O swapped for the Archipelago logo. It's made here
++// from the player's own copy of Barony's title.png (the mod only ships the small Archipelago piece),
++// and saved next to the mod's other images so the tracker window can show it too.
++namespace
++{
++	bool g_apTitleReady = false;
++	const char* const AP_TITLE_PATH = "images/ui/Archipelago/AP_Title.png";
++
++	void makeApTitle()
++	{
++		const char* titleDir = PHYSFS_getRealDir("images/system/title.png");
++		const char* patchDir = PHYSFS_getRealDir("images/ui/Archipelago/AP_TitleO.png");
++		if ( !titleDir || !patchDir ) { return; }
++		std::string titlePath = std::string(titleDir) + "/images/system/title.png";
++		std::string patchPath = std::string(patchDir) + "/images/ui/Archipelago/AP_TitleO.png";
++		std::string outPath = std::string(patchDir) + "/" + AP_TITLE_PATH;
++
++		SDL_Surface* rawTitle = IMG_Load(titlePath.c_str());
++		SDL_Surface* rawPatch = IMG_Load(patchPath.c_str());
++		SDL_Surface* title = rawTitle ? SDL_ConvertSurfaceFormat(rawTitle, SDL_PIXELFORMAT_RGBA32, 0) : nullptr;
++		SDL_Surface* patch = rawPatch ? SDL_ConvertSurfaceFormat(rawPatch, SDL_PIXELFORMAT_RGBA32, 0) : nullptr;
++		if ( rawTitle ) { SDL_FreeSurface(rawTitle); }
++		if ( rawPatch ) { SDL_FreeSurface(rawPatch); }
++		// Only Barony's standard 130x60 title is known; anything else is left alone.
++		if ( title && patch && title->w == 130 && title->h == 60 && patch->w == 18 && patch->h == 18 )
++		{
++			auto at = [](SDL_Surface* sf, int x, int y) -> Uint8* { return (Uint8*)sf->pixels + y * sf->pitch + x * 4; };
++			for ( int y = 9; y < 24; ++y )
++			{
++				for ( int x = 74; x < 87; ++x ) { memset(at(title, x, y), 0, 4); } // the O
++			}
++			for ( int y = 0; y < 18; ++y )
++			{
++				for ( int x = 0; x < 18; ++x )
++				{
++					Uint8* src = at(patch, x, y);
++					if ( src[3] == 0 ) { continue; }
++					Uint8* dst = at(title, 71 + x, 8 + y);
++					bool outline = src[0] == 24 && src[1] == 16 && src[2] == 12;
++					if ( outline && dst[3] != 0 ) { continue; } // outlines only go on empty pixels
++					memcpy(dst, src, 4);
++				}
++			}
++			g_apTitleReady = IMG_SavePNG(title, outPath.c_str()) == 0;
++			printlog("[Archipelago] Main menu title %s.", g_apTitleReady ? "made" : "could not be saved");
++		}
++		if ( title ) { SDL_FreeSurface(title); }
++		if ( patch ) { SDL_FreeSurface(patch); }
++	}
++}
++
++const char* titleImagePath()
++{
++	return g_apTitleReady ? "*images/ui/Archipelago/AP_Title.png" : "*images/system/title.png";
++}
++
 +void loadExtraModels()
 +{
++	makeApTitle();
 +	if ( !PHYSFS_getRealDir(AP_MODEL_PATH) )
 +	{
 +		printlog("[Archipelago] %s not found; the Archipelago item will look like a luckstone.", AP_MODEL_PATH);
@@ -3060,10 +3194,8 @@ index 0000000..f940cee
 +	drawText(label, BIG_FONT, color, 38, 10);
 +	if ( g_ready && inGame() )
 +	{
-+		Uint32 c2 = g_floorCounts.total() > 0 ? makeColorRGB(255, 200, 90) : makeColorRGB(170, 170, 170);
++		// What's left on the floor is in the tracker window (and the stairs warn you), not here.
 +		int row = 32;
-+		drawText(floorCountsText(g_floorCounts).c_str(), HUD_FONT, c2, 38, row);
-+		row += 18;
 +		// The Minotaur: how long until he arrives, or that he's here.
 +		if ( g_minotaurSecs >= 0 )
 +		{
@@ -3090,7 +3222,7 @@ index 0000000..f940cee
 +		// Death counter: total, then everyone who has died, most deaths first.
 +		std::vector<std::pair<std::string, int>> rows(g_save.deaths.begin(), g_save.deaths.end());
 +		std::stable_sort(rows.begin(), rows.end(), [](auto& a, auto& b) { return a.second > b.second; });
-+		const int x = 12, y = 96, w = 360, lineH = 22;
++		const int x = 12, y = 80, w = 360, lineH = 22;
 +		int h = 70 + lineH * (int)std::max<size_t>(1, rows.size());
 +		drawImage("images/system/white.png", x, y, w, h, makeColor(10, 8, 6, 200));
 +		drawText("Deaths (F3 to close)", BIG_FONT, makeColorRGB(255, 200, 90), x + 8, y + 6);
@@ -3117,7 +3249,7 @@ index 0000000..f940cee
 +		{
 +			if ( g_logPanel == 2 || it->item ) { lines.push_back(&*it); }
 +		}
-+		const int x = 12, y = 96, w = 520, lineH = 18;
++		const int x = 12, y = 80, w = 520, lineH = 18;
 +		int h = 30 + lineH * (int)std::max<size_t>(1, lines.size());
 +		drawImage("images/system/white.png", x, y, w, h, makeColor(10, 8, 6, 200));
 +		drawText(g_logPanel == 1 ? "Archipelago items (F1 to close)" : "Archipelago log (F2 to close)",
@@ -3174,10 +3306,10 @@ index 0000000..f940cee
 +} // namespace AP
 diff --git a/src/archipelago_barony.hpp b/src/archipelago_barony.hpp
 new file mode 100644
-index 0000000..c84a811
+index 0000000..0f7c1a8
 --- /dev/null
 +++ b/src/archipelago_barony.hpp
-@@ -0,0 +1,97 @@
+@@ -0,0 +1,99 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client.
@@ -3252,6 +3384,8 @@ index 0000000..c84a811
 +	const char* apItemName(bool withArticle);
 +	// init.cpp, right after the game's models load: adds the Archipelago model.
 +	void loadExtraModels();
++	// ui/MainMenu.cpp: the title image (Barony's logo with the Archipelago logo for the O).
++	const char* titleImagePath();
 +
 +	// actchest.cpp / actgeneral.cpp: Archipelago items in chests and breakable containers.
 +	void onChestCreated(Entity* chest);
@@ -3690,6 +3824,36 @@ index 1678756..619b6fb 100644
      } else {
          if (remap) {
              mat4x4_t empty(0.f);
+diff --git a/src/ui/MainMenu.cpp b/src/ui/MainMenu.cpp
+index 37d93bc..949792d 100644
+--- a/src/ui/MainMenu.cpp
++++ b/src/ui/MainMenu.cpp
+@@ -29,6 +29,7 @@
+ 
+ #include <cassert>
+ #include <functional>
++#include "../archipelago_barony.hpp" // Archipelago
+ #ifdef STEAMWORKS
+ #include <nfd.h>
+ #endif
+@@ -26521,7 +26522,7 @@ failed:
+ 		main_menu_frame->setTickCallback(tickMainMenu);
+ 
+ 		const auto title_scale = 4.0;
+-		auto title_img = Image::get("*images/system/title.png");
++		auto title_img = Image::get(AP::titleImagePath()); // Archipelago: the title with the AP logo
+ 		auto title = main_menu_frame->addImage(
+ 			SDL_Rect{
+ 				(int)(Frame::virtualScreenX - (int)title_img->getWidth() * title_scale) / 2,
+@@ -26872,7 +26873,7 @@ failed:
+ 		int y = 0;
+ 
+ 		const auto title_scale = 3.0;
+-		auto title_img = Image::get("*images/system/title.png");
++		auto title_img = Image::get(AP::titleImagePath()); // Archipelago: the title with the AP logo
+ 		auto title = main_menu_frame->addImage(
+ 			SDL_Rect{
+ 				(int)(Frame::virtualScreenX - (int)title_img->getWidth() * title_scale) / 2,
 -- 
 2.43.0
 

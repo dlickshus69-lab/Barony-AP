@@ -2295,8 +2295,65 @@ int apItemModel() { return g_apModelIndex; }
 const char* apItemIconPath() { return "items/images/AP_Item.png"; }
 const char* apItemName(bool withArticle) { return withArticle ? "an Archipelago item" : "Archipelago item"; }
 
+// The main-menu title: Barony's own logo with the O swapped for the Archipelago logo. It's made here
+// from the player's own copy of Barony's title.png (the mod only ships the small Archipelago piece),
+// and saved next to the mod's other images so the tracker window can show it too.
+namespace
+{
+	bool g_apTitleReady = false;
+	const char* const AP_TITLE_PATH = "images/ui/Archipelago/AP_Title.png";
+
+	void makeApTitle()
+	{
+		const char* titleDir = PHYSFS_getRealDir("images/system/title.png");
+		const char* patchDir = PHYSFS_getRealDir("images/ui/Archipelago/AP_TitleO.png");
+		if ( !titleDir || !patchDir ) { return; }
+		std::string titlePath = std::string(titleDir) + "/images/system/title.png";
+		std::string patchPath = std::string(patchDir) + "/images/ui/Archipelago/AP_TitleO.png";
+		std::string outPath = std::string(patchDir) + "/" + AP_TITLE_PATH;
+
+		SDL_Surface* rawTitle = IMG_Load(titlePath.c_str());
+		SDL_Surface* rawPatch = IMG_Load(patchPath.c_str());
+		SDL_Surface* title = rawTitle ? SDL_ConvertSurfaceFormat(rawTitle, SDL_PIXELFORMAT_RGBA32, 0) : nullptr;
+		SDL_Surface* patch = rawPatch ? SDL_ConvertSurfaceFormat(rawPatch, SDL_PIXELFORMAT_RGBA32, 0) : nullptr;
+		if ( rawTitle ) { SDL_FreeSurface(rawTitle); }
+		if ( rawPatch ) { SDL_FreeSurface(rawPatch); }
+		// Only Barony's standard 130x60 title is known; anything else is left alone.
+		if ( title && patch && title->w == 130 && title->h == 60 && patch->w == 18 && patch->h == 18 )
+		{
+			auto at = [](SDL_Surface* sf, int x, int y) -> Uint8* { return (Uint8*)sf->pixels + y * sf->pitch + x * 4; };
+			for ( int y = 9; y < 24; ++y )
+			{
+				for ( int x = 74; x < 87; ++x ) { memset(at(title, x, y), 0, 4); } // the O
+			}
+			for ( int y = 0; y < 18; ++y )
+			{
+				for ( int x = 0; x < 18; ++x )
+				{
+					Uint8* src = at(patch, x, y);
+					if ( src[3] == 0 ) { continue; }
+					Uint8* dst = at(title, 71 + x, 8 + y);
+					bool outline = src[0] == 24 && src[1] == 16 && src[2] == 12;
+					if ( outline && dst[3] != 0 ) { continue; } // outlines only go on empty pixels
+					memcpy(dst, src, 4);
+				}
+			}
+			g_apTitleReady = IMG_SavePNG(title, outPath.c_str()) == 0;
+			printlog("[Archipelago] Main menu title %s.", g_apTitleReady ? "made" : "could not be saved");
+		}
+		if ( title ) { SDL_FreeSurface(title); }
+		if ( patch ) { SDL_FreeSurface(patch); }
+	}
+}
+
+const char* titleImagePath()
+{
+	return g_apTitleReady ? "*images/ui/Archipelago/AP_Title.png" : "*images/system/title.png";
+}
+
 void loadExtraModels()
 {
+	makeApTitle();
 	if ( !PHYSFS_getRealDir(AP_MODEL_PATH) )
 	{
 		printlog("[Archipelago] %s not found; the Archipelago item will look like a luckstone.", AP_MODEL_PATH);
@@ -2550,10 +2607,8 @@ void drawHud()
 	drawText(label, BIG_FONT, color, 38, 10);
 	if ( g_ready && inGame() )
 	{
-		Uint32 c2 = g_floorCounts.total() > 0 ? makeColorRGB(255, 200, 90) : makeColorRGB(170, 170, 170);
+		// What's left on the floor is in the tracker window (and the stairs warn you), not here.
 		int row = 32;
-		drawText(floorCountsText(g_floorCounts).c_str(), HUD_FONT, c2, 38, row);
-		row += 18;
 		// The Minotaur: how long until he arrives, or that he's here.
 		if ( g_minotaurSecs >= 0 )
 		{
@@ -2580,7 +2635,7 @@ void drawHud()
 		// Death counter: total, then everyone who has died, most deaths first.
 		std::vector<std::pair<std::string, int>> rows(g_save.deaths.begin(), g_save.deaths.end());
 		std::stable_sort(rows.begin(), rows.end(), [](auto& a, auto& b) { return a.second > b.second; });
-		const int x = 12, y = 96, w = 360, lineH = 22;
+		const int x = 12, y = 80, w = 360, lineH = 22;
 		int h = 70 + lineH * (int)std::max<size_t>(1, rows.size());
 		drawImage("images/system/white.png", x, y, w, h, makeColor(10, 8, 6, 200));
 		drawText("Deaths (F3 to close)", BIG_FONT, makeColorRGB(255, 200, 90), x + 8, y + 6);
@@ -2607,7 +2662,7 @@ void drawHud()
 		{
 			if ( g_logPanel == 2 || it->item ) { lines.push_back(&*it); }
 		}
-		const int x = 12, y = 96, w = 520, lineH = 18;
+		const int x = 12, y = 80, w = 520, lineH = 18;
 		int h = 30 + lineH * (int)std::max<size_t>(1, lines.size());
 		drawImage("images/system/white.png", x, y, w, h, makeColor(10, 8, 6, 200));
 		drawText(g_logPanel == 1 ? "Archipelago items (F1 to close)" : "Archipelago log (F2 to close)",

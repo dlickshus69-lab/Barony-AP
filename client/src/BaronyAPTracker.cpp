@@ -4,8 +4,12 @@
 // archipelago/tracker.txt about once a second. This window shows that file:
 // connection, floor, what's left on the floor, lives, keys, and the item log.
 
-#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #include <windows.h>
+#include <algorithm>
+namespace Gdiplus { using std::min; using std::max; } // gdiplus.h needs these without the macros
+#include <objidl.h>
+#include <gdiplus.h>
 
 #include <algorithm>
 #include <fstream>
@@ -27,6 +31,10 @@ namespace
 	TrackerState g_state;
 	bool g_showAll = false;
 	HFONT g_titleFont = nullptr, g_bodyFont = nullptr;
+	// Barony's own art, read from the Barony folder this program sits in.
+	Gdiplus::Image* g_logo = nullptr;
+
+	Gdiplus::Image* loadImage(const std::string& relative);
 
 	const COLORREF BG = RGB(22, 18, 14);
 	const COLORREF PANEL = RGB(38, 31, 24);
@@ -81,6 +89,35 @@ namespace
 		g_state = st;
 	}
 
+	Gdiplus::Image* loadImage(const std::string& relative)
+	{
+		std::string path = exeDir() + "\\" + relative;
+		std::wstring wpath(path.begin(), path.end());
+		Gdiplus::Image* img = Gdiplus::Image::FromFile(wpath.c_str());
+		if ( img && img->GetLastStatus() != Gdiplus::Ok ) { delete img; img = nullptr; }
+		return img;
+	}
+
+	void drawPanel(HDC dc, int x, int y, int w, int h)
+	{
+		Gdiplus::Graphics g(dc);
+		Gdiplus::SolidBrush b(Gdiplus::Color(200, 30, 24, 18));
+		g.FillRectangle(&b, x, y, w, h);
+		Gdiplus::Pen pen(Gdiplus::Color(255, 74, 62, 48), 1.0f);
+		g.DrawRectangle(&pen, x, y, w - 1, h - 1);
+	}
+
+	int drawLogo(HDC dc, int x, int y)
+	{
+		if ( !g_logo ) { return 0; }
+		Gdiplus::Graphics g(dc);
+		g.SetInterpolationMode(Gdiplus::InterpolationModeNearestNeighbor);
+		g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+		int w = (int)g_logo->GetWidth() * 2, h = (int)g_logo->GetHeight() * 2;
+		g.DrawImage(g_logo, x, y, w, h);
+		return h;
+	}
+
 	int num(const char* key)
 	{
 		auto it = g_state.values.find(key);
@@ -113,9 +150,17 @@ namespace
 		SetBkMode(dc, TRANSPARENT);
 		fill(dc, rc, BG);
 
-		int y = 12;
-		text(dc, 14, y, L"Barony Archipelago", GOLD, g_titleFont);
-		y += 34;
+		int y = 8;
+		int logoH = g_logo ? drawLogo(dc, (rc.right - (int)g_logo->GetWidth() * 2) / 2, y) : 0;
+		if ( logoH > 0 )
+		{
+			y += logoH + 6;
+		}
+		else
+		{
+			text(dc, 14, y, L"Barony Archipelago", GOLD, g_titleFont);
+			y += 34;
+		}
 
 		if ( !g_state.fileFound )
 		{
@@ -148,8 +193,7 @@ namespace
 				}
 				y += 6;
 
-				RECT panel{ 10, y, rc.right - 10, y + 118 };
-				fill(dc, panel, PANEL);
+				drawPanel(dc, 10, y, rc.right - 20, 118);
 				int ground = num("ground"), chests = num("chests"), shop = num("shop"), marked = num("marked");
 				int total = ground + chests + shop + marked;
 				text(dc, 20, y + 8, L"Left on this floor", GOLD, g_bodyFont);
@@ -175,6 +219,8 @@ namespace
 			}
 
 			{
+				int rowsH = 34 + 20 * (int)std::max<size_t>(1, g_state.deaths.size());
+				drawPanel(dc, 10, y - 4, rc.right - 20, rowsH);
 				wchar_t buf[256];
 				swprintf(buf, 256, L"Deaths: %d", num("deaths_total"));
 				text(dc, 14, y, buf, GOLD, g_bodyFont);
@@ -189,7 +235,8 @@ namespace
 					text(dc, rc.right - 60, y, buf, me ? GOLD : TEXT, g_bodyFont);
 					y += 20;
 				}
-				y += 10;
+				if ( rows.empty() ) { text(dc, 30, y, L"Nobody has died yet.", DIM, g_bodyFont); y += 20; }
+				y += 14;
 			}
 
 			text(dc, 14, y, g_showAll ? L"Full log   (Tab: items only)" : L"Item log   (Tab: full log)", GOLD, g_bodyFont);
@@ -241,6 +288,13 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE, LPSTR, int show)
 	HANDLE mutex = CreateMutexA(nullptr, TRUE, "BaronyAPTrackerSingleInstance");
 	if ( GetLastError() == ERROR_ALREADY_EXISTS ) { return 0; }
 
+	Gdiplus::GdiplusStartupInput gdiplusInput;
+	ULONG_PTR gdiplusToken = 0;
+	Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusInput, nullptr);
+	// Barony's title with the Archipelago logo (the game makes it at startup), else Barony's own.
+	g_logo = loadImage("images\\ui\\Archipelago\\AP_Title.png");
+	if ( !g_logo ) { g_logo = loadImage("images\\system\\title.png"); }
+
 	g_titleFont = CreateFontW(26, 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, 0, 0, NONANTIALIASED_QUALITY, 0, L"Consolas");
 	g_bodyFont = CreateFontW(17, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Consolas");
 
@@ -264,6 +318,8 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE, LPSTR, int show)
 		TranslateMessage(&m);
 		DispatchMessageW(&m);
 	}
+	delete g_logo;
+	Gdiplus::GdiplusShutdown(gdiplusToken);
 	if ( mutex ) { CloseHandle(mutex); }
 	return 0;
 }
