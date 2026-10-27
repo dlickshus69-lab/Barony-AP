@@ -152,9 +152,10 @@ SKILL_RANKS = [(1, "Basic", 20), (2, "Skilled", 40), (3, "Expert", 60), (4, "Mas
 SKILL_RANK_FLOOR = {1: 1, 2: 4, 3: 10, 4: 16, 5: 22}
 # Skills every class can raise from nothing: identifying items, buying and selling, sneaking.
 UNIVERSAL_SKILLS = [3, 2, 1]
-# The 13 base classes (Barony's PlayerClasses order) and the skills they start with, with starting values.
-CLASSES = ["Barbarian", "Warrior", "Healer", "Rogue", "Wanderer", "Cleric", "Merchant", "Wizard", "Arcanist",
-           "Joker", "Sexton", "Ninja", "Monk"]
+# Every class (Barony's PlayerClasses order) and the skills it starts with, with starting values.
+# The first 13 are the base game; the rest need a DLC pack (see DLC_PACK_OF_CLASS).
+CLASSES = ['Barbarian', 'Warrior', 'Healer', 'Rogue', 'Wanderer', 'Cleric', 'Merchant', 'Wizard', 'Arcanist', 'Joker', 'Sexton', 'Ninja', 'Monk', 'Conjurer', 'Accursed', 'Mesmer', 'Brewer', 'Machinist', 'Punisher', 'Shaman', 'Hunter', 'Bard', 'Sapper', 'Scion', 'Hermit', 'Paladin']
+DLC_PACK_OF_CLASS = {'Conjurer': 1, 'Accursed': 1, 'Mesmer': 1, 'Brewer': 1, 'Machinist': 2, 'Punisher': 2, 'Shaman': 2, 'Hunter': 2, 'Bard': 3, 'Sapper': 3, 'Scion': 3, 'Hermit': 3, 'Paladin': 3}  # 1 Myths and Outcasts, 2 Legends and Pariahs, 3 Deserters and Disciples
 CLASS_SKILLS: dict[str, dict[int, int]] = {
     "Barbarian": {13: 25, 11: 50, 10: 25, 14: 20, 15: 10},
     "Warrior": {5: 40, 8: 25, 9: 25, 12: 50, 13: 25, 14: 10},
@@ -169,6 +170,19 @@ CLASS_SKILLS: dict[str, dict[int, int]] = {
     "Sexton": {10: 10, 13: 10, 1: 40, 6: 40, 8: 20, 15: 20},
     "Ninja": {1: 60, 9: 60, 8: 40},
     "Monk": {13: 40, 5: 10, 4: 25, 14: 50, 15: 20},
+    "Conjurer": {6: 40, 4: 15, 1: 20, 8: 20, 5: 40, 15: 20},
+    "Accursed": {7: 60, 6: 20, 1: 40, 3: 20, 14: 40},
+    "Mesmer": {6: 60, 7: 25, 12: 20, 5: 60},
+    "Brewer": {11: 10, 14: 25, 2: 10, 3: 10, 5: 25, 15: 50},
+    "Machinist": {0: 40, 8: 10, 15: 10, 2: 10},
+    "Punisher": {7: 20, 6: 20, 8: 25, 11: 25},
+    "Shaman": {6: 40, 14: 10, 15: 10, 1: 10},
+    "Hunter": {3: 20, 1: 25, 8: 50, 0: 10},
+    "Bard": {9: 25, 3: 50, 6: 15, 5: 15, 1: 15, 2: 15},
+    "Sapper": {10: 50, 7: 15, 8: 15, 1: 25, 15: 25},
+    "Scion": {7: 40, 6: 40, 4: 40, 15: 10, 3: 10},
+    "Hermit": {6: 40, 7: 15, 10: 25, 1: 25, 15: 10},
+    "Paladin": {9: 50, 4: 25, 3: 25, 13: 10, 5: 10},
 }
 
 

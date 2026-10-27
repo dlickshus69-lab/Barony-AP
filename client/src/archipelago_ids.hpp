@@ -94,11 +94,13 @@ static const AreaEntry SPECIAL_AREAS[] = {
     { 10, "Visit Bram's Castle", "bramscastle", 34 },
 };
 constexpr int NUM_SKILLS = 16;
-constexpr int NUM_SKILL_CLASSES = 13;
+constexpr int NUM_SKILL_CLASSES = 26;
 static const char* const SKILL_NAMES[NUM_SKILLS] = { "Tinkering", "Stealth", "Trading", "Lore", "Thaumaturgy", "Leadership", "Mysticism", "Sorcery", "Ranged", "Sword", "Mace", "Axe", "Polearm", "Shield", "Unarmed", "Alchemy" };
 static const char* const SKILL_RANK_NAMES[6] = { "", "Basic", "Skilled", "Expert", "Master", "Legendary" };
 static const int SKILL_RANK_VALUES[6] = { 0, 20, 40, 60, 80, 100 };
 static const bool SKILL_UNIVERSAL[NUM_SKILLS] = { false, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false };
+static const char* const CLASS_NAMES[NUM_SKILL_CLASSES] = { "Barbarian", "Warrior", "Healer", "Rogue", "Wanderer", "Cleric", "Merchant", "Wizard", "Arcanist", "Joker", "Sexton", "Ninja", "Monk", "Conjurer", "Accursed", "Mesmer", "Brewer", "Machinist", "Punisher", "Shaman", "Hunter", "Bard", "Sapper", "Scion", "Hermit", "Paladin" };
+static const int CLASS_DLC_PACK[NUM_SKILL_CLASSES] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3 };
 // Main skills only (start >= 20), as data.skill_checks_for uses them.
 static const int CLASS_SKILL_START[NUM_SKILL_CLASSES][NUM_SKILLS] = {
     { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 25, 50, -1, 25, 20, -1 }, // Barbarian
@@ -114,5 +116,18 @@ static const int CLASS_SKILL_START[NUM_SKILL_CLASSES][NUM_SKILLS] = {
     { -1, 40, -1, -1, -1, -1, 40, -1, 20, -1, -1, -1, -1, -1, -1, 20 }, // Sexton
     { -1, 60, -1, -1, -1, -1, -1, -1, 40, 60, -1, -1, -1, -1, -1, -1 }, // Ninja
     { -1, -1, -1, -1, 25, -1, -1, -1, -1, -1, -1, -1, -1, 40, 50, 20 }, // Monk
+    { -1, 20, -1, -1, -1, 40, 40, -1, 20, -1, -1, -1, -1, -1, -1, 20 }, // Conjurer
+    { -1, 40, -1, 20, -1, -1, 20, 60, -1, -1, -1, -1, -1, -1, 40, -1 }, // Accursed
+    { -1, -1, -1, -1, -1, 60, 60, 25, -1, -1, -1, -1, 20, -1, -1, -1 }, // Mesmer
+    { -1, -1, -1, -1, -1, 25, -1, -1, -1, -1, -1, -1, -1, -1, 25, 50 }, // Brewer
+    { 40, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 }, // Machinist
+    { -1, -1, -1, -1, -1, -1, 20, 20, 25, -1, -1, 25, -1, -1, -1, -1 }, // Punisher
+    { -1, -1, -1, -1, -1, -1, 40, -1, -1, -1, -1, -1, -1, -1, -1, -1 }, // Shaman
+    { -1, 25, -1, 20, -1, -1, -1, -1, 50, -1, -1, -1, -1, -1, -1, -1 }, // Hunter
+    { -1, -1, -1, 50, -1, -1, -1, -1, -1, 25, -1, -1, -1, -1, -1, -1 }, // Bard
+    { -1, 25, -1, -1, -1, -1, -1, -1, -1, -1, 50, -1, -1, -1, -1, 25 }, // Sapper
+    { -1, -1, -1, -1, 40, -1, 40, 40, -1, -1, -1, -1, -1, -1, -1, -1 }, // Scion
+    { -1, 25, -1, -1, -1, -1, 40, -1, -1, -1, 25, -1, -1, -1, -1, -1 }, // Hermit
+    { -1, -1, -1, 25, 25, -1, -1, -1, -1, 50, -1, -1, -1, -1, -1, -1 }, // Paladin
 };
 } // namespace ap_ids

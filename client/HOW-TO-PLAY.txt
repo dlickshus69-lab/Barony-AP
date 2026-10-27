@@ -26,4 +26,5 @@ Chat commands (type in the in-game chat):
   /ap_connect host:port slot [password]   connect by hand
   /ap_say text  chat with the room
 
+DLC: start Barony from Steam and the DLC packs you own are turned on.
 This build has no Steam online lobbies or achievements. Single player works normally.

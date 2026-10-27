@@ -84,7 +84,8 @@ namespace
 		int key_compass_time = 30;
 		int enemy_randomizer_secret = 0; // Enemy Randomizer also in secret areas (never Minetown)
 		int skill_checks = 0;         // 0 off, 1 any class, 2.. a class (Barony class index + 2)
-		int skill_check_max_rank = 3; // 1 Basic .. 5 Legendary    // Minotaur floors: seconds before he arrives that the key compass turns on
+		int skill_check_max_rank = 3; // 1 Basic .. 5 Legendary
+		int lock_class = 0;           // new characters always get the Skill Checks class    // Minotaur floors: seconds before he arrives that the key compass turns on
 		int floor_shuffle = 0;        // 0 off, 1 sections, 2 full
 		int floor_shuffle_seed = 0;
 		int difficulty_scaling = 1;
@@ -496,6 +497,7 @@ namespace
 		registerSlotInt("skill_checks", &SlotOptions::skill_checks);
 		registerSlotInt("enemy_randomizer_secret", &SlotOptions::enemy_randomizer_secret);
 		registerSlotInt("skill_check_max_rank", &SlotOptions::skill_check_max_rank);
+		registerSlotInt("lock_class", &SlotOptions::lock_class);
 		registerSlotInt("floor_shuffle", &SlotOptions::floor_shuffle);
 		registerSlotInt("floor_shuffle_seed", &SlotOptions::floor_shuffle_seed);
 		registerSlotInt("difficulty_scaling", &SlotOptions::difficulty_scaling);
@@ -1029,10 +1031,8 @@ namespace
 		int chosen = sc - 2;
 		if ( client_classes[clientnum] != chosen && chosen < ap_ids::NUM_SKILL_CLASSES )
 		{
-			static const char* const NAMES[] = { "Barbarian", "Warrior", "Healer", "Rogue", "Wanderer", "Cleric",
-				"Merchant", "Wizard", "Arcanist", "Joker", "Sexton", "Ninja", "Monk" };
 			say(COLOR_TRAP, "Skill Checks were made for a %s. Other classes can still raise those skills, but some checks may be much harder.",
-				NAMES[chosen]);
+				ap_ids::CLASS_NAMES[chosen]);
 		}
 	}
 
@@ -2716,6 +2716,22 @@ namespace
 	}
 }
 
+int lockedClass(int player, int currentClass)
+{
+	// Lock Class: with Skill Checks set to a class, new characters always get that class (looks,
+	// race and name are still yours to pick). A DLC class you don't own isn't forced.
+	if ( !g_ready || !g_slot.lock_class || g_slot.skill_checks < 2 ) { return currentClass; }
+	if ( player != clientnum ) { return currentClass; }
+	int chosen = g_slot.skill_checks - 2;
+	if ( chosen < 0 || chosen >= ap_ids::NUM_SKILL_CLASSES ) { return currentClass; }
+	int pack = ap_ids::CLASS_DLC_PACK[chosen];
+	if ( (pack == 1 && !enabledDLCPack1) || (pack == 2 && !enabledDLCPack2) || (pack == 3 && !enabledDLCPack3) )
+	{
+		return currentClass;
+	}
+	return chosen;
+}
+
 bool isFloorKey(const Item* item)
 {
 	return item && item->type == FLOOR_KEY_TYPE && item->appearance == FLOOR_KEY_APPEARANCE;
@@ -2726,9 +2742,39 @@ const char* titleImagePath()
 	return g_apTitleReady ? "*images/ui/Archipelago/AP_Title.png" : "*images/system/title.png";
 }
 
+// DLC: this build has no Steam support compiled in, so it asks Steam directly, through the
+// steam_api64.dll that comes with Barony, which DLC packs you own. Only owned packs are turned on.
+namespace
+{
+	void checkSteamDlc()
+	{
+#ifdef WINDOWS
+		HMODULE steam = LoadLibraryA("steam_api64.dll");
+		if ( !steam ) { printlog("[Archipelago] steam_api64.dll not found; DLC stays off."); return; }
+		using InitFn = bool (*)();
+		using AppsFn = void* (*)();
+		using DlcFn = bool (*)(void*, unsigned int);
+		auto init = (InitFn)GetProcAddress(steam, "SteamAPI_InitSafe");
+		auto apps = (AppsFn)GetProcAddress(steam, "SteamAPI_SteamApps_v008");
+		auto installed = (DlcFn)GetProcAddress(steam, "SteamAPI_ISteamApps_BIsDlcInstalled");
+		if ( !init || !apps || !installed ) { printlog("[Archipelago] Unknown steam_api64.dll version; DLC stays off."); return; }
+		if ( !init() ) { printlog("[Archipelago] Steam isn't running (start Barony from Steam); DLC stays off."); return; }
+		void* a = apps();
+		if ( !a ) { return; }
+		if ( installed(a, 1010820) ) { enabledDLCPack1 = true; }
+		if ( installed(a, 1010821) ) { enabledDLCPack2 = true; }
+		if ( installed(a, 1010822) ) { enabledDLCPack3 = true; }
+		printlog("[Archipelago] Steam DLC: Myths and Outcasts %s, Legends and Pariahs %s, Deserters and Disciples %s.",
+			enabledDLCPack1 ? "owned" : "not owned", enabledDLCPack2 ? "owned" : "not owned",
+			enabledDLCPack3 ? "owned" : "not owned");
+#endif
+	}
+}
+
 void loadExtraModels()
 {
 	makeApTitle();
+	checkSteamDlc();
 	if ( !PHYSFS_getRealDir(AP_MODEL_PATH) )
 	{
 		printlog("[Archipelago] %s not found; the Archipelago item will look like a luckstone.", AP_MODEL_PATH);

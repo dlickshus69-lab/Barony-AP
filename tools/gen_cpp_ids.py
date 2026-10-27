@@ -65,6 +65,8 @@ lines.append("static const char* const SKILL_NAMES[NUM_SKILLS] = { " + ", ".join
 lines.append("static const char* const SKILL_RANK_NAMES[6] = { \"\", " + ", ".join(f'"{n}"' for _, n, _ in data.SKILL_RANKS) + " };")
 lines.append("static const int SKILL_RANK_VALUES[6] = { 0, " + ", ".join(str(v) for _, _, v in data.SKILL_RANKS) + " };")
 lines.append("static const bool SKILL_UNIVERSAL[NUM_SKILLS] = { " + ", ".join("true" if i in data.UNIVERSAL_SKILLS else "false" for i in range(len(data.SKILLS))) + " };")
+lines.append("static const char* const CLASS_NAMES[NUM_SKILL_CLASSES] = { " + ", ".join(f'"{c}"' for c in data.CLASSES) + " };")
+lines.append("static const int CLASS_DLC_PACK[NUM_SKILL_CLASSES] = { " + ", ".join(str(data.DLC_PACK_OF_CLASS.get(c, 0)) for c in data.CLASSES) + " };")
 lines.append("// Main skills only (start >= 20), as data.skill_checks_for uses them.")
 lines.append("static const int CLASS_SKILL_START[NUM_SKILL_CLASSES][NUM_SKILLS] = {")
 for c in data.CLASSES:

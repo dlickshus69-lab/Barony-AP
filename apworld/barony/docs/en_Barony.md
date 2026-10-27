@@ -83,3 +83,9 @@ until you're back in the dungeon.
 With Checkpoint Interval on, reaching floor 5, 10, 15... (or every 10, 15 or 20 floors) saves your
 whole character: level, stats, skills, items, gold and spells. If you die with no lives left, your
 next run starts at that checkpoint with everything you had when you reached it.
+
+## DLC
+
+The game asks Steam which DLC packs you own (start Barony from Steam), and turns on the classes and
+races of the packs you own, just like the normal game. Skill Checks can be set to any class, DLC
+classes included; with Lock Class on, every new character is that class.

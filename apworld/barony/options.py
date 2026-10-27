@@ -489,6 +489,9 @@ class SkillChecks(Choice):
     its main skills (the ones it starts with at 20 or more), plus Lore, Trading and Stealth (every class
     can raise those). Ranks you already start at or above aren't checks.
     Any Class: only Lore, Trading and Stealth, so it works whichever class you pick in game.
+    The DLC classes need their DLC pack on Steam: Conjurer, Accursed, Mesmer and Brewer (Myths and
+    Outcasts); Machinist, Punisher, Shaman and Hunter (Legends and Pariahs); Bard, Sapper, Scion,
+    Hermit and Paladin (Deserters and Disciples).
     Playing a different class than the one chosen still counts any skill you raise, but some checks
     may be much harder to get; the game warns you when your run starts.
     """
@@ -508,7 +511,28 @@ class SkillChecks(Choice):
     option_sexton = 12
     option_ninja = 13
     option_monk = 14
+    option_conjurer = 15
+    option_accursed = 16
+    option_mesmer = 17
+    option_brewer = 18
+    option_machinist = 19
+    option_punisher = 20
+    option_shaman = 21
+    option_hunter = 22
+    option_bard = 23
+    option_sapper = 24
+    option_scion = 25
+    option_hermit = 26
+    option_paladin = 27
     default = option_off
+
+
+class LockClass(DefaultOnToggle):
+    """
+    With Skill Checks set to a class, every new character you make is that class. You still choose your
+    race, looks and name. (A DLC class you don't own on Steam isn't forced.)
+    """
+    display_name = "Lock Class"
 
 
 class SkillCheckMaxRank(Choice):
@@ -725,6 +749,7 @@ class BaronyOptions(PerGameCommonOptions):
     floor_keys: FloorKeys
     skill_checks: SkillChecks
     skill_check_max_rank: SkillCheckMaxRank
+    lock_class: LockClass
     key_compass_time: KeyCompassTime
     floor_shuffle: FloorShuffle
     layout_seed: LayoutSeed
@@ -774,7 +799,7 @@ option_groups = [
         EnemySanityPerFloor, BestiaryChecks,
         ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),
-    OptionGroup("Skills", [SkillChecks, SkillCheckMaxRank]),
+    OptionGroup("Skills", [SkillChecks, SkillCheckMaxRank, LockClass]),
     OptionGroup("Dungeon", [FloorKeys, KeyCompassTime, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemyRandomizerSecretAreas, EnemyPool, EnemySeed, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, MinotaurTime, DifficultyScaling, Difficulty]),
     OptionGroup("Lives & Checkpoints", [Lives, ExtraLivesInPool, CheckpointInterval]),
     OptionGroup("Death Link", [BaronyDeathLink, DeathLinkMode, DeathPenalty, DeathItems, FloorRestart, BossDeath]),

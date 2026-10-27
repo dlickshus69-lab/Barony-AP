@@ -23,6 +23,7 @@ Barony:
   # Skills
   skill_checks: off
   skill_check_max_rank: expert
+  lock_class: true
 
   # Dungeon
   floor_keys: true
