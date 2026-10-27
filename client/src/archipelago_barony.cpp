@@ -1745,13 +1745,21 @@ namespace
 	{
 		if ( g_slot.archipelago_pickups <= 0 || currentlevel < 1 ) { return; } // none on the starting floor
 		// Every dungeon floor gets them, generated or hand-made; not boss arenas or the town.
-		static const char* const SKIP[] = { "Boss", "Hell Boss", "Sanctum", "Hamlet", "Tutorial" };
+		static const char* const SKIP[] = { "Hamlet", "Tutorial" };
 		for ( const char* name : SKIP )
 		{
 			if ( !strncmp(map.name, name, strlen(name)) ) { return; }
 		}
+		// Boss arenas get none of their own, but items you left behind still show up there, so a
+		// skipped item can't end up somewhere you'll never reach.
+		static const char* const BOSS[] = { "Boss", "Hell Boss", "Sanctum" };
+		bool arena = false;
+		for ( const char* name : BOSS ) { if ( !strncmp(map.name, name, strlen(name)) ) { arena = true; } }
 		int carry = g_floorIsRestart ? 0 : g_carryPickups;
-		int toPlace = std::min(g_slot.pickups_per_floor + carry,
+		if ( arena && carry <= 0 && !g_floorIsRestart ) { return; }
+		int ownShare = arena ? 0 : g_slot.pickups_per_floor;
+		// A restarted floor gets back exactly what was still unfound on it (carried ones included).
+		int toPlace = std::min(g_floorIsRestart ? g_restartApBudget : ownShare + carry,
 			uncheckedCount(ap_ids::PICKUP_OFFSET, g_slot.archipelago_pickups) - apItemsLyingAround());
 		if ( g_floorIsRestart ) { toPlace = std::min(toPlace, g_restartApBudget - g_attemptApMade); }
 		if ( !g_floorIsRestart ) { g_carryPickups = 0; } // this floor took them (or none are left to place)

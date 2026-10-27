@@ -1,4 +1,4 @@
-From 69232adde9536f1faef3155dc14d9ef0eddbe2d2 Mon Sep 17 00:00:00 2001
+From f011eb120460b0aca82929b4fe1ec4edd0f78bbc Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -12,7 +12,7 @@ Subject: [PATCH] Archipelago client hooks
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 4026 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 4034 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |  120 +
  src/archipelago_ids.hpp           |  134 +
  src/charclass.cpp                 |    4 +
@@ -29,7 +29,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   10 +
  src/ui/MainMenu.cpp               |    5 +-
- 25 files changed, 5877 insertions(+), 4 deletions(-)
+ 25 files changed, 5885 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -1591,10 +1591,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..d9abdf3
+index 0000000..67c0703
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,4026 @@
+@@ -0,0 +1,4034 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -3342,13 +3342,21 @@ index 0000000..d9abdf3
 +	{
 +		if ( g_slot.archipelago_pickups <= 0 || currentlevel < 1 ) { return; } // none on the starting floor
 +		// Every dungeon floor gets them, generated or hand-made; not boss arenas or the town.
-+		static const char* const SKIP[] = { "Boss", "Hell Boss", "Sanctum", "Hamlet", "Tutorial" };
++		static const char* const SKIP[] = { "Hamlet", "Tutorial" };
 +		for ( const char* name : SKIP )
 +		{
 +			if ( !strncmp(map.name, name, strlen(name)) ) { return; }
 +		}
++		// Boss arenas get none of their own, but items you left behind still show up there, so a
++		// skipped item can't end up somewhere you'll never reach.
++		static const char* const BOSS[] = { "Boss", "Hell Boss", "Sanctum" };
++		bool arena = false;
++		for ( const char* name : BOSS ) { if ( !strncmp(map.name, name, strlen(name)) ) { arena = true; } }
 +		int carry = g_floorIsRestart ? 0 : g_carryPickups;
-+		int toPlace = std::min(g_slot.pickups_per_floor + carry,
++		if ( arena && carry <= 0 && !g_floorIsRestart ) { return; }
++		int ownShare = arena ? 0 : g_slot.pickups_per_floor;
++		// A restarted floor gets back exactly what was still unfound on it (carried ones included).
++		int toPlace = std::min(g_floorIsRestart ? g_restartApBudget : ownShare + carry,
 +			uncheckedCount(ap_ids::PICKUP_OFFSET, g_slot.archipelago_pickups) - apItemsLyingAround());
 +		if ( g_floorIsRestart ) { toPlace = std::min(toPlace, g_restartApBudget - g_attemptApMade); }
 +		if ( !g_floorIsRestart ) { g_carryPickups = 0; } // this floor took them (or none are left to place)
