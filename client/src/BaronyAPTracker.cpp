@@ -192,15 +192,21 @@ namespace
 				text(dc, 14, y, buf, TEXT, g_bodyFont);
 				y += 24;
 				int key = num("floorkey");
-				if ( key == 0 )
+				if ( key == 0 && num("keyreq") == 2 )
+				{
+					swprintf(buf, 256, L"Floor Key: defeat all enemies (%d left)", std::max(0, num("enemiesleft")));
+					text(dc, 14, y, buf, GOLD, g_bodyFont);
+					y += 24;
+				}
+				else if ( key == 0 )
 				{
 					std::wstring compass = widen(g_state.values["keycompass"]);
 					text(dc, 14, y, compass.empty() ? L"Floor Key: not found yet" : L"Floor Key: " + compass, GOLD, g_bodyFont);
 					y += 24;
 					int left = num("enemiesleft");
-					if ( left > 0 )
+					if ( left > 0 && num("keyreq") == 0 )
 					{
-						swprintf(buf, 256, L"  or defeat all %d enemies left", left);
+						swprintf(buf, 256, L"  or defeat all enemies (%d left)", left);
 						text(dc, 14, y, buf, DIM, g_bodyFont);
 						y += 22;
 					}

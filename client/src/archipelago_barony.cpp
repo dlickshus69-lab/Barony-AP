@@ -1466,6 +1466,17 @@ namespace
 		say(COLOR_AP, "The Compass is in your bag. Use it to find the Floor Key.");
 	}
 
+	// The Compass shows only while it's the selected hotbar item.
+	bool compassSelected()
+	{
+		if ( !players[clientnum] ) { return false; }
+		auto& hotbar = players[clientnum]->hotbar;
+		int cur = hotbar.current_hotbar;
+		if ( cur < 0 || cur >= NUM_HOTBAR_SLOTS ) { return false; }
+		Item* it = uidToItem(hotbar.slots()[cur].item);
+		return isCompassItemPrivate(it);
+	}
+
 	// Backup compass: on Minotaur floors near the end of his timer, and after 5 minutes on any floor.
 	bool backupCompassOn(int minotaurSecs)
 	{
@@ -1488,7 +1499,7 @@ namespace
 		bool backup = backupCompassOn(minotaurSecs);
 		int level = compassLevel();
 		bool owned = level > 0;
-		bool fromCompass = owned && (g_slot.compass_mode == 1 || ticks < g_compassPingUntil);
+		bool fromCompass = owned && compassSelected() && (g_slot.compass_mode == 1 || ticks < g_compassPingUntil);
 		if ( !backup && !fromCompass ) { return; }
 		Entity* pl = players[clientnum] ? players[clientnum]->entity : nullptr;
 		if ( !pl || !map.entities ) { return; }
@@ -2273,6 +2284,7 @@ namespace
 		out << "floorkey=" << (!g_floorNeedsKey ? 2 : g_floorKeyFound ? 1 : 0) << "\n";
 		out << "keycompass=" << g_keyCompass << "\n";
 		out << "enemiesleft=" << g_enemiesLeft << "\n";
+		out << "keyreq=" << g_slot.floor_key_requirement << "\n";
 		{
 			int per = std::max(1, g_slot.kill_check_interval);
 			out << "es_mode=" << g_slot.enemy_sanity << "\nes_left=" << uncheckedCount(ap_ids::KILL_OFFSET, g_slot.kill_checks)
@@ -3249,6 +3261,42 @@ namespace
 			}
 		}
 	}
+#ifdef USE_FMOD
+	std::string musicSlotName(FMOD::Sound* sound)
+	{
+		char buf[64];
+		auto arr = [&](FMOD::Sound** a, int n, const char* fmt) -> bool {
+			if ( !a ) { return false; }
+			for ( int i = 0; i < n; ++i ) { if ( a[i] == sound ) { snprintf(buf, sizeof(buf), fmt, i); return true; } }
+			return false;
+		};
+		if ( arr(minesmusic, NUMMINESMUSIC, "mines%02d.ogg") || arr(swampmusic, NUMSWAMPMUSIC, "swamp%02d.ogg")
+			|| arr(labyrinthmusic, NUMLABYRINTHMUSIC, "labyrinth%02d.ogg") || arr(ruinsmusic, NUMRUINSMUSIC, "ruins%02d.ogg")
+			|| arr(underworldmusic, NUMUNDERWORLDMUSIC, "underworld%02d.ogg") || arr(hellmusic, NUMHELLMUSIC, "hell%02d.ogg")
+			|| arr(minotaurmusic, NUMMINOTAURMUSIC, "minotaur%02d.ogg") || arr(cavesmusic, NUMCAVESMUSIC, "caves%02d.ogg")
+			|| arr(citadelmusic, NUMCITADELMUSIC, "citadel%02d.ogg") || arr(fortressmusic, NUMFORTRESSMUSIC, "fortress%02d.ogg") )
+		{
+			return buf;
+		}
+		if ( intromusic )
+		{
+			for ( int i = 0; i < NUMINTROMUSIC; ++i )
+			{
+				if ( intromusic[i] == sound ) { return i == 0 ? std::string("intro.ogg") : "intro" + std::string(i < 10 ? "0" : "") + std::to_string(i) + ".ogg"; }
+			}
+		}
+		const std::pair<FMOD::Sound*, const char*> singles[] = {
+			{ introductionmusic, "introduction.ogg" }, { intermissionmusic, "intermission.ogg" }, { minetownmusic, "minetown.ogg" },
+			{ splashmusic, "splash.ogg" }, { librarymusic, "library.ogg" }, { shopmusic, "shop.ogg" }, { herxmusic, "herxboss.ogg" },
+			{ templemusic, "temple.ogg" }, { endgamemusic, "endgame.ogg" }, { escapemusic, "escape.ogg" }, { devilmusic, "devil.ogg" },
+			{ sanctummusic, "sanctum.ogg" }, { gnomishminesmusic, "gnomishmines.ogg" }, { greatcastlemusic, "greatcastle.ogg" },
+			{ sokobanmusic, "sokoban.ogg" }, { caveslairmusic, "caveslair.ogg" }, { bramscastlemusic, "bramscastle.ogg" },
+			{ hamletmusic, "hamlet.ogg" }, { tutorialmusic, "tutorial.ogg" },
+		};
+		for ( auto& p : singles ) { if ( p.first && p.first == sound ) { return p.second; } }
+		return std::string();
+	}
+#endif
 }
 
 void* pickMusicVersion(void* soundPtr)
@@ -3266,11 +3314,20 @@ void* pickMusicVersion(void* soundPtr)
 	if ( chosen != g_musicChoice.end() ) { return chosen->second; }
 
 	FMOD::Sound* result = sound;
-	char nameBuf[512] = "";
-	if ( sound->getName(nameBuf, sizeof(nameBuf)) == FMOD_OK )
+	// Which track is this? Match the game's own music slots (FMOD's getName can return the song's
+	// title tag instead of its file name, so it isn't reliable).
+	std::string name = musicSlotName(sound);
+	if ( name.empty() )
 	{
-		std::string name = std::filesystem::path(nameBuf).filename().string();
-		std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+		char nameBuf[512] = "";
+		if ( sound->getName(nameBuf, sizeof(nameBuf)) == FMOD_OK )
+		{
+			name = std::filesystem::path(nameBuf).filename().string();
+			std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+		}
+	}
+	if ( !name.empty() )
+	{
 		auto it = g_modMusic.find(name);
 		// Mixed: original or one of the mod versions, all equally likely. Mods Only: always a mod version.
 		if ( it != g_modMusic.end() && !it->second.empty() )
@@ -3289,6 +3346,8 @@ void* pickMusicVersion(void* soundPtr)
 				}
 				if ( alt ) { result = alt; }
 			}
+			printlog("[Archipelago] Music Mods: %s plays %s.", name.c_str(),
+				result == sound ? "the original" : "a mod version");
 		}
 	}
 	g_musicChoice[sound] = result;
@@ -3436,18 +3495,15 @@ void drawHud()
 		if ( g_floorNeedsKey && !g_floorKeyFound )
 		{
 			std::string keyLine;
+			std::string left = g_enemiesLeft > 0 ? " (" + std::to_string(g_enemiesLeft) + " left)" : std::string();
 			if ( g_slot.floor_key_requirement == 2 )
 			{
-				keyLine = g_enemiesLeft > 0 ? "Defeat all " + std::to_string(g_enemiesLeft) + " enemies to open the stairs"
-					: std::string("Defeat every enemy to open the stairs");
+				keyLine = "Defeat all enemies" + left;
 			}
 			else
 			{
-				keyLine = "Find the Floor Key";
-				if ( g_slot.floor_key_requirement == 0 && g_enemiesLeft > 0 )
-				{
-					keyLine += "  (or defeat all " + std::to_string(g_enemiesLeft) + " enemies)";
-				}
+				keyLine = g_slot.floor_key_requirement == 0 ? "Find the Floor Key or defeat all enemies" + left
+					: std::string("Find the Floor Key");
 				if ( compassLevel() > 0 && g_slot.compass_mode == 0 && ticks >= g_compassPingUntil && ticks < g_compassReadyAt )
 				{
 					int secs = (int)((g_compassReadyAt - ticks) / TICKS_PER_SECOND) + 1;

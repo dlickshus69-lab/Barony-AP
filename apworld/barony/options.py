@@ -168,9 +168,9 @@ class FloorKeys(DefaultOnToggle):
     until you find it. It's part of your own game only: it is never an Archipelago item, nobody can send
     it to you, and you never wait on another game for it. The starting floor, secret areas and boss
     floors don't have one. If you die and the floor restarts, a key you already found stays found.
-    Two ways to open the stairs: pick up the Floor Key (a gold key with the Archipelago colors in its
-    ring), or defeat every enemy on the floor. The key is always put somewhere you can walk to (never
-    behind a gate). After 5 minutes on a floor without it, you're shown which way the key is.
+    The Floor Key is a gold key with the Archipelago colors in its ring (see Floor Key Requirement for
+    other ways to open the stairs). The key is always put somewhere you can walk to (never behind a
+    gate). After 5 minutes on a floor without it, you're shown which way the key is.
     On Minotaur floors you're shown how far the key is and which way, from the time set by Key Compass
     Time.
     """
@@ -195,15 +195,15 @@ class FloorSize(OptionSet):
 class FloorKeyRequirement(Choice):
     """
     What opens the stairs on each floor (with Floor Keys on).
-    Key or Enemies: pick up the Floor Key, or defeat every enemy on the floor.
     Key Only: only the Floor Key opens them.
     Enemies Only: no key; defeat every enemy on the floor.
+    Key or Enemies: either one opens them: pick up the Floor Key, or defeat every enemy on the floor.
     """
     display_name = "Floor Key Requirement"
-    option_key_or_enemies = 0
     option_key_only = 1
     option_enemies_only = 2
-    default = option_key_or_enemies
+    option_key_or_enemies = 0
+    default = option_key_only
 
 
 class Compass(Choice):
@@ -228,9 +228,9 @@ class Compass(Choice):
 class CompassMode(Choice):
     """
     How the compass works once you have it.
-    Ping and Recharge: use it from your bag or hotbar; it points at the key for a while (Compass Ping
-    Time), then needs to recharge (Compass Recharge).
-    Always On: it always points at the key while you haven't found it.
+    Ping and Recharge: use it from your hotbar; while it's the selected item it points at the key for
+    a while (Compass Ping Time), then needs to recharge (Compass Recharge).
+    Always On: whenever it's the selected hotbar item, it points at the key.
     """
     display_name = "Compass Mode"
     option_ping_and_recharge = 0

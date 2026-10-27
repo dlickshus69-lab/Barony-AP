@@ -41,8 +41,8 @@ On a Minotaur floor, once the Minotaur is 30 seconds away (or already there), th
 tracker point you at the key: "Floor Key: 18 tiles NE" (directions as on the map, north up).
 Key Compass Time turns it on sooner if you want more help (never in the first 30 seconds).
 
-Floor Key Requirement picks what opens the stairs: the key or defeating every enemy (default), the
-key only, or every enemy only.
+Floor Key Requirement picks what opens the stairs: the key only (default), every enemy only, or
+either one (the key or defeating every enemy).
 
 The Compass (optional) points at the Floor Key from the way you're facing, under the XP bar. You can
 start with it, find it as an Archipelago item, or find two Progressive Compasses (the first shows the

@@ -1,18 +1,18 @@
-From db8e62ac16950c25eedf4cdbaa0e4513affef651 Mon Sep 17 00:00:00 2001
+From 116f77438e70274a174cc90ae5291ff6886b1fc1 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
 
 ---
  CMakeLists.txt                    |   32 +
- src/BaronyAPTracker.cpp           |  419 ++++
+ src/BaronyAPTracker.cpp           |  425 ++++
  src/CMakeLists.txt                |    1 +
  src/actchest.cpp                  |    7 +
  src/actgeneral.cpp                |    2 +
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 3572 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 3628 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |  118 +
  src/archipelago_ids.hpp           |  134 ++
  src/charclass.cpp                 |    4 +
@@ -29,7 +29,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   10 +
  src/ui/MainMenu.cpp               |    5 +-
- 25 files changed, 4483 insertions(+), 4 deletions(-)
+ 25 files changed, 4545 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -80,10 +80,10 @@ index 4e9ed8f..c2b0e9a 100644
      # Only for MinGW...
 diff --git a/src/BaronyAPTracker.cpp b/src/BaronyAPTracker.cpp
 new file mode 100644
-index 0000000..aec03d4
+index 0000000..3dd9a61
 --- /dev/null
 +++ b/src/BaronyAPTracker.cpp
-@@ -0,0 +1,419 @@
+@@ -0,0 +1,425 @@
 +// Barony Archipelago tracker window.
 +//
 +// Barony (the Archipelago build) starts this when it connects, and writes
@@ -278,15 +278,21 @@ index 0000000..aec03d4
 +				text(dc, 14, y, buf, TEXT, g_bodyFont);
 +				y += 24;
 +				int key = num("floorkey");
-+				if ( key == 0 )
++				if ( key == 0 && num("keyreq") == 2 )
++				{
++					swprintf(buf, 256, L"Floor Key: defeat all enemies (%d left)", std::max(0, num("enemiesleft")));
++					text(dc, 14, y, buf, GOLD, g_bodyFont);
++					y += 24;
++				}
++				else if ( key == 0 )
 +				{
 +					std::wstring compass = widen(g_state.values["keycompass"]);
 +					text(dc, 14, y, compass.empty() ? L"Floor Key: not found yet" : L"Floor Key: " + compass, GOLD, g_bodyFont);
 +					y += 24;
 +					int left = num("enemiesleft");
-+					if ( left > 0 )
++					if ( left > 0 && num("keyreq") == 0 )
 +					{
-+						swprintf(buf, 256, L"  or defeat all %d enemies left", left);
++						swprintf(buf, 256, L"  or defeat all enemies (%d left)", left);
 +						text(dc, 14, y, buf, DIM, g_bodyFont);
 +						y += 22;
 +					}
@@ -657,10 +663,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..53d0d5f
+index 0000000..c493a87
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,3572 @@
+@@ -0,0 +1,3628 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -2129,6 +2135,17 @@ index 0000000..53d0d5f
 +		say(COLOR_AP, "The Compass is in your bag. Use it to find the Floor Key.");
 +	}
 +
++	// The Compass shows only while it's the selected hotbar item.
++	bool compassSelected()
++	{
++		if ( !players[clientnum] ) { return false; }
++		auto& hotbar = players[clientnum]->hotbar;
++		int cur = hotbar.current_hotbar;
++		if ( cur < 0 || cur >= NUM_HOTBAR_SLOTS ) { return false; }
++		Item* it = uidToItem(hotbar.slots()[cur].item);
++		return isCompassItemPrivate(it);
++	}
++
 +	// Backup compass: on Minotaur floors near the end of his timer, and after 5 minutes on any floor.
 +	bool backupCompassOn(int minotaurSecs)
 +	{
@@ -2151,7 +2168,7 @@ index 0000000..53d0d5f
 +		bool backup = backupCompassOn(minotaurSecs);
 +		int level = compassLevel();
 +		bool owned = level > 0;
-+		bool fromCompass = owned && (g_slot.compass_mode == 1 || ticks < g_compassPingUntil);
++		bool fromCompass = owned && compassSelected() && (g_slot.compass_mode == 1 || ticks < g_compassPingUntil);
 +		if ( !backup && !fromCompass ) { return; }
 +		Entity* pl = players[clientnum] ? players[clientnum]->entity : nullptr;
 +		if ( !pl || !map.entities ) { return; }
@@ -2936,6 +2953,7 @@ index 0000000..53d0d5f
 +		out << "floorkey=" << (!g_floorNeedsKey ? 2 : g_floorKeyFound ? 1 : 0) << "\n";
 +		out << "keycompass=" << g_keyCompass << "\n";
 +		out << "enemiesleft=" << g_enemiesLeft << "\n";
++		out << "keyreq=" << g_slot.floor_key_requirement << "\n";
 +		{
 +			int per = std::max(1, g_slot.kill_check_interval);
 +			out << "es_mode=" << g_slot.enemy_sanity << "\nes_left=" << uncheckedCount(ap_ids::KILL_OFFSET, g_slot.kill_checks)
@@ -3912,6 +3930,42 @@ index 0000000..53d0d5f
 +			}
 +		}
 +	}
++#ifdef USE_FMOD
++	std::string musicSlotName(FMOD::Sound* sound)
++	{
++		char buf[64];
++		auto arr = [&](FMOD::Sound** a, int n, const char* fmt) -> bool {
++			if ( !a ) { return false; }
++			for ( int i = 0; i < n; ++i ) { if ( a[i] == sound ) { snprintf(buf, sizeof(buf), fmt, i); return true; } }
++			return false;
++		};
++		if ( arr(minesmusic, NUMMINESMUSIC, "mines%02d.ogg") || arr(swampmusic, NUMSWAMPMUSIC, "swamp%02d.ogg")
++			|| arr(labyrinthmusic, NUMLABYRINTHMUSIC, "labyrinth%02d.ogg") || arr(ruinsmusic, NUMRUINSMUSIC, "ruins%02d.ogg")
++			|| arr(underworldmusic, NUMUNDERWORLDMUSIC, "underworld%02d.ogg") || arr(hellmusic, NUMHELLMUSIC, "hell%02d.ogg")
++			|| arr(minotaurmusic, NUMMINOTAURMUSIC, "minotaur%02d.ogg") || arr(cavesmusic, NUMCAVESMUSIC, "caves%02d.ogg")
++			|| arr(citadelmusic, NUMCITADELMUSIC, "citadel%02d.ogg") || arr(fortressmusic, NUMFORTRESSMUSIC, "fortress%02d.ogg") )
++		{
++			return buf;
++		}
++		if ( intromusic )
++		{
++			for ( int i = 0; i < NUMINTROMUSIC; ++i )
++			{
++				if ( intromusic[i] == sound ) { return i == 0 ? std::string("intro.ogg") : "intro" + std::string(i < 10 ? "0" : "") + std::to_string(i) + ".ogg"; }
++			}
++		}
++		const std::pair<FMOD::Sound*, const char*> singles[] = {
++			{ introductionmusic, "introduction.ogg" }, { intermissionmusic, "intermission.ogg" }, { minetownmusic, "minetown.ogg" },
++			{ splashmusic, "splash.ogg" }, { librarymusic, "library.ogg" }, { shopmusic, "shop.ogg" }, { herxmusic, "herxboss.ogg" },
++			{ templemusic, "temple.ogg" }, { endgamemusic, "endgame.ogg" }, { escapemusic, "escape.ogg" }, { devilmusic, "devil.ogg" },
++			{ sanctummusic, "sanctum.ogg" }, { gnomishminesmusic, "gnomishmines.ogg" }, { greatcastlemusic, "greatcastle.ogg" },
++			{ sokobanmusic, "sokoban.ogg" }, { caveslairmusic, "caveslair.ogg" }, { bramscastlemusic, "bramscastle.ogg" },
++			{ hamletmusic, "hamlet.ogg" }, { tutorialmusic, "tutorial.ogg" },
++		};
++		for ( auto& p : singles ) { if ( p.first && p.first == sound ) { return p.second; } }
++		return std::string();
++	}
++#endif
 +}
 +
 +void* pickMusicVersion(void* soundPtr)
@@ -3929,11 +3983,20 @@ index 0000000..53d0d5f
 +	if ( chosen != g_musicChoice.end() ) { return chosen->second; }
 +
 +	FMOD::Sound* result = sound;
-+	char nameBuf[512] = "";
-+	if ( sound->getName(nameBuf, sizeof(nameBuf)) == FMOD_OK )
++	// Which track is this? Match the game's own music slots (FMOD's getName can return the song's
++	// title tag instead of its file name, so it isn't reliable).
++	std::string name = musicSlotName(sound);
++	if ( name.empty() )
 +	{
-+		std::string name = std::filesystem::path(nameBuf).filename().string();
-+		std::transform(name.begin(), name.end(), name.begin(), ::tolower);
++		char nameBuf[512] = "";
++		if ( sound->getName(nameBuf, sizeof(nameBuf)) == FMOD_OK )
++		{
++			name = std::filesystem::path(nameBuf).filename().string();
++			std::transform(name.begin(), name.end(), name.begin(), ::tolower);
++		}
++	}
++	if ( !name.empty() )
++	{
 +		auto it = g_modMusic.find(name);
 +		// Mixed: original or one of the mod versions, all equally likely. Mods Only: always a mod version.
 +		if ( it != g_modMusic.end() && !it->second.empty() )
@@ -3952,6 +4015,8 @@ index 0000000..53d0d5f
 +				}
 +				if ( alt ) { result = alt; }
 +			}
++			printlog("[Archipelago] Music Mods: %s plays %s.", name.c_str(),
++				result == sound ? "the original" : "a mod version");
 +		}
 +	}
 +	g_musicChoice[sound] = result;
@@ -4099,18 +4164,15 @@ index 0000000..53d0d5f
 +		if ( g_floorNeedsKey && !g_floorKeyFound )
 +		{
 +			std::string keyLine;
++			std::string left = g_enemiesLeft > 0 ? " (" + std::to_string(g_enemiesLeft) + " left)" : std::string();
 +			if ( g_slot.floor_key_requirement == 2 )
 +			{
-+				keyLine = g_enemiesLeft > 0 ? "Defeat all " + std::to_string(g_enemiesLeft) + " enemies to open the stairs"
-+					: std::string("Defeat every enemy to open the stairs");
++				keyLine = "Defeat all enemies" + left;
 +			}
 +			else
 +			{
-+				keyLine = "Find the Floor Key";
-+				if ( g_slot.floor_key_requirement == 0 && g_enemiesLeft > 0 )
-+				{
-+					keyLine += "  (or defeat all " + std::to_string(g_enemiesLeft) + " enemies)";
-+				}
++				keyLine = g_slot.floor_key_requirement == 0 ? "Find the Floor Key or defeat all enemies" + left
++					: std::string("Find the Floor Key");
 +				if ( compassLevel() > 0 && g_slot.compass_mode == 0 && ticks >= g_compassPingUntil && ticks < g_compassReadyAt )
 +				{
 +					int secs = (int)((g_compassReadyAt - ticks) / TICKS_PER_SECOND) + 1;

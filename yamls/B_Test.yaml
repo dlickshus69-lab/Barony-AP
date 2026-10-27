@@ -27,7 +27,7 @@ Barony:
 
   # Dungeon
   floor_keys: true
-  floor_key_requirement: key_or_enemies
+  floor_key_requirement: key_only
   compass: off
   compass_mode: ping_and_recharge
   compass_ping_time: 15
