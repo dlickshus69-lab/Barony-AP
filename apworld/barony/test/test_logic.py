@@ -159,3 +159,12 @@ class TestBossRushLong(BaronyTestBase):
         self.assertEqual(self.world.fill_slot_data()["goal_floor"], 34)
         names = {loc.name for loc in self.multiworld.get_locations(self.player)}
         self.assertNotIn("Defeat the Devil", names)
+
+
+class TestBossRushRandomOrder(BaronyTestBase):
+    options = {"goal": "boss_rush", "boss_rush_order": "shuffled_each_run"}
+
+    def test_order(self) -> None:
+        sd = self.world.fill_slot_data()
+        self.assertEqual(sd["boss_rush_order"], 2)
+        self.assertGreater(sd["boss_rush_seed"], 0)

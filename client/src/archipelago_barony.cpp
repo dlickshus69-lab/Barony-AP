@@ -96,6 +96,8 @@ namespace
 		int boss_rush_mask = 7;       // Boss Rush: 1 Herx, 2 Devil, 4 Twin Liches
 		int boss_rush_floors = 10;    // Boss Rush: dungeon floors before the rush
 		int boss_rush_town = 1;       // Boss Rush: rest in a town between bosses
+		int boss_rush_order = 0;      // Boss Rush: 0 game order, 1 random (same every run), 2 random each run
+		int boss_rush_seed = 0;       // Boss Rush: the seed's own shuffle
 		int floor_key_on_tracker_map = 0; // 1: the tracker map always shows the Floor Key
 		int randomize_loot = 0;       // 0 off, 1 same kind, 2 anything
 		int music_mods = 0;           // 0 off, 1 mixed with the original, 2 mods only
@@ -567,6 +569,8 @@ namespace
 		registerSlotInt("boss_rush_mask", &SlotOptions::boss_rush_mask);
 		registerSlotInt("boss_rush_floors", &SlotOptions::boss_rush_floors);
 		registerSlotInt("boss_rush_town", &SlotOptions::boss_rush_town);
+		registerSlotInt("boss_rush_order", &SlotOptions::boss_rush_order);
+		registerSlotInt("boss_rush_seed", &SlotOptions::boss_rush_seed);
 		registerSlotInt("extra_monsters", &SlotOptions::extra_monsters);
 		registerSlotInt("floor_shuffle", &SlotOptions::floor_shuffle);
 		registerSlotInt("floor_shuffle_seed", &SlotOptions::floor_shuffle_seed);
@@ -2499,8 +2503,8 @@ namespace
 	}
 
 	// ------------------------------------------------------- Boss Rush (Goal)
-	// The dungeon down to Boss Rush Floors, then the bosses you picked back to back (Herx, the
-	// Devil, the Twin Liches), with a rest in the town between them if you like. Bosses you've
+	// The dungeon down to Boss Rush Floors, then the bosses you picked back to back (in game order:
+	// Herx, the Devil, the Twin Liches; or shuffled), with a rest in the town between them if you like. Bosses you've
 	// already beaten (in any run) are skipped.
 	bool bossRushOn() { return g_ready && g_slot.goal == 3 && multiplayer == SINGLE; } // single player only
 	bool g_rushSaveDirty = false; // the rush state changed while a floor was loading: save it on the next tick
@@ -2528,6 +2532,14 @@ namespace
 		if ( (m & 1) && !(killed & 1) ) { bosses.push_back("boss"); }
 		if ( (m & 2) && !(killed & 2) ) { bosses.push_back("hellboss"); }
 		if ( (m & 12) && (killed & 12) != (m & 12) ) { bosses.push_back("sanctum"); }
+		if ( g_slot.boss_rush_order != 0 && bosses.size() > 1 )
+		{
+			// Random order: the same for every run of this seed, or a new one each run.
+			uint32_t seed = (uint32_t)g_slot.boss_rush_seed;
+			if ( g_slot.boss_rush_order == 2 ) { seed ^= uniqueGameKey * 2654435761u; }
+			std::mt19937 rng(seed ? seed : 1);
+			std::shuffle(bosses.begin(), bosses.end(), rng);
+		}
 		std::string seq;
 		for ( size_t i = 0; i < bosses.size(); ++i )
 		{

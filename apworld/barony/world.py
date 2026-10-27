@@ -76,6 +76,7 @@ class BaronyWorld(World):
     goal_floor: int
     num_sections: int
     floor_shuffle_seed: int
+    boss_rush_seed: int
     level_check_max: int
     pickup_count: int
     shop_count: int
@@ -88,6 +89,7 @@ class BaronyWorld(World):
             self.goal_floor = self.options.boss_rush_floors.value
         self.num_sections = data.section_of_floor(self.goal_floor)
         self.floor_shuffle_seed = self.random.randint(1, 2**31 - 1)
+        self.boss_rush_seed = self.random.randint(1, 2**31 - 1)
 
         self.level_check_max = self.options.level_checks.value
         cap = MAX_SENSIBLE_LEVEL[goal]
@@ -285,6 +287,8 @@ class BaronyWorld(World):
             "boss_rush_mask": (sum(bit for name, bit in (("Herx", 1), ("Devil", 2), ("Twin Liches", 4))
                                    if name in o.boss_rush_bosses.value) or 7),
             "boss_rush_town": int(bool(o.boss_rush_rest_town)),
+            "boss_rush_order": o.boss_rush_order.value,
+            "boss_rush_seed": self.boss_rush_seed,
             "floor_check_interval": o.floor_check_interval.value,
             "level_checks": self.level_check_max,
             "kill_checks": 0 if o.enemy_sanity.value == o.enemy_sanity.option_off else o.enemy_sanity_checks.value,

@@ -12,6 +12,7 @@ Barony:
   - Devil
   - Herx
   - Twin Liches
+  boss_rush_order: game_order
   boss_rush_rest_town: true
   floor_check_interval: 1
   level_checks: 15

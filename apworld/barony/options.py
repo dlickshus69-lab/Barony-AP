@@ -40,13 +40,27 @@ class BossRushFloors(Range):
 
 class BossRushBosses(OptionSet):
     """
-    Boss Rush only: which bosses are in the rush. They come in game order: Baron Herx, the Devil,
-    then the Twin Liches (both). A boss you've already beaten, in any run, stays beaten.
+    Boss Rush only: which bosses are in the rush (the Twin Liches count as one stop: beat both).
+    Boss Rush Order sets the order. A boss you've already beaten, in any run, stays beaten.
     Leave it empty to get all three.
     """
     display_name = "Boss Rush Bosses"
     valid_keys = ["Herx", "Devil", "Twin Liches"]
     default = frozenset({"Herx", "Devil", "Twin Liches"})
+
+
+class BossRushOrder(Choice):
+    """
+    Boss Rush only: the order you fight the bosses in.
+    Game Order: Baron Herx, then the Devil, then the Twin Liches.
+    Shuffled: shuffled once for this seed, the same every run.
+    Shuffled Each Run: shuffled again every time you start a new run.
+    """
+    display_name = "Boss Rush Order"
+    option_game_order = 0
+    option_shuffled = 1
+    option_shuffled_each_run = 2
+    default = option_game_order
 
 
 class BossRushRestTown(DefaultOnToggle):
@@ -910,6 +924,7 @@ class BaronyOptions(PerGameCommonOptions):
     goal: Goal
     boss_rush_floors: BossRushFloors
     boss_rush_bosses: BossRushBosses
+    boss_rush_order: BossRushOrder
     boss_rush_rest_town: BossRushRestTown
     floor_check_interval: FloorCheckInterval
     level_checks: LevelChecks
@@ -982,7 +997,7 @@ class BaronyOptions(PerGameCommonOptions):
 
 option_groups = [
     OptionGroup("Goal & Checks", [
-        Goal, BossRushFloors, BossRushBosses, BossRushRestTown, FloorCheckInterval, LevelChecks, EnemySanity, EnemySanityChecks, EnemySanityKillsPerCheck,
+        Goal, BossRushFloors, BossRushBosses, BossRushOrder, BossRushRestTown, FloorCheckInterval, LevelChecks, EnemySanity, EnemySanityChecks, EnemySanityKillsPerCheck,
         EnemySanityPerFloor, BestiaryChecks,
         ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),
