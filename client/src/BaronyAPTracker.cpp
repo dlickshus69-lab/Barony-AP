@@ -1,8 +1,9 @@
 // Barony Archipelago tracker window.
 //
-// Barony (the Archipelago build) starts this when it connects, and writes
-// archipelago/tracker.txt about once a second. This window shows that file:
-// connection, floor, what's left on the floor, lives, keys, and the item log.
+// Barony (the Archipelago build) starts this with the game, and writes
+// archipelago/tracker.txt about once a second. This window connects you (server, port and
+// name go in archipelago/connect.txt, which the game reads), then shows that file:
+// floor, what's left on the floor, lives, keys, deaths and the item log.
 
 #define NOMINMAX
 #include <windows.h>
@@ -34,6 +35,13 @@ namespace
 	int g_lastLootToggle = -1;  // F4 presses counted by the game
 	RECT g_lootBox{};           // where the loot box was drawn, for clicks
 	const COLORREF STEEL = RGB(184, 196, 214);
+	// The connect form: shown until the game says it's connected.
+	HWND g_main = nullptr, g_editServer = nullptr, g_editPort = nullptr, g_editName = nullptr, g_btnConnect = nullptr;
+	bool g_formShown = false;
+	int g_formTop = -1;
+	std::wstring g_formNote;     // "enter a port", etc.
+	HBRUSH g_editBrush = nullptr;
+	const int ID_CONNECT = 101;
 	HFONT g_titleFont = nullptr, g_bodyFont = nullptr;
 	// Barony's own art, read from the Barony folder this program sits in.
 	Gdiplus::Image* g_logo = nullptr;
@@ -110,6 +118,127 @@ namespace
 		return img;
 	}
 
+
+	std::string trim(const std::string& v)
+	{
+		size_t a = v.find_first_not_of(" \t\r\n"), b = v.find_last_not_of(" \t\r\n");
+		return a == std::string::npos ? std::string() : v.substr(a, b - a + 1);
+	}
+
+	std::string getText(HWND edit)
+	{
+		wchar_t buf[256] = {};
+		GetWindowTextW(edit, buf, 256);
+		char out[512] = {};
+		WideCharToMultiByte(CP_UTF8, 0, buf, -1, out, sizeof(out), nullptr, nullptr);
+		return trim(out);
+	}
+
+	std::map<std::string, std::string> readKeyValues(const std::string& path)
+	{
+		std::map<std::string, std::string> kv;
+		std::ifstream in(path);
+		std::string line;
+		while ( in && std::getline(in, line) )
+		{
+			if ( !line.empty() && line.back() == '\r' ) { line.pop_back(); }
+			size_t eq = line.find('=');
+			if ( eq == std::string::npos || line[0] == '#' ) { continue; }
+			kv[line.substr(0, eq)] = line.substr(eq + 1);
+		}
+		return kv;
+	}
+
+	// Last server, port and name used here; else archipelago.cfg; else archipelago.gg.
+	void fillForm()
+	{
+		std::string host = "archipelago.gg", port, name;
+		auto cfg = readKeyValues(exeDir() + "\\archipelago.cfg");
+		if ( !cfg["server"].empty() )
+		{
+			std::string server = cfg["server"];
+			size_t colon = server.rfind(':');
+			if ( colon != std::string::npos ) { host = server.substr(0, colon); port = server.substr(colon + 1); }
+			else { host = server; }
+		}
+		if ( !cfg["slot"].empty() ) { name = cfg["slot"]; }
+		auto last = readKeyValues(exeDir() + "\\archipelago\\tracker_login.txt");
+		if ( !last["host"].empty() ) { host = last["host"]; }
+		if ( !last["port"].empty() ) { port = last["port"]; }
+		if ( !last["slot"].empty() ) { name = last["slot"]; }
+		SetWindowTextW(g_editServer, widen(host).c_str());
+		SetWindowTextW(g_editPort, widen(port).c_str());
+		SetWindowTextW(g_editName, widen(name).c_str());
+	}
+
+	bool gameRunning()
+	{
+		HANDLE m = OpenMutexA(SYNCHRONIZE, FALSE, "BaronyAPGameRunning");
+		if ( !m ) { return false; }
+		CloseHandle(m);
+		return true;
+	}
+
+	void doConnect()
+	{
+		std::string host = getText(g_editServer), port = getText(g_editPort), name = getText(g_editName);
+		if ( host.empty() ) { host = "archipelago.gg"; }
+		if ( host.find(':') != std::string::npos && port.empty() )
+		{
+			port = host.substr(host.rfind(':') + 1);
+			host = host.substr(0, host.rfind(':'));
+		}
+		if ( port.empty() || port.find_first_not_of("0123456789") != std::string::npos )
+		{
+			g_formNote = L"Type the room's port number (the digits after the colon).";
+		}
+		else if ( name.empty() )
+		{
+			g_formNote = L"Type your name (your slot name from your YAML).";
+		}
+		else if ( !gameRunning() )
+		{
+			g_formNote = L"Start Barony first, then press Connect.";
+		}
+		else
+		{
+			std::string dir = exeDir() + "\\archipelago";
+			CreateDirectoryA(dir.c_str(), nullptr);
+			{
+				std::ofstream login(dir + "\\tracker_login.txt", std::ios::trunc);
+				login << "host=" << host << "\nport=" << port << "\nslot=" << name << "\n";
+			}
+			std::ofstream out(dir + "\\connect.txt", std::ios::trunc);
+			out << "server=" << host << ":" << port << "\nslot=" << name << "\n";
+			g_formNote = L"Connecting...";
+		}
+		InvalidateRect(g_main, nullptr, FALSE);
+	}
+
+	void showForm(bool show)
+	{
+		if ( show == g_formShown ) { return; }
+		g_formShown = show;
+		int cmd = show ? SW_SHOW : SW_HIDE;
+		ShowWindow(g_editServer, cmd);
+		ShowWindow(g_editPort, cmd);
+		ShowWindow(g_editName, cmd);
+		ShowWindow(g_btnConnect, cmd);
+		if ( show ) { SetFocus(GetWindowTextLengthW(g_editPort) ? g_editName : g_editPort); }
+		else { SetFocus(g_main); g_formNote.clear(); }
+	}
+
+	void placeForm(int top, int width)
+	{
+		if ( top == g_formTop ) { return; }
+		g_formTop = top;
+		int x = 150, w = width - x - 20;
+		SetWindowPos(g_editServer, nullptr, x, top, w, 34, SWP_NOZORDER);
+		SetWindowPos(g_editPort, nullptr, x, top + 44, 140, 34, SWP_NOZORDER);
+		SetWindowPos(g_editName, nullptr, x, top + 88, w, 34, SWP_NOZORDER);
+		SetWindowPos(g_btnConnect, nullptr, x, top + 136, 170, 42, SWP_NOZORDER);
+	}
+
 	void drawPanel(HDC dc, int x, int y, int w, int h)
 	{
 		Gdiplus::Graphics g(dc);
@@ -174,15 +303,45 @@ namespace
 			y += 34;
 		}
 
-		if ( !g_state.fileFound )
+		bool running = gameRunning();
+		bool connected = running && g_state.fileFound && num("connected") != 0;
+		showForm(!connected);
+		if ( !connected )
 		{
-			text(dc, 14, y, L"Waiting for Barony to connect...", DIM, g_bodyFont);
+			std::string status = running ? g_state.values["status"] : std::string("off");
+			std::wstring line;
+			COLORREF c = TEXT;
+			if ( status == "off" ) { line = L"Start Barony, then connect here."; c = DIM; }
+			else if ( status == "connecting" )
+			{
+				line = L"Connecting to " + widen(g_state.values["server"]) + L" as " + widen(g_state.values["slot"]) + L"...";
+				c = GOLD;
+			}
+			else if ( status == "refused" ) { line = L"The server refused that name. Check it and connect again."; c = BAD; }
+			else if ( status == "lost" ) { line = L"Lost the connection. Check the port and connect again."; c = BAD; }
+			else { line = L"Connect to your Archipelago room:"; }
+			RECT tr{ 14, y, rc.right - 14, y + 60 };
+			SelectObject(dc, g_bodyFont);
+			SetTextColor(dc, c);
+			int th = DrawTextW(dc, line.c_str(), -1, &tr, DT_WORDBREAK);
+			y += th + 12;
+			text(dc, 20, y + 2, L"Server", TEXT, g_bodyFont);
+			text(dc, 20, y + 46, L"Port", TEXT, g_bodyFont);
+			text(dc, 20, y + 90, L"Name", TEXT, g_bodyFont);
+			placeForm(y, rc.right);
+			y += 190;
+			if ( !g_formNote.empty() && g_formNote != L"Connecting..." && status != "connecting" )
+			{
+				RECT nr{ 14, y, rc.right - 14, y + 60 };
+				SetTextColor(dc, g_formNote == L"Connecting..." ? GOLD : BAD);
+				y += DrawTextW(dc, g_formNote.c_str(), -1, &nr, DT_WORDBREAK) + 8;
+			}
+			text(dc, 14, y, L"No password needed. Press Enter or Connect.", DIM, g_bodyFont);
 		}
 		else
 		{
-			bool connected = num("connected") != 0;
 			std::wstring slot = widen(g_state.values["slot"]);
-			text(dc, 14, y, connected ? L"Connected as " + slot : L"Not connected", connected ? GOOD : BAD, g_bodyFont);
+			text(dc, 14, y, L"Connected as " + slot, GOOD, g_bodyFont);
 			y += 26;
 
 			if ( num("ingame") )
@@ -353,8 +512,35 @@ namespace
 				if ( wp == VK_TAB ) { g_showAll = !g_showAll; InvalidateRect(hwnd, nullptr, FALSE); }
 				if ( wp == 'L' || wp == VK_F4 ) { g_lootShort = !g_lootShort; InvalidateRect(hwnd, nullptr, FALSE); }
 				return 0;
+			case WM_COMMAND:
+				if ( LOWORD(wp) == ID_CONNECT ) { doConnect(); }
+				return 0;
+			case WM_CTLCOLOREDIT:
+				SetTextColor((HDC)wp, TEXT);
+				SetBkColor((HDC)wp, PANEL);
+				return (LRESULT)g_editBrush;
+			case WM_DRAWITEM:
+			{
+				auto* di = (DRAWITEMSTRUCT*)lp;
+				if ( di->CtlID != ID_CONNECT ) { break; }
+				bool down = (di->itemState & ODS_SELECTED) != 0;
+				fill(di->hDC, di->rcItem, down ? RGB(90, 70, 30) : RGB(60, 46, 26));
+				HBRUSH border = CreateSolidBrush(GOLD);
+				FrameRect(di->hDC, &di->rcItem, border);
+				DeleteObject(border);
+				SetBkMode(di->hDC, TRANSPARENT);
+				SelectObject(di->hDC, g_bodyFont);
+				SetTextColor(di->hDC, GOLD);
+				DrawTextW(di->hDC, L"Connect", -1, &di->rcItem, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+				return TRUE;
+			}
+			case WM_SIZE:
+				g_formTop = -1;
+				InvalidateRect(hwnd, nullptr, FALSE);
+				return 0;
 			case WM_LBUTTONDOWN:
 			{
+				SetFocus(hwnd);
 				POINT pt{ (short)LOWORD(lp), (short)HIWORD(lp) };
 				if ( PtInRect(&g_lootBox, pt) ) { g_lootShort = !g_lootShort; InvalidateRect(hwnd, nullptr, FALSE); }
 				return 0;
@@ -407,7 +593,21 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE, LPSTR, int show)
 	RegisterClassW(&wc);
 
 	HWND hwnd = CreateWindowExW(0, wc.lpszClassName, L"Barony Archipelago Tracker",
-		WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 470, 960, nullptr, nullptr, inst, nullptr);
+		WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, CW_USEDEFAULT, CW_USEDEFAULT, 470, 960, nullptr, nullptr, inst, nullptr);
+	g_main = hwnd;
+	g_editBrush = CreateSolidBrush(PANEL);
+	auto makeEdit = [&](DWORD extra) {
+		HWND e = CreateWindowExW(0, L"EDIT", L"", WS_CHILD | WS_BORDER | ES_AUTOHSCROLL | extra,
+			0, 0, 10, 10, hwnd, nullptr, inst, nullptr);
+		SendMessageW(e, WM_SETFONT, (WPARAM)g_bodyFont, TRUE);
+		return e;
+	};
+	g_editServer = makeEdit(0);
+	g_editPort = makeEdit(ES_NUMBER);
+	g_editName = makeEdit(0);
+	g_btnConnect = CreateWindowExW(0, L"BUTTON", L"Connect", WS_CHILD | BS_OWNERDRAW,
+		0, 0, 10, 10, hwnd, (HMENU)(INT_PTR)ID_CONNECT, inst, nullptr);
+	fillForm();
 	ShowWindow(hwnd, show);
 	SetTimer(hwnd, 1, 1000, nullptr);
 	readState();
@@ -415,10 +615,27 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE, LPSTR, int show)
 	MSG m;
 	while ( GetMessageW(&m, nullptr, 0, 0) )
 	{
+		// In the connect form: Enter connects, Tab moves to the next box.
+		if ( m.message == WM_KEYDOWN && (m.hwnd == g_editServer || m.hwnd == g_editPort || m.hwnd == g_editName) )
+		{
+			if ( m.wParam == VK_RETURN ) { doConnect(); continue; }
+			if ( m.wParam == VK_TAB )
+			{
+				bool back = GetKeyState(VK_SHIFT) < 0;
+				HWND order[] = { g_editServer, g_editPort, g_editName };
+				int i = m.hwnd == g_editServer ? 0 : m.hwnd == g_editPort ? 1 : 2;
+				SetFocus(order[(i + (back ? 2 : 1)) % 3]);
+				SendMessageW(GetFocus(), EM_SETSEL, 0, -1);
+				continue;
+			}
+		}
+		if ( m.message == WM_CHAR && (m.wParam == '\r' || m.wParam == '\t')
+			&& (m.hwnd == g_editServer || m.hwnd == g_editPort || m.hwnd == g_editName) ) { continue; } // no beep
 		TranslateMessage(&m);
 		DispatchMessageW(&m);
 	}
 	delete g_logo;
+	if ( g_editBrush ) { DeleteObject(g_editBrush); }
 	Gdiplus::GdiplusShutdown(gdiplusToken);
 	if ( mutex ) { CloseHandle(mutex); }
 	return 0;

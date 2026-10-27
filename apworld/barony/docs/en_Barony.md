@@ -19,6 +19,9 @@ Barony is a roguelike, so instead of fixed chests, checks come from things you d
 Everything you receive is kept across runs. Permanent items (stat boosts, Max HP Up, Starting
 Gold Bonus) are applied to every new character you start.
 
+Randomize Loot (optional) rerolls the ordinary loot in chests, shops and on the floor: Same Kind keeps
+each item's kind (a potion becomes a different potion), Anything lets it become any item.
+
 ## What is the goal?
 
 Defeat Baron Herx, the Devil, or the twin liches of the Sanctum, depending on your options.

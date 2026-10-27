@@ -4,7 +4,8 @@
 	PATCHES.md for where each one is called from.
 
 	Connection:
-	  - archipelago.cfg next to barony.exe (server=, slot=, password=) connects on start
+	  - the tracker window (BaronyAPTracker.exe, opened with the game) has the connect form
+	  - without the tracker, archipelago.cfg next to barony.exe (server=, slot=, password=) connects on start
 	  - or the console: /ap_connect archipelago.gg:38281 MySlot [password]
 
 	Saved progress (one-shot items already used, kill count, lives, queued traps)
@@ -92,6 +93,7 @@ namespace
 		int skill_check_max_rank = 3; // 1 Basic .. 5 Legendary
 		int lock_class = 0;
 		int floor_size_mask = 1;      // Floor Size: bit 1 Normal, 2 Bigger, 4 Much Bigger
+		int randomize_loot = 0;       // 0 off, 1 same kind, 2 anything
 		int music_mods = 0;           // 0 off, 1 mixed with the original, 2 mods only
 		int extra_monsters = 0;       // how many more monsters per floor (0 to 20)           // new characters always get the Skill Checks class    // Minotaur floors: seconds before he arrives that the key compass turns on
 		int floor_shuffle = 0;        // 0 off, 1 sections, 2 full
@@ -515,6 +517,7 @@ namespace
 		registerSlotInt("lock_class", &SlotOptions::lock_class);
 		registerSlotInt("floor_size_mask", &SlotOptions::floor_size_mask);
 		registerSlotInt("music_mods", &SlotOptions::music_mods);
+		registerSlotInt("randomize_loot", &SlotOptions::randomize_loot);
 		registerSlotInt("extra_monsters", &SlotOptions::extra_monsters);
 		registerSlotInt("floor_shuffle", &SlotOptions::floor_shuffle);
 		registerSlotInt("floor_shuffle_seed", &SlotOptions::floor_shuffle_seed);
@@ -1451,6 +1454,92 @@ namespace
 		return it && it->type == COMPASS_TYPE && it->appearance == COMPASS_APPEARANCE;
 	}
 
+	// ------------------------------------------------------- Randomize Loot
+	// Chests, shop stock and items lying on the floor are rerolled. Same Kind keeps the kind (a potion
+	// stays a potion, a different one); Anything can turn into any kind of item. Gold, Archipelago items,
+	// Floor Keys, the Compass and quest items are never touched.
+	const Category LOOT_CATEGORIES[] = { WEAPON, ARMOR, AMULET, POTION, SCROLL, MAGICSTAFF, RING, SPELLBOOK,
+		GEM, THROWN, TOOL, FOOD, BOOK };
+
+	bool lootRerollable(ItemType type, Uint32 appearance)
+	{
+		if ( type < 0 || type >= NUMITEMS ) { return false; }
+		if ( type == AP_ITEM_TYPE && (appearance == AP_FLOOR_APPEARANCE || appearance == AP_SHOP_APPEARANCE) ) { return false; }
+		if ( type == FLOOR_KEY_TYPE && appearance == FLOOR_KEY_APPEARANCE ) { return false; }
+		if ( type == COMPASS_TYPE && appearance == COMPASS_APPEARANCE ) { return false; }
+		if ( type == ARTIFACT_ORB_BLUE || type == ARTIFACT_ORB_RED || type == ARTIFACT_ORB_PURPLE || type == ARTIFACT_ORB_GREEN ) { return false; }
+		if ( type == KEY_IRON || type == KEY_BRONZE || type == KEY_SILVER || type == KEY_GOLD ) { return false; }
+		Category c = items[type].category;
+		for ( Category ok : LOOT_CATEGORIES ) { if ( ok == c ) { return true; } }
+		return false;
+	}
+
+	// Picks the new item. Returns false when this one stays as it is.
+	bool rerollLoot(ItemType& type, Sint16& count, Uint32& appearance)
+	{
+		if ( !g_ready || g_slot.randomize_loot == 0 || multiplayer == CLIENT || !lootRerollable(type, appearance) ) { return false; }
+		Category cat = items[type].category;
+		if ( g_slot.randomize_loot == 2 )
+		{
+			cat = LOOT_CATEGORIES[local_rng.rand() % (sizeof(LOOT_CATEGORIES) / sizeof(LOOT_CATEGORIES[0]))];
+		}
+		bool sameKind = cat == items[type].category;
+		ItemType picked = itemLevelCurve(cat, 0, std::max(1, currentlevel), local_rng);
+		if ( !lootRerollable(picked, 0) ) { return false; }
+		type = picked;
+		appearance = local_rng.rand();
+		if ( type == ENCHANTED_FEATHER ) { appearance = 75 + 25 * (local_rng.rand() % 2); }
+		if ( !sameKind ) { count = cat == THROWN ? (Sint16)(3 + local_rng.rand() % 5) : 1; }
+		return true;
+	}
+
+	void rerollItemList(list_t* inv)
+	{
+		if ( !inv ) { return; }
+		for ( node_t* n = inv->first; n; n = n->next )
+		{
+			Item* it = (Item*)n->element;
+			if ( !it ) { continue; }
+			ItemType type = it->type;
+			Sint16 count = it->count;
+			Uint32 appearance = it->appearance;
+			if ( rerollLoot(type, count, appearance) )
+			{
+				it->type = type;
+				it->count = count;
+				it->appearance = appearance;
+				it->identified = false;
+			}
+		}
+	}
+
+	void rerollGroundLoot()
+	{
+		if ( !g_ready || g_slot.randomize_loot == 0 || multiplayer == CLIENT || !map.entities ) { return; }
+		int changed = 0;
+		for ( node_t* node = map.entities->first; node; node = node->next )
+		{
+			Entity* e = (Entity*)node->element;
+			if ( !e || e->behavior != &actItem ) { continue; }
+			ItemType type = static_cast<ItemType>(e->skill[10]);
+			Sint16 count = (Sint16)e->skill[13];
+			Uint32 appearance = (Uint32)e->skill[14];
+			if ( !rerollLoot(type, count, appearance) ) { continue; }
+			e->skill[10] = type;
+			e->skill[13] = count;
+			e->skill[14] = (Sint32)appearance;
+			e->skill[15] = 0;
+			Item* item = newItemFromEntity(e, true);
+			if ( item )
+			{
+				e->sprite = itemModel(item);
+				free(item);
+			}
+			++changed;
+		}
+		if ( changed ) { printlog("[Archipelago] Randomize Loot: %d items on the floor rerolled.", changed); }
+	}
+
 	// Puts the compass in your bag if you should have one and don't.
 	void giveCompassIfMissing()
 	{
@@ -2079,6 +2168,7 @@ namespace
 		else { g_floorKills = 0; }
 		if ( restarted && g_slot.death_items == 1 ) { removeTakenLoot(); }
 		else if ( !restarted ) { g_floorItemsTaken = 0; g_floorChestsLooted = 0; }
+		rerollGroundLoot();
 		rememberFloorLoot();
 		g_markedEnemies.clear();
 		g_markedThisFloor = 0;
@@ -2271,7 +2361,9 @@ namespace
 		// Built in memory and written only when something changed, so the disk is left alone.
 		static std::string lastWritten;
 		std::ostringstream out;
-		out << "connected=" << (AP_GetConnectionStatus() == AP_ConnectionStatus::Authenticated ? 1 : 0) << "\n";
+		bool authed = AP_GetConnectionStatus() == AP_ConnectionStatus::Authenticated;
+		out << "connected=" << (authed ? 1 : 0) << "\n";
+		out << "status=" << (authed ? "connected" : "lost") << "\nserver=" << g_server << "\ngame=1\n";
 		out << "slot=" << g_slotName << "\n";
 		out << "ingame=" << (inGame() ? 1 : 0) << "\n";
 		out << "floor=" << currentlevel << "\n";
@@ -2331,6 +2423,58 @@ namespace
 #endif
 	}
 
+	// The tracker window connects us: it writes archipelago/connect.txt (server=host:port, slot=name),
+	// we read it, delete it and connect.
+	void pollTrackerConnect()
+	{
+		std::error_code ec;
+		if ( !std::filesystem::exists("archipelago/connect.txt", ec) ) { return; }
+		std::string server, slot, password;
+		{
+			std::ifstream in("archipelago/connect.txt");
+			std::string line;
+			while ( std::getline(in, line) )
+			{
+				if ( !line.empty() && line.back() == '\r' ) { line.pop_back(); }
+				auto eq = line.find('=');
+				if ( eq == std::string::npos ) { continue; }
+				std::string key = line.substr(0, eq), value = line.substr(eq + 1);
+				if ( key == "server" ) { server = value; }
+				else if ( key == "slot" ) { slot = value; }
+				else if ( key == "password" ) { password = value; }
+			}
+		}
+		std::filesystem::remove("archipelago/connect.txt", ec);
+		if ( server.empty() || slot.empty() ) { return; }
+		printlog("[Archipelago] Connecting from the tracker window.");
+		connect(server, slot, password);
+	}
+
+	// Before we're connected, the tracker only needs to know how the connection is going.
+	void writeConnectStatus()
+	{
+		static std::string lastWritten;
+		std::string status = "idle";
+		if ( g_started )
+		{
+			switch ( AP_GetConnectionStatus() )
+			{
+				case AP_ConnectionStatus::ConnectionRefused: status = "refused"; break;
+				case AP_ConnectionStatus::Authenticated: status = "connecting"; break; // waiting for slot data
+				default: status = "connecting"; break;
+			}
+		}
+		std::ostringstream out;
+		out << "connected=0\nstatus=" << status << "\nserver=" << g_server << "\nslot=" << g_slotName << "\ngame=1\n";
+		std::string text = out.str();
+		if ( text == lastWritten ) { return; }
+		std::filesystem::create_directories("archipelago");
+		std::ofstream file("archipelago/tracker.txt", std::ios::trunc | std::ios::binary);
+		if ( !file ) { return; }
+		file << text;
+		lastWritten = text;
+	}
+
 	// ----------------------------------------------------------- console commands
 	ConsoleCommand ccmd_ap_connect("/ap_connect", "connect to Archipelago: /ap_connect host:port slot [password]",
 		[](int argc, const char** argv) {
@@ -2383,7 +2527,21 @@ namespace
 
 void tick()
 {
-	if ( !g_triedAutoConnect ) { autoConnectFromConfig(); }
+	if ( !g_triedAutoConnect )
+	{
+		g_triedAutoConnect = true;
+#ifdef WINDOWS
+		CreateMutexA(nullptr, FALSE, "BaronyAPGameRunning"); // lets the tracker window know the game is open
+#endif
+		std::filesystem::create_directories("archipelago");
+		std::error_code ec;
+		std::filesystem::remove("archipelago/connect.txt", ec); // left over from last time
+		// With the tracker window, you connect from there; otherwise archipelago.cfg connects on start.
+		if ( std::filesystem::exists("BaronyAPTracker.exe", ec) ) { launchTracker(); }
+		else { autoConnectFromConfig(); }
+	}
+	if ( ticks % (TICKS_PER_SECOND / 2) == 0 ) { pollTrackerConnect(); }
+	if ( !g_ready && ticks % TICKS_PER_SECOND == 0 ) { writeConnectStatus(); }
 	if ( !g_started ) { return; }
 	checkReady();
 	if ( !g_ready ) { return; }
@@ -2570,6 +2728,8 @@ void onDungeonGenerated()
 void onMonsterInit(Entity* my, Stat* myStats)
 {
 	if ( !g_ready || !my || !myStats || multiplayer == CLIENT ) { return; }
+
+	if ( myStats->type == SHOPKEEPER ) { rerollItemList(&myStats->inventory); } // Randomize Loot
 
 	// Shopkeepers stock an Archipelago item while shop checks remain.
 	if ( myStats->type == SHOPKEEPER && g_slot.shop_checks > 0
@@ -3128,7 +3288,9 @@ namespace
 
 void onChestCreated(Entity* chest)
 {
-	if ( !chest || chest->behavior != &actChest || !chest->children.first || !apItemAvailable() ) { return; }
+	if ( !chest || chest->behavior != &actChest || !chest->children.first ) { return; }
+	rerollItemList((list_t*)chest->children.first->element); // Randomize Loot
+	if ( !apItemAvailable() ) { return; }
 	if ( g_floorReady ) { g_attemptApMade = 0; g_floorReady = false; } // first chest of a new floor
 	bool restart = g_restartPending;
 	if ( restart && g_attemptApMade >= g_restartApBudget ) { return; }
@@ -3607,6 +3769,25 @@ void drawHud()
 	{
 		drawDeathScreen();
 	}
+}
+
+bool holidayThemeAllowed()
+{
+	// Barony's holiday themes (Halloween, Christmas) replace the music and art; off unless
+	// archipelago.cfg has holiday_theme=1.
+	static int allowed = -1;
+	if ( allowed < 0 )
+	{
+		allowed = 0;
+		std::ifstream in("archipelago.cfg");
+		std::string line;
+		while ( in && std::getline(in, line) )
+		{
+			if ( !line.empty() && line.back() == '\r' ) { line.pop_back(); }
+			if ( line == "holiday_theme=1" || line == "holiday_theme=true" ) { allowed = 1; }
+		}
+	}
+	return allowed == 1;
 }
 
 bool isConnected()

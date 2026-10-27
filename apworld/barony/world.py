@@ -302,6 +302,7 @@ class BaronyWorld(World):
             "lock_class": int(bool(o.lock_class)),
             "floor_size_mask": sum(bit for name, bit in (("Normal", 1), ("Bigger", 2), ("Much Bigger", 4))
                                    if name in o.floor_size.value),
+            "randomize_loot": o.randomize_loot.value,
             "music_mods": o.music_mods.value,
             "extra_monsters": o.extra_monsters.value,
             "floor_shuffle": o.floor_shuffle.value,

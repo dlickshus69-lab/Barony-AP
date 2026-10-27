@@ -8,7 +8,7 @@ An Archipelago multiworld randomizer for Barony.
 | `client/src/` | The game client (C++), added into Barony's own source |
 | `client/barony-archipelago.patch` | All the Barony changes as one `git am` patch (Barony master `962a5ce`) |
 | `client/PATCHES.md` | Where each hook goes, chat commands, known limits |
-| `client/archipelago.cfg` | Connection settings file to put next to `barony.exe` |
+| `client/archipelago.cfg` | Optional connection settings (the tracker window has a connect form) |
 | `tools/gen_cpp_ids.py` | Writes `client/src/archipelago_ids.hpp` from the APWorld's data |
 | `BUILDING.md` | How to build the modded `barony.exe` on Windows |
 

@@ -407,6 +407,23 @@ class ExtraMonsters(Range):
     default = 0
 
 
+class RandomizeLoot(Choice):
+    """
+    Rerolls the ordinary loot: what's in chests, what shopkeepers sell, and items lying on the floor.
+    Off: Barony's normal loot.
+    Same Kind: each item becomes a random item of the same kind (a potion is still a potion, a sword
+    is still a weapon, just a different one).
+    Anything: each item can become any kind of item, so a shop or a chest can hold anything.
+    Items still follow the floor's depth (deeper floors, better items). Gold, Archipelago items, the
+    Floor Key, the Compass and quest items are never changed.
+    """
+    display_name = "Randomize Loot"
+    option_off = 0
+    option_same_kind = 1
+    option_anything = 2
+    default = option_off
+
+
 class MusicMods(Choice):
     """
     Uses music mods you have: any Barony Workshop mod you're subscribed to on Steam (or a mod in the
@@ -877,6 +894,7 @@ class BaronyOptions(PerGameCommonOptions):
     enemy_seed: EnemySeed
     music_shuffle: MusicShuffle
     music_seed: MusicSeed
+    randomize_loot: RandomizeLoot
     music_mods: MusicMods
     extra_monsters: ExtraMonsters
     enemy_level_scaling: EnemyLevelScaling
@@ -921,7 +939,7 @@ option_groups = [
     ]),
     OptionGroup("Skills", [SkillChecks, SkillCheckMaxRank, LockClass]),
     OptionGroup("Dungeon", [FloorKeys, FloorKeyRequirement, Compass, CompassMode, CompassPingTime, CompassRecharge, KeyCompassTime, MinotaurTime, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemySeed, EnemyRandomizerSecretAreas, EnemyPool, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, DifficultyScaling, Difficulty]),
-    OptionGroup("Extras", [FloorSize, ExtraMonsters, MusicMods]),
+    OptionGroup("Extras", [FloorSize, ExtraMonsters, RandomizeLoot, MusicMods]),
     OptionGroup("Lives & Checkpoints", [Lives, ExtraLivesInPool, CheckpointInterval]),
     OptionGroup("Death Link", [BaronyDeathLink, DeathLinkMode, DeathPenalty, DeathItems, FloorRestart, BossDeath]),
     OptionGroup("Traps", [TrapChance, MinotaurTrapWeight, AmbushTrapWeight, PolymorphTrapWeight, FumbleTrapWeight, BlindnessTrapWeight, TeleportTrapWeight, HungerTrapWeight, DarknessTrapWeight, CurseTrapWeight,

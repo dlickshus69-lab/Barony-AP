@@ -51,6 +51,7 @@ Barony:
   floor_size:
   - Normal
   extra_monsters: 0
+  randomize_loot: same_kind
   music_mods: mixed
 
   # Lives & Checkpoints

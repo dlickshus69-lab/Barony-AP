@@ -1,24 +1,24 @@
-From 116f77438e70274a174cc90ae5291ff6886b1fc1 Mon Sep 17 00:00:00 2001
+From 231e7e51585dce2f441f8e63e9e7ab424687b3ff Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
 
 ---
  CMakeLists.txt                    |   32 +
- src/BaronyAPTracker.cpp           |  425 ++++
+ src/BaronyAPTracker.cpp           |  642 +++++
  src/CMakeLists.txt                |    1 +
  src/actchest.cpp                  |    7 +
  src/actgeneral.cpp                |    2 +
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 3628 +++++++++++++++++++++++++++++
- src/archipelago_barony.hpp        |  118 +
- src/archipelago_ids.hpp           |  134 ++
+ src/archipelago_barony.cpp        | 3809 +++++++++++++++++++++++++++++
+ src/archipelago_barony.hpp        |  119 +
+ src/archipelago_ids.hpp           |  134 +
  src/charclass.cpp                 |    4 +
  src/engine/audio/music.cpp        |    4 +
  src/engine/audio/sound_game.cpp   |    2 +
- src/files.cpp                     |   44 +
+ src/files.cpp                     |   47 +
  src/game.cpp                      |    6 +
  src/init.cpp                      |    6 +
  src/init_game.cpp                 |    6 +
@@ -29,7 +29,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   10 +
  src/ui/MainMenu.cpp               |    5 +-
- 25 files changed, 4545 insertions(+), 4 deletions(-)
+ 25 files changed, 4947 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -80,15 +80,16 @@ index 4e9ed8f..c2b0e9a 100644
      # Only for MinGW...
 diff --git a/src/BaronyAPTracker.cpp b/src/BaronyAPTracker.cpp
 new file mode 100644
-index 0000000..3dd9a61
+index 0000000..364821a
 --- /dev/null
 +++ b/src/BaronyAPTracker.cpp
-@@ -0,0 +1,425 @@
+@@ -0,0 +1,642 @@
 +// Barony Archipelago tracker window.
 +//
-+// Barony (the Archipelago build) starts this when it connects, and writes
-+// archipelago/tracker.txt about once a second. This window shows that file:
-+// connection, floor, what's left on the floor, lives, keys, and the item log.
++// Barony (the Archipelago build) starts this with the game, and writes
++// archipelago/tracker.txt about once a second. This window connects you (server, port and
++// name go in archipelago/connect.txt, which the game reads), then shows that file:
++// floor, what's left on the floor, lives, keys, deaths and the item log.
 +
 +#define NOMINMAX
 +#include <windows.h>
@@ -120,6 +121,13 @@ index 0000000..3dd9a61
 +	int g_lastLootToggle = -1;  // F4 presses counted by the game
 +	RECT g_lootBox{};           // where the loot box was drawn, for clicks
 +	const COLORREF STEEL = RGB(184, 196, 214);
++	// The connect form: shown until the game says it's connected.
++	HWND g_main = nullptr, g_editServer = nullptr, g_editPort = nullptr, g_editName = nullptr, g_btnConnect = nullptr;
++	bool g_formShown = false;
++	int g_formTop = -1;
++	std::wstring g_formNote;     // "enter a port", etc.
++	HBRUSH g_editBrush = nullptr;
++	const int ID_CONNECT = 101;
 +	HFONT g_titleFont = nullptr, g_bodyFont = nullptr;
 +	// Barony's own art, read from the Barony folder this program sits in.
 +	Gdiplus::Image* g_logo = nullptr;
@@ -196,6 +204,127 @@ index 0000000..3dd9a61
 +		return img;
 +	}
 +
++
++	std::string trim(const std::string& v)
++	{
++		size_t a = v.find_first_not_of(" \t\r\n"), b = v.find_last_not_of(" \t\r\n");
++		return a == std::string::npos ? std::string() : v.substr(a, b - a + 1);
++	}
++
++	std::string getText(HWND edit)
++	{
++		wchar_t buf[256] = {};
++		GetWindowTextW(edit, buf, 256);
++		char out[512] = {};
++		WideCharToMultiByte(CP_UTF8, 0, buf, -1, out, sizeof(out), nullptr, nullptr);
++		return trim(out);
++	}
++
++	std::map<std::string, std::string> readKeyValues(const std::string& path)
++	{
++		std::map<std::string, std::string> kv;
++		std::ifstream in(path);
++		std::string line;
++		while ( in && std::getline(in, line) )
++		{
++			if ( !line.empty() && line.back() == '\r' ) { line.pop_back(); }
++			size_t eq = line.find('=');
++			if ( eq == std::string::npos || line[0] == '#' ) { continue; }
++			kv[line.substr(0, eq)] = line.substr(eq + 1);
++		}
++		return kv;
++	}
++
++	// Last server, port and name used here; else archipelago.cfg; else archipelago.gg.
++	void fillForm()
++	{
++		std::string host = "archipelago.gg", port, name;
++		auto cfg = readKeyValues(exeDir() + "\\archipelago.cfg");
++		if ( !cfg["server"].empty() )
++		{
++			std::string server = cfg["server"];
++			size_t colon = server.rfind(':');
++			if ( colon != std::string::npos ) { host = server.substr(0, colon); port = server.substr(colon + 1); }
++			else { host = server; }
++		}
++		if ( !cfg["slot"].empty() ) { name = cfg["slot"]; }
++		auto last = readKeyValues(exeDir() + "\\archipelago\\tracker_login.txt");
++		if ( !last["host"].empty() ) { host = last["host"]; }
++		if ( !last["port"].empty() ) { port = last["port"]; }
++		if ( !last["slot"].empty() ) { name = last["slot"]; }
++		SetWindowTextW(g_editServer, widen(host).c_str());
++		SetWindowTextW(g_editPort, widen(port).c_str());
++		SetWindowTextW(g_editName, widen(name).c_str());
++	}
++
++	bool gameRunning()
++	{
++		HANDLE m = OpenMutexA(SYNCHRONIZE, FALSE, "BaronyAPGameRunning");
++		if ( !m ) { return false; }
++		CloseHandle(m);
++		return true;
++	}
++
++	void doConnect()
++	{
++		std::string host = getText(g_editServer), port = getText(g_editPort), name = getText(g_editName);
++		if ( host.empty() ) { host = "archipelago.gg"; }
++		if ( host.find(':') != std::string::npos && port.empty() )
++		{
++			port = host.substr(host.rfind(':') + 1);
++			host = host.substr(0, host.rfind(':'));
++		}
++		if ( port.empty() || port.find_first_not_of("0123456789") != std::string::npos )
++		{
++			g_formNote = L"Type the room's port number (the digits after the colon).";
++		}
++		else if ( name.empty() )
++		{
++			g_formNote = L"Type your name (your slot name from your YAML).";
++		}
++		else if ( !gameRunning() )
++		{
++			g_formNote = L"Start Barony first, then press Connect.";
++		}
++		else
++		{
++			std::string dir = exeDir() + "\\archipelago";
++			CreateDirectoryA(dir.c_str(), nullptr);
++			{
++				std::ofstream login(dir + "\\tracker_login.txt", std::ios::trunc);
++				login << "host=" << host << "\nport=" << port << "\nslot=" << name << "\n";
++			}
++			std::ofstream out(dir + "\\connect.txt", std::ios::trunc);
++			out << "server=" << host << ":" << port << "\nslot=" << name << "\n";
++			g_formNote = L"Connecting...";
++		}
++		InvalidateRect(g_main, nullptr, FALSE);
++	}
++
++	void showForm(bool show)
++	{
++		if ( show == g_formShown ) { return; }
++		g_formShown = show;
++		int cmd = show ? SW_SHOW : SW_HIDE;
++		ShowWindow(g_editServer, cmd);
++		ShowWindow(g_editPort, cmd);
++		ShowWindow(g_editName, cmd);
++		ShowWindow(g_btnConnect, cmd);
++		if ( show ) { SetFocus(GetWindowTextLengthW(g_editPort) ? g_editName : g_editPort); }
++		else { SetFocus(g_main); g_formNote.clear(); }
++	}
++
++	void placeForm(int top, int width)
++	{
++		if ( top == g_formTop ) { return; }
++		g_formTop = top;
++		int x = 150, w = width - x - 20;
++		SetWindowPos(g_editServer, nullptr, x, top, w, 34, SWP_NOZORDER);
++		SetWindowPos(g_editPort, nullptr, x, top + 44, 140, 34, SWP_NOZORDER);
++		SetWindowPos(g_editName, nullptr, x, top + 88, w, 34, SWP_NOZORDER);
++		SetWindowPos(g_btnConnect, nullptr, x, top + 136, 170, 42, SWP_NOZORDER);
++	}
++
 +	void drawPanel(HDC dc, int x, int y, int w, int h)
 +	{
 +		Gdiplus::Graphics g(dc);
@@ -260,15 +389,45 @@ index 0000000..3dd9a61
 +			y += 34;
 +		}
 +
-+		if ( !g_state.fileFound )
++		bool running = gameRunning();
++		bool connected = running && g_state.fileFound && num("connected") != 0;
++		showForm(!connected);
++		if ( !connected )
 +		{
-+			text(dc, 14, y, L"Waiting for Barony to connect...", DIM, g_bodyFont);
++			std::string status = running ? g_state.values["status"] : std::string("off");
++			std::wstring line;
++			COLORREF c = TEXT;
++			if ( status == "off" ) { line = L"Start Barony, then connect here."; c = DIM; }
++			else if ( status == "connecting" )
++			{
++				line = L"Connecting to " + widen(g_state.values["server"]) + L" as " + widen(g_state.values["slot"]) + L"...";
++				c = GOLD;
++			}
++			else if ( status == "refused" ) { line = L"The server refused that name. Check it and connect again."; c = BAD; }
++			else if ( status == "lost" ) { line = L"Lost the connection. Check the port and connect again."; c = BAD; }
++			else { line = L"Connect to your Archipelago room:"; }
++			RECT tr{ 14, y, rc.right - 14, y + 60 };
++			SelectObject(dc, g_bodyFont);
++			SetTextColor(dc, c);
++			int th = DrawTextW(dc, line.c_str(), -1, &tr, DT_WORDBREAK);
++			y += th + 12;
++			text(dc, 20, y + 2, L"Server", TEXT, g_bodyFont);
++			text(dc, 20, y + 46, L"Port", TEXT, g_bodyFont);
++			text(dc, 20, y + 90, L"Name", TEXT, g_bodyFont);
++			placeForm(y, rc.right);
++			y += 190;
++			if ( !g_formNote.empty() && g_formNote != L"Connecting..." && status != "connecting" )
++			{
++				RECT nr{ 14, y, rc.right - 14, y + 60 };
++				SetTextColor(dc, g_formNote == L"Connecting..." ? GOLD : BAD);
++				y += DrawTextW(dc, g_formNote.c_str(), -1, &nr, DT_WORDBREAK) + 8;
++			}
++			text(dc, 14, y, L"No password needed. Press Enter or Connect.", DIM, g_bodyFont);
 +		}
 +		else
 +		{
-+			bool connected = num("connected") != 0;
 +			std::wstring slot = widen(g_state.values["slot"]);
-+			text(dc, 14, y, connected ? L"Connected as " + slot : L"Not connected", connected ? GOOD : BAD, g_bodyFont);
++			text(dc, 14, y, L"Connected as " + slot, GOOD, g_bodyFont);
 +			y += 26;
 +
 +			if ( num("ingame") )
@@ -439,8 +598,35 @@ index 0000000..3dd9a61
 +				if ( wp == VK_TAB ) { g_showAll = !g_showAll; InvalidateRect(hwnd, nullptr, FALSE); }
 +				if ( wp == 'L' || wp == VK_F4 ) { g_lootShort = !g_lootShort; InvalidateRect(hwnd, nullptr, FALSE); }
 +				return 0;
++			case WM_COMMAND:
++				if ( LOWORD(wp) == ID_CONNECT ) { doConnect(); }
++				return 0;
++			case WM_CTLCOLOREDIT:
++				SetTextColor((HDC)wp, TEXT);
++				SetBkColor((HDC)wp, PANEL);
++				return (LRESULT)g_editBrush;
++			case WM_DRAWITEM:
++			{
++				auto* di = (DRAWITEMSTRUCT*)lp;
++				if ( di->CtlID != ID_CONNECT ) { break; }
++				bool down = (di->itemState & ODS_SELECTED) != 0;
++				fill(di->hDC, di->rcItem, down ? RGB(90, 70, 30) : RGB(60, 46, 26));
++				HBRUSH border = CreateSolidBrush(GOLD);
++				FrameRect(di->hDC, &di->rcItem, border);
++				DeleteObject(border);
++				SetBkMode(di->hDC, TRANSPARENT);
++				SelectObject(di->hDC, g_bodyFont);
++				SetTextColor(di->hDC, GOLD);
++				DrawTextW(di->hDC, L"Connect", -1, &di->rcItem, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
++				return TRUE;
++			}
++			case WM_SIZE:
++				g_formTop = -1;
++				InvalidateRect(hwnd, nullptr, FALSE);
++				return 0;
 +			case WM_LBUTTONDOWN:
 +			{
++				SetFocus(hwnd);
 +				POINT pt{ (short)LOWORD(lp), (short)HIWORD(lp) };
 +				if ( PtInRect(&g_lootBox, pt) ) { g_lootShort = !g_lootShort; InvalidateRect(hwnd, nullptr, FALSE); }
 +				return 0;
@@ -493,7 +679,21 @@ index 0000000..3dd9a61
 +	RegisterClassW(&wc);
 +
 +	HWND hwnd = CreateWindowExW(0, wc.lpszClassName, L"Barony Archipelago Tracker",
-+		WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 470, 960, nullptr, nullptr, inst, nullptr);
++		WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, CW_USEDEFAULT, CW_USEDEFAULT, 470, 960, nullptr, nullptr, inst, nullptr);
++	g_main = hwnd;
++	g_editBrush = CreateSolidBrush(PANEL);
++	auto makeEdit = [&](DWORD extra) {
++		HWND e = CreateWindowExW(0, L"EDIT", L"", WS_CHILD | WS_BORDER | ES_AUTOHSCROLL | extra,
++			0, 0, 10, 10, hwnd, nullptr, inst, nullptr);
++		SendMessageW(e, WM_SETFONT, (WPARAM)g_bodyFont, TRUE);
++		return e;
++	};
++	g_editServer = makeEdit(0);
++	g_editPort = makeEdit(ES_NUMBER);
++	g_editName = makeEdit(0);
++	g_btnConnect = CreateWindowExW(0, L"BUTTON", L"Connect", WS_CHILD | BS_OWNERDRAW,
++		0, 0, 10, 10, hwnd, (HMENU)(INT_PTR)ID_CONNECT, inst, nullptr);
++	fillForm();
 +	ShowWindow(hwnd, show);
 +	SetTimer(hwnd, 1, 1000, nullptr);
 +	readState();
@@ -501,10 +701,27 @@ index 0000000..3dd9a61
 +	MSG m;
 +	while ( GetMessageW(&m, nullptr, 0, 0) )
 +	{
++		// In the connect form: Enter connects, Tab moves to the next box.
++		if ( m.message == WM_KEYDOWN && (m.hwnd == g_editServer || m.hwnd == g_editPort || m.hwnd == g_editName) )
++		{
++			if ( m.wParam == VK_RETURN ) { doConnect(); continue; }
++			if ( m.wParam == VK_TAB )
++			{
++				bool back = GetKeyState(VK_SHIFT) < 0;
++				HWND order[] = { g_editServer, g_editPort, g_editName };
++				int i = m.hwnd == g_editServer ? 0 : m.hwnd == g_editPort ? 1 : 2;
++				SetFocus(order[(i + (back ? 2 : 1)) % 3]);
++				SendMessageW(GetFocus(), EM_SETSEL, 0, -1);
++				continue;
++			}
++		}
++		if ( m.message == WM_CHAR && (m.wParam == '\r' || m.wParam == '\t')
++			&& (m.hwnd == g_editServer || m.hwnd == g_editPort || m.hwnd == g_editName) ) { continue; } // no beep
 +		TranslateMessage(&m);
 +		DispatchMessageW(&m);
 +	}
 +	delete g_logo;
++	if ( g_editBrush ) { DeleteObject(g_editBrush); }
 +	Gdiplus::GdiplusShutdown(gdiplusToken);
 +	if ( mutex ) { CloseHandle(mutex); }
 +	return 0;
@@ -663,17 +880,18 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..c493a87
+index 0000000..0eef936
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,3628 @@
+@@ -0,0 +1,3809 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
 +	PATCHES.md for where each one is called from.
 +
 +	Connection:
-+	  - archipelago.cfg next to barony.exe (server=, slot=, password=) connects on start
++	  - the tracker window (BaronyAPTracker.exe, opened with the game) has the connect form
++	  - without the tracker, archipelago.cfg next to barony.exe (server=, slot=, password=) connects on start
 +	  - or the console: /ap_connect archipelago.gg:38281 MySlot [password]
 +
 +	Saved progress (one-shot items already used, kill count, lives, queued traps)
@@ -761,6 +979,7 @@ index 0000000..c493a87
 +		int skill_check_max_rank = 3; // 1 Basic .. 5 Legendary
 +		int lock_class = 0;
 +		int floor_size_mask = 1;      // Floor Size: bit 1 Normal, 2 Bigger, 4 Much Bigger
++		int randomize_loot = 0;       // 0 off, 1 same kind, 2 anything
 +		int music_mods = 0;           // 0 off, 1 mixed with the original, 2 mods only
 +		int extra_monsters = 0;       // how many more monsters per floor (0 to 20)           // new characters always get the Skill Checks class    // Minotaur floors: seconds before he arrives that the key compass turns on
 +		int floor_shuffle = 0;        // 0 off, 1 sections, 2 full
@@ -1184,6 +1403,7 @@ index 0000000..c493a87
 +		registerSlotInt("lock_class", &SlotOptions::lock_class);
 +		registerSlotInt("floor_size_mask", &SlotOptions::floor_size_mask);
 +		registerSlotInt("music_mods", &SlotOptions::music_mods);
++		registerSlotInt("randomize_loot", &SlotOptions::randomize_loot);
 +		registerSlotInt("extra_monsters", &SlotOptions::extra_monsters);
 +		registerSlotInt("floor_shuffle", &SlotOptions::floor_shuffle);
 +		registerSlotInt("floor_shuffle_seed", &SlotOptions::floor_shuffle_seed);
@@ -2120,6 +2340,92 @@ index 0000000..c493a87
 +		return it && it->type == COMPASS_TYPE && it->appearance == COMPASS_APPEARANCE;
 +	}
 +
++	// ------------------------------------------------------- Randomize Loot
++	// Chests, shop stock and items lying on the floor are rerolled. Same Kind keeps the kind (a potion
++	// stays a potion, a different one); Anything can turn into any kind of item. Gold, Archipelago items,
++	// Floor Keys, the Compass and quest items are never touched.
++	const Category LOOT_CATEGORIES[] = { WEAPON, ARMOR, AMULET, POTION, SCROLL, MAGICSTAFF, RING, SPELLBOOK,
++		GEM, THROWN, TOOL, FOOD, BOOK };
++
++	bool lootRerollable(ItemType type, Uint32 appearance)
++	{
++		if ( type < 0 || type >= NUMITEMS ) { return false; }
++		if ( type == AP_ITEM_TYPE && (appearance == AP_FLOOR_APPEARANCE || appearance == AP_SHOP_APPEARANCE) ) { return false; }
++		if ( type == FLOOR_KEY_TYPE && appearance == FLOOR_KEY_APPEARANCE ) { return false; }
++		if ( type == COMPASS_TYPE && appearance == COMPASS_APPEARANCE ) { return false; }
++		if ( type == ARTIFACT_ORB_BLUE || type == ARTIFACT_ORB_RED || type == ARTIFACT_ORB_PURPLE || type == ARTIFACT_ORB_GREEN ) { return false; }
++		if ( type == KEY_IRON || type == KEY_BRONZE || type == KEY_SILVER || type == KEY_GOLD ) { return false; }
++		Category c = items[type].category;
++		for ( Category ok : LOOT_CATEGORIES ) { if ( ok == c ) { return true; } }
++		return false;
++	}
++
++	// Picks the new item. Returns false when this one stays as it is.
++	bool rerollLoot(ItemType& type, Sint16& count, Uint32& appearance)
++	{
++		if ( !g_ready || g_slot.randomize_loot == 0 || multiplayer == CLIENT || !lootRerollable(type, appearance) ) { return false; }
++		Category cat = items[type].category;
++		if ( g_slot.randomize_loot == 2 )
++		{
++			cat = LOOT_CATEGORIES[local_rng.rand() % (sizeof(LOOT_CATEGORIES) / sizeof(LOOT_CATEGORIES[0]))];
++		}
++		bool sameKind = cat == items[type].category;
++		ItemType picked = itemLevelCurve(cat, 0, std::max(1, currentlevel), local_rng);
++		if ( !lootRerollable(picked, 0) ) { return false; }
++		type = picked;
++		appearance = local_rng.rand();
++		if ( type == ENCHANTED_FEATHER ) { appearance = 75 + 25 * (local_rng.rand() % 2); }
++		if ( !sameKind ) { count = cat == THROWN ? (Sint16)(3 + local_rng.rand() % 5) : 1; }
++		return true;
++	}
++
++	void rerollItemList(list_t* inv)
++	{
++		if ( !inv ) { return; }
++		for ( node_t* n = inv->first; n; n = n->next )
++		{
++			Item* it = (Item*)n->element;
++			if ( !it ) { continue; }
++			ItemType type = it->type;
++			Sint16 count = it->count;
++			Uint32 appearance = it->appearance;
++			if ( rerollLoot(type, count, appearance) )
++			{
++				it->type = type;
++				it->count = count;
++				it->appearance = appearance;
++				it->identified = false;
++			}
++		}
++	}
++
++	void rerollGroundLoot()
++	{
++		if ( !g_ready || g_slot.randomize_loot == 0 || multiplayer == CLIENT || !map.entities ) { return; }
++		int changed = 0;
++		for ( node_t* node = map.entities->first; node; node = node->next )
++		{
++			Entity* e = (Entity*)node->element;
++			if ( !e || e->behavior != &actItem ) { continue; }
++			ItemType type = static_cast<ItemType>(e->skill[10]);
++			Sint16 count = (Sint16)e->skill[13];
++			Uint32 appearance = (Uint32)e->skill[14];
++			if ( !rerollLoot(type, count, appearance) ) { continue; }
++			e->skill[10] = type;
++			e->skill[13] = count;
++			e->skill[14] = (Sint32)appearance;
++			e->skill[15] = 0;
++			Item* item = newItemFromEntity(e, true);
++			if ( item )
++			{
++				e->sprite = itemModel(item);
++				free(item);
++			}
++			++changed;
++		}
++		if ( changed ) { printlog("[Archipelago] Randomize Loot: %d items on the floor rerolled.", changed); }
++	}
++
 +	// Puts the compass in your bag if you should have one and don't.
 +	void giveCompassIfMissing()
 +	{
@@ -2748,6 +3054,7 @@ index 0000000..c493a87
 +		else { g_floorKills = 0; }
 +		if ( restarted && g_slot.death_items == 1 ) { removeTakenLoot(); }
 +		else if ( !restarted ) { g_floorItemsTaken = 0; g_floorChestsLooted = 0; }
++		rerollGroundLoot();
 +		rememberFloorLoot();
 +		g_markedEnemies.clear();
 +		g_markedThisFloor = 0;
@@ -2940,7 +3247,9 @@ index 0000000..c493a87
 +		// Built in memory and written only when something changed, so the disk is left alone.
 +		static std::string lastWritten;
 +		std::ostringstream out;
-+		out << "connected=" << (AP_GetConnectionStatus() == AP_ConnectionStatus::Authenticated ? 1 : 0) << "\n";
++		bool authed = AP_GetConnectionStatus() == AP_ConnectionStatus::Authenticated;
++		out << "connected=" << (authed ? 1 : 0) << "\n";
++		out << "status=" << (authed ? "connected" : "lost") << "\nserver=" << g_server << "\ngame=1\n";
 +		out << "slot=" << g_slotName << "\n";
 +		out << "ingame=" << (inGame() ? 1 : 0) << "\n";
 +		out << "floor=" << currentlevel << "\n";
@@ -3000,6 +3309,58 @@ index 0000000..c493a87
 +#endif
 +	}
 +
++	// The tracker window connects us: it writes archipelago/connect.txt (server=host:port, slot=name),
++	// we read it, delete it and connect.
++	void pollTrackerConnect()
++	{
++		std::error_code ec;
++		if ( !std::filesystem::exists("archipelago/connect.txt", ec) ) { return; }
++		std::string server, slot, password;
++		{
++			std::ifstream in("archipelago/connect.txt");
++			std::string line;
++			while ( std::getline(in, line) )
++			{
++				if ( !line.empty() && line.back() == '\r' ) { line.pop_back(); }
++				auto eq = line.find('=');
++				if ( eq == std::string::npos ) { continue; }
++				std::string key = line.substr(0, eq), value = line.substr(eq + 1);
++				if ( key == "server" ) { server = value; }
++				else if ( key == "slot" ) { slot = value; }
++				else if ( key == "password" ) { password = value; }
++			}
++		}
++		std::filesystem::remove("archipelago/connect.txt", ec);
++		if ( server.empty() || slot.empty() ) { return; }
++		printlog("[Archipelago] Connecting from the tracker window.");
++		connect(server, slot, password);
++	}
++
++	// Before we're connected, the tracker only needs to know how the connection is going.
++	void writeConnectStatus()
++	{
++		static std::string lastWritten;
++		std::string status = "idle";
++		if ( g_started )
++		{
++			switch ( AP_GetConnectionStatus() )
++			{
++				case AP_ConnectionStatus::ConnectionRefused: status = "refused"; break;
++				case AP_ConnectionStatus::Authenticated: status = "connecting"; break; // waiting for slot data
++				default: status = "connecting"; break;
++			}
++		}
++		std::ostringstream out;
++		out << "connected=0\nstatus=" << status << "\nserver=" << g_server << "\nslot=" << g_slotName << "\ngame=1\n";
++		std::string text = out.str();
++		if ( text == lastWritten ) { return; }
++		std::filesystem::create_directories("archipelago");
++		std::ofstream file("archipelago/tracker.txt", std::ios::trunc | std::ios::binary);
++		if ( !file ) { return; }
++		file << text;
++		lastWritten = text;
++	}
++
 +	// ----------------------------------------------------------- console commands
 +	ConsoleCommand ccmd_ap_connect("/ap_connect", "connect to Archipelago: /ap_connect host:port slot [password]",
 +		[](int argc, const char** argv) {
@@ -3052,7 +3413,21 @@ index 0000000..c493a87
 +
 +void tick()
 +{
-+	if ( !g_triedAutoConnect ) { autoConnectFromConfig(); }
++	if ( !g_triedAutoConnect )
++	{
++		g_triedAutoConnect = true;
++#ifdef WINDOWS
++		CreateMutexA(nullptr, FALSE, "BaronyAPGameRunning"); // lets the tracker window know the game is open
++#endif
++		std::filesystem::create_directories("archipelago");
++		std::error_code ec;
++		std::filesystem::remove("archipelago/connect.txt", ec); // left over from last time
++		// With the tracker window, you connect from there; otherwise archipelago.cfg connects on start.
++		if ( std::filesystem::exists("BaronyAPTracker.exe", ec) ) { launchTracker(); }
++		else { autoConnectFromConfig(); }
++	}
++	if ( ticks % (TICKS_PER_SECOND / 2) == 0 ) { pollTrackerConnect(); }
++	if ( !g_ready && ticks % TICKS_PER_SECOND == 0 ) { writeConnectStatus(); }
 +	if ( !g_started ) { return; }
 +	checkReady();
 +	if ( !g_ready ) { return; }
@@ -3239,6 +3614,8 @@ index 0000000..c493a87
 +void onMonsterInit(Entity* my, Stat* myStats)
 +{
 +	if ( !g_ready || !my || !myStats || multiplayer == CLIENT ) { return; }
++
++	if ( myStats->type == SHOPKEEPER ) { rerollItemList(&myStats->inventory); } // Randomize Loot
 +
 +	// Shopkeepers stock an Archipelago item while shop checks remain.
 +	if ( myStats->type == SHOPKEEPER && g_slot.shop_checks > 0
@@ -3797,7 +4174,9 @@ index 0000000..c493a87
 +
 +void onChestCreated(Entity* chest)
 +{
-+	if ( !chest || chest->behavior != &actChest || !chest->children.first || !apItemAvailable() ) { return; }
++	if ( !chest || chest->behavior != &actChest || !chest->children.first ) { return; }
++	rerollItemList((list_t*)chest->children.first->element); // Randomize Loot
++	if ( !apItemAvailable() ) { return; }
 +	if ( g_floorReady ) { g_attemptApMade = 0; g_floorReady = false; } // first chest of a new floor
 +	bool restart = g_restartPending;
 +	if ( restart && g_attemptApMade >= g_restartApBudget ) { return; }
@@ -4278,6 +4657,25 @@ index 0000000..c493a87
 +	}
 +}
 +
++bool holidayThemeAllowed()
++{
++	// Barony's holiday themes (Halloween, Christmas) replace the music and art; off unless
++	// archipelago.cfg has holiday_theme=1.
++	static int allowed = -1;
++	if ( allowed < 0 )
++	{
++		allowed = 0;
++		std::ifstream in("archipelago.cfg");
++		std::string line;
++		while ( in && std::getline(in, line) )
++		{
++			if ( !line.empty() && line.back() == '\r' ) { line.pop_back(); }
++			if ( line == "holiday_theme=1" || line == "holiday_theme=true" ) { allowed = 1; }
++		}
++	}
++	return allowed == 1;
++}
++
 +bool isConnected()
 +{
 +	return g_ready && AP_GetConnectionStatus() == AP_ConnectionStatus::Authenticated;
@@ -4297,10 +4695,10 @@ index 0000000..c493a87
 +} // namespace AP
 diff --git a/src/archipelago_barony.hpp b/src/archipelago_barony.hpp
 new file mode 100644
-index 0000000..66afd87
+index 0000000..07e1980
 --- /dev/null
 +++ b/src/archipelago_barony.hpp
-@@ -0,0 +1,118 @@
+@@ -0,0 +1,119 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client.
@@ -4414,6 +4812,7 @@ index 0000000..66afd87
 +	// engine/audio/music.cpp, playMusic(): Music Mods. Takes and returns an FMOD::Sound*: the track to
 +	// play, which may be a mod's version of the same track.
 +	void* pickMusicVersion(void* sound);
++	bool holidayThemeAllowed(); // Barony's Halloween/Christmas themes, off unless archipelago.cfg says holiday_theme=1
 +
 +	// Status for the console and the UI.
 +	bool isConnected();
@@ -4624,7 +5023,7 @@ index ccbe0af..9e022e3 100644
  	if (players[clientnum] && players[clientnum]->entity)
  	{
 diff --git a/src/files.cpp b/src/files.cpp
-index 12ae3dd..a7f9ac0 100644
+index 12ae3dd..f801f09 100644
 --- a/src/files.cpp
 +++ b/src/files.cpp
 @@ -22,6 +22,9 @@
@@ -4637,7 +5036,17 @@ index 12ae3dd..a7f9ac0 100644
  #include "engine/audio/sound.hpp"
  #include "entity.hpp"
  #include "book.hpp"
-@@ -2620,6 +2623,44 @@ int loadMap(const char* filename2, map_t* destmap, list_t* entlist, list_t* crea
+@@ -55,6 +58,9 @@ HolidayTheme getCurrentHoliday(bool force) {
+     if (*cvar_disableHoliday && !force) {
+         return HolidayTheme::THEME_NONE;
+     }
++    if (!AP::holidayThemeAllowed() && !*cvar_forceHoliday) { // Archipelago: holiday themes off unless holiday_theme=1
++        return HolidayTheme::THEME_NONE;
++    }
+     if (*cvar_forceHoliday) {
+         const int holiday = std::clamp(*cvar_forceHoliday, 0, (int)HolidayTheme::THEME_MAX - 1);
+         return static_cast<HolidayTheme>(holiday);
+@@ -2620,6 +2626,44 @@ int loadMap(const char* filename2, map_t* destmap, list_t* entlist, list_t* crea
          }
      }
  
@@ -4682,7 +5091,7 @@ index 12ae3dd..a7f9ac0 100644
  	for (c = 0; c < numentities; c++)
  	{
  		fp->read(&sprite, sizeof(Sint32), 1);
-@@ -3763,6 +3804,9 @@ int physfsLoadMapFile(int levelToLoad, Uint32 seed, bool useRandSeed, int* check
+@@ -3763,6 +3807,9 @@ int physfsLoadMapFile(int levelToLoad, Uint32 seed, bool useRandSeed, int* check
  		printlog("Maps directory: %s", mapsDirectory.c_str());
  		std::vector<std::string> levelsList = getLinesFromDataFile(mapsDirectory);
  		line = levelsList.front();
