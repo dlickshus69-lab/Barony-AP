@@ -77,6 +77,7 @@ namespace AP
 	int scaleFloorEntities(int count);
 	int currentFloorScale();           // 100 normal, 120/140 on a bigger generated floor  // this floor's Floor Key (a marked skeleton key)
 	int apItemModel();                 // model index, or -1 if the model didn't load
+	int floorKeyModel();               // the Floor Key's own model, or -1
 	const char* apItemIconPath();
 	const char* apItemName(bool withArticle);
 	// init.cpp, right after the game's models load: adds the Archipelago model.

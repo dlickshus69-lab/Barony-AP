@@ -1,19 +1,19 @@
-From dc07765dfddbe3f3255448f93c4ecbbf433e005c Mon Sep 17 00:00:00 2001
+From e88d3c005ead0f46d109357a8e4916a728999245 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
 
 ---
  CMakeLists.txt                    |   32 +
- src/BaronyAPTracker.cpp           |  412 ++++
+ src/BaronyAPTracker.cpp           |  419 ++++
  src/CMakeLists.txt                |    1 +
  src/actchest.cpp                  |    7 +
  src/actgeneral.cpp                |    2 +
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 3344 +++++++++++++++++++++++++++++
- src/archipelago_barony.hpp        |  114 +
+ src/archipelago_barony.cpp        | 3417 +++++++++++++++++++++++++++++
+ src/archipelago_barony.hpp        |  115 +
  src/archipelago_ids.hpp           |  133 ++
  src/charclass.cpp                 |    4 +
  src/engine/audio/music.cpp        |    4 +
@@ -22,14 +22,14 @@ Subject: [PATCH] Archipelago client hooks
  src/game.cpp                      |    6 +
  src/init.cpp                      |    6 +
  src/init_game.cpp                 |    6 +
- src/interface/playerinventory.cpp |    5 +
- src/items.cpp                     |   25 +
+ src/interface/playerinventory.cpp |    9 +
+ src/items.cpp                     |   29 +
  src/light.cpp                     |    3 +
  src/maps.cpp                      |   34 +
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   10 +
  src/ui/MainMenu.cpp               |    5 +-
- 25 files changed, 4217 insertions(+), 4 deletions(-)
+ 25 files changed, 4306 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -80,10 +80,10 @@ index 4e9ed8f..c2b0e9a 100644
      # Only for MinGW...
 diff --git a/src/BaronyAPTracker.cpp b/src/BaronyAPTracker.cpp
 new file mode 100644
-index 0000000..f180894
+index 0000000..aec03d4
 --- /dev/null
 +++ b/src/BaronyAPTracker.cpp
-@@ -0,0 +1,412 @@
+@@ -0,0 +1,419 @@
 +// Barony Archipelago tracker window.
 +//
 +// Barony (the Archipelago build) starts this when it connects, and writes
@@ -283,6 +283,13 @@ index 0000000..f180894
 +					std::wstring compass = widen(g_state.values["keycompass"]);
 +					text(dc, 14, y, compass.empty() ? L"Floor Key: not found yet" : L"Floor Key: " + compass, GOLD, g_bodyFont);
 +					y += 24;
++					int left = num("enemiesleft");
++					if ( left > 0 )
++					{
++						swprintf(buf, 256, L"  or defeat all %d enemies left", left);
++						text(dc, 14, y, buf, DIM, g_bodyFont);
++						y += 22;
++					}
 +				}
 +				else if ( key == 1 ) { text(dc, 14, y, L"Floor Key: found, the stairs are open", GOOD, g_bodyFont); y += 24; }
 +				int mino = num("minotaur");
@@ -345,7 +352,7 @@ index 0000000..f180894
 +				int boxH = g_lootShort ? 44 : 44 + 6 * 21 + 14 + 22 + 22;
 +				drawPanel(dc, 10, y, rc.right - 20, boxH);
 +				g_lootBox = RECT{ 10, y, rc.right - 10, y + boxH };
-+				text(dc, 20, y + 10, g_lootShort ? L"Other loot on this floor  (F4: more)" : L"Other loot on this floor", STEEL, g_bodyFont);
++				text(dc, 20, y + 10, g_lootShort ? L"Normal loot on this floor  (F4: more)" : L"Normal loot on this floor", STEEL, g_bodyFont);
 +				swprintf(buf, 256, L"%d", num("loot_total"));
 +				text(dc, rc.right - 60, y + 6, buf, num("loot_total") ? GOOD : DIM, g_titleFont);
 +				if ( !g_lootShort )
@@ -650,10 +657,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..334e894
+index 0000000..c62afaa
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,3344 @@
+@@ -0,0 +1,3417 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -1980,6 +1987,19 @@ index 0000000..334e894
 +		};
 +		int sx = (int)(pl->x / 16), sy = (int)(pl->y / 16);
 +		if ( sx < 0 || sy < 0 || sx >= w || sy >= h ) { return false; }
++		// Gates (portcullises) only open with a lever, which may be hidden: treat them as walls, so
++		// nothing goes behind one. Doors still count as open (they can be opened, picked or kicked in).
++		std::vector<bool> gate(w * h, false);
++		if ( map.entities )
++		{
++			for ( node_t* node = map.entities->first; node; node = node->next )
++			{
++				Entity* e = (Entity*)node->element;
++				if ( !e || e->behavior != &actGate ) { continue; }
++				int gx = (int)(e->x / 16), gy = (int)(e->y / 16);
++				if ( gx >= 0 && gy >= 0 && gx < w && gy < h ) { gate[gx + gy * w] = true; }
++			}
++		}
 +		std::vector<int> dist(w * h, -1);
 +		std::vector<int> queue;
 +		queue.push_back(sx + sy * w);
@@ -1992,7 +2012,7 @@ index 0000000..334e894
 +			{
 +				int nx = cx + dx[k], ny = cy + dy[k];
 +				if ( nx < 0 || ny < 0 || nx >= w || ny >= h || dist[nx + ny * w] >= 0 ) { continue; }
-+				if ( !walkable(nx, ny) ) { continue; }
++				if ( !walkable(nx, ny) || gate[nx + ny * w] ) { continue; }
 +				dist[nx + ny * w] = dist[queue[q]] + 1;
 +				queue.push_back(nx + ny * w);
 +			}
@@ -2059,6 +2079,8 @@ index 0000000..334e894
 +		int least = 30 * scale / 100;
 +		bool on = minotaurSecs == -2 || (minotaurSecs >= 0 && minotaurSecs <= when && g_minotaurElapsed >= 30);
 +		if ( minotaurSecs >= 0 && minotaurSecs <= least ) { on = true; }
++		// Any floor: after 5 minutes without finding it, the compass helps out.
++		if ( ticks - g_floorStartTicks >= (Uint32)(TICKS_PER_SECOND * 300) ) { on = true; }
 +		if ( !g_floorNeedsKey || g_floorKeyFound || !on ) { return; }
 +		Entity* pl = players[clientnum] ? players[clientnum]->entity : nullptr;
 +		if ( !pl || !map.entities ) { return; }
@@ -2079,10 +2101,57 @@ index 0000000..334e894
 +		}
 +	}
 +
-+	// Picked up? Then the stairs open. Lost (a monster took it, it fell somewhere)? Put out a new one.
++	int g_enemiesLeft = -1; // hostile monsters still alive on this floor (-1 = not counted)
++
++	int countHostileEnemies()
++	{
++		if ( !map.creatures ) { return 0; }
++		Entity* pl = players[clientnum] ? players[clientnum]->entity : nullptr;
++		int n = 0;
++		for ( node_t* node = map.creatures->first; node; node = node->next )
++		{
++			Entity* e = (Entity*)node->element;
++			if ( !e || e->behavior != &actMonster ) { continue; }
++			Stat* st = e->getStats();
++			if ( !st || st->HP <= 0 ) { continue; }
++			if ( st->type == SHOPKEEPER || st->type == NOTHING || st->type == MINOTAUR ) { continue; }
++			if ( e->monsterAllySummonRank != 0 || e->monsterAllyGetPlayerLeader() ) { continue; } // your allies
++			if ( pl && e->checkFriend(pl) ) { continue; } // friendly people
++			++n;
++		}
++		return n;
++	}
++
++	void removeFloorKeyEntities()
++	{
++		if ( !map.entities ) { return; }
++		for ( node_t* node = map.entities->first; node; )
++		{
++			node_t* next = node->next;
++			if ( isFloorKeyEntity((Entity*)node->element) ) { list_RemoveNode(node); }
++			node = next;
++		}
++	}
++
++	// Picked up? Then the stairs open. Every enemy dead? That opens them too. Lost (a monster took it,
++	// it fell somewhere)? Put out a new one.
 +	void updateFloorKey()
 +	{
-+		if ( !g_floorNeedsKey || g_floorKeyFound ) { return; }
++		if ( !g_floorNeedsKey || g_floorKeyFound ) { g_enemiesLeft = -1; return; }
++		if ( ticks - g_floorStartTicks > (Uint32)(TICKS_PER_SECOND * 5) ) // monsters are set up by now
++		{
++			g_enemiesLeft = countHostileEnemies();
++			if ( g_enemiesLeft == 0 )
++			{
++				g_floorKeyFound = true;
++				removeFloorKeyEntities();
++				messagePlayerColor(clientnum, MESSAGE_HINT, makeColorRGB(120, 230, 120),
++					"Every enemy on this floor is defeated! The stairs down are open.");
++				addLog("Defeated every enemy: the stairs are open.", makeColorRGB(120, 230, 120));
++				playSound(91, 64);
++				return;
++			}
++		}
 +		for ( int p = 0; p < MAXPLAYERS; ++p )
 +		{
 +			if ( client_disconnected[p] || !stats[p] ) { continue; }
@@ -2750,6 +2819,7 @@ index 0000000..334e894
 +		out << "minotaur=" << g_minotaurSecs << "\n";
 +		out << "floorkey=" << (!g_floorNeedsKey ? 2 : g_floorKeyFound ? 1 : 0) << "\n";
 +		out << "keycompass=" << g_keyCompass << "\n";
++		out << "enemiesleft=" << g_enemiesLeft << "\n";
 +		{
 +			int per = std::max(1, g_slot.kill_check_interval);
 +			out << "es_mode=" << g_slot.enemy_sanity << "\nes_left=" << uncheckedCount(ap_ids::KILL_OFFSET, g_slot.kill_checks)
@@ -3337,7 +3407,31 @@ index 0000000..334e894
 +namespace
 +{
 +	int g_apModelIndex = -1;
++	int g_floorKeyModelIndex = -1;
 +	constexpr const char* AP_MODEL_PATH = "models/items/AP_Item.vox";
++	constexpr const char* FLOOR_KEY_MODEL_PATH = "models/items/AP_FloorKey.vox";
++
++	// Adds one .vox model after the game's own; returns its index, or -1.
++	int addModel(const char* file)
++	{
++		if ( !PHYSFS_getRealDir(file) ) { printlog("[Archipelago] %s not found.", file); return -1; }
++		char path[128];
++		snprintf(path, sizeof(path), "%s", file);
++		voxel_t* model = loadVoxel(path);
++		if ( !model ) { return -1; }
++		voxel_t** grown = (voxel_t**)realloc(models, sizeof(voxel_t*) * (nummodels + 1));
++		if ( grown ) { models = grown; }
++		polymodel_t* grownPoly = (polymodel_t*)realloc(polymodels, sizeof(polymodel_t) * (nummodels + 1));
++		if ( grownPoly ) { polymodels = grownPoly; }
++		if ( !grown || !grownPoly ) { return -1; }
++		int index = (int)nummodels;
++		models[index] = model;
++		memset(&polymodels[index], 0, sizeof(polymodel_t));
++		nummodels += 1;
++		generatePolyModels(index, index + 1, false);
++		printlog("[Archipelago] %s loaded as model %d.", file, index);
++		return index;
++	}
 +}
 +
 +bool isMarkedEnemy(const Entity* entity)
@@ -3354,6 +3448,7 @@ index 0000000..334e894
 +}
 +
 +int apItemModel() { return g_apModelIndex; }
++int floorKeyModel() { return g_floorKeyModelIndex; }
 +const char* apItemIconPath() { return "items/images/AP_Item.png"; }
 +const char* apItemName(bool withArticle) { return withArticle ? "an Archipelago item" : "Archipelago item"; }
 +
@@ -3512,27 +3607,8 @@ index 0000000..334e894
 +{
 +	makeApTitle();
 +	checkSteamDlc();
-+	if ( !PHYSFS_getRealDir(AP_MODEL_PATH) )
-+	{
-+		printlog("[Archipelago] %s not found; the Archipelago item will look like a luckstone.", AP_MODEL_PATH);
-+		return;
-+	}
-+	char path[128];
-+	snprintf(path, sizeof(path), "%s", AP_MODEL_PATH);
-+	voxel_t* model = loadVoxel(path);
-+	if ( !model ) { return; }
-+	voxel_t** grown = (voxel_t**)realloc(models, sizeof(voxel_t*) * (nummodels + 1));
-+	polymodel_t* grownPoly = (polymodel_t*)realloc(polymodels, sizeof(polymodel_t) * (nummodels + 1));
-+	if ( grown ) { models = grown; }
-+	if ( grownPoly ) { polymodels = grownPoly; }
-+	if ( !grown || !grownPoly ) { return; }
-+	int index = (int)nummodels;
-+	models[index] = model;
-+	memset(&polymodels[index], 0, sizeof(polymodel_t));
-+	nummodels += 1;
-+	generatePolyModels(index, index + 1, false);
-+	g_apModelIndex = index;
-+	printlog("[Archipelago] Archipelago item model loaded as model %d.", index);
++	g_apModelIndex = addModel(AP_MODEL_PATH);
++	g_floorKeyModelIndex = addModel(FLOOR_KEY_MODEL_PATH);
 +}
 +
 +// ---------------------------------------------------------------- Enemy Randomizer
@@ -3900,6 +3976,10 @@ index 0000000..334e894
 +		if ( g_floorNeedsKey && !g_floorKeyFound )
 +		{
 +			std::string keyLine = g_keyCompass.empty() ? std::string("Find the Floor Key") : "Floor Key: " + g_keyCompass;
++			if ( g_enemiesLeft > 0 )
++			{
++				keyLine += "  (or defeat all " + std::to_string(g_enemiesLeft) + " enemies)";
++			}
 +			drawText(keyLine.c_str(), g_keyCompass.empty() ? HUD_FONT : BIG_FONT, makeColorRGB(255, 200, 90), 38, row);
 +			row += g_keyCompass.empty() ? 18 : 22;
 +		}
@@ -4000,10 +4080,10 @@ index 0000000..334e894
 +} // namespace AP
 diff --git a/src/archipelago_barony.hpp b/src/archipelago_barony.hpp
 new file mode 100644
-index 0000000..055f494
+index 0000000..e104d1d
 --- /dev/null
 +++ b/src/archipelago_barony.hpp
-@@ -0,0 +1,114 @@
+@@ -0,0 +1,115 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client.
@@ -4083,6 +4163,7 @@ index 0000000..055f494
 +	int scaleFloorEntities(int count);
 +	int currentFloorScale();           // 100 normal, 120/140 on a bigger generated floor  // this floor's Floor Key (a marked skeleton key)
 +	int apItemModel();                 // model index, or -1 if the model didn't load
++	int floorKeyModel();               // the Floor Key's own model, or -1
 +	const char* apItemIconPath();
 +	const char* apItemName(bool withArticle);
 +	// init.cpp, right after the game's models load: adds the Archipelago model.
@@ -4484,7 +4565,7 @@ index 434719b..fd0398c 100644
  		const auto& ach = it.value.GetObject();
  		auto& achData = Compendium_t::achievements[achName];
 diff --git a/src/interface/playerinventory.cpp b/src/interface/playerinventory.cpp
-index 15a5614..c81c2f2 100644
+index 15a5614..78ce660 100644
 --- a/src/interface/playerinventory.cpp
 +++ b/src/interface/playerinventory.cpp
 @@ -10,6 +10,7 @@
@@ -4495,7 +4576,7 @@ index 15a5614..c81c2f2 100644
  #include "../draw.hpp"
  #include "../game.hpp"
  #include "../stat.hpp"
-@@ -2284,6 +2285,10 @@ void select_inventory_slot(int player, int currentx, int currenty, int diffx, in
+@@ -2284,6 +2285,14 @@ void select_inventory_slot(int player, int currentx, int currenty, int diffx, in
  
  std::string getItemSpritePath(const int player, Item& item)
  {
@@ -4503,11 +4584,15 @@ index 15a5614..c81c2f2 100644
 +	{
 +		return AP::apItemIconPath();
 +	}
++	if ( AP::isFloorKey(&item) ) // Archipelago: the Floor Key's own icon
++	{
++		return "items/images/AP_FloorKey.png";
++	}
  	if ( item.type == SPELL_ITEM )
  	{
  		return ItemTooltips.getSpellIconPath(player, item, -1);
 diff --git a/src/items.cpp b/src/items.cpp
-index 879c6ea..6b5384e 100644
+index 879c6ea..c1d4fcb 100644
 --- a/src/items.cpp
 +++ b/src/items.cpp
 @@ -13,6 +13,7 @@
@@ -4552,13 +4637,17 @@ index 879c6ea..6b5384e 100644
  	if ( type >= 0 && type < NUMITEMS )
  	{
  		if ( identified )
-@@ -1273,6 +1294,10 @@ Sint32 itemModel(const Item* const item, bool shortModel, Entity* creature)
+@@ -1273,6 +1294,14 @@ Sint32 itemModel(const Item* const item, bool shortModel, Entity* creature)
  	{
  		return 0;
  	}
 +	if ( AP::isApItem(item) && AP::apItemModel() >= 0 ) // Archipelago: logo model
 +	{
 +		return AP::apItemModel();
++	}
++	if ( AP::isFloorKey(item) && AP::floorKeyModel() >= 0 ) // Archipelago: the Floor Key's own model
++	{
++		return AP::floorKeyModel();
 +	}
  
  	if ( creature && creature->behavior == &actMonster )

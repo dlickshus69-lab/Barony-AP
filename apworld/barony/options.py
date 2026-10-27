@@ -168,6 +168,9 @@ class FloorKeys(DefaultOnToggle):
     until you find it. It's part of your own game only: it is never an Archipelago item, nobody can send
     it to you, and you never wait on another game for it. The starting floor, secret areas and boss
     floors don't have one. If you die and the floor restarts, a key you already found stays found.
+    Two ways to open the stairs: pick up the Floor Key (a gold key with the Archipelago colors in its
+    ring), or defeat every enemy on the floor. The key is always put somewhere you can walk to (never
+    behind a gate). After 5 minutes on a floor without it, you're shown which way the key is.
     On Minotaur floors you're shown how far the key is and which way, from the time set by Key Compass
     Time.
     """

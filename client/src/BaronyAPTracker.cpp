@@ -197,6 +197,13 @@ namespace
 					std::wstring compass = widen(g_state.values["keycompass"]);
 					text(dc, 14, y, compass.empty() ? L"Floor Key: not found yet" : L"Floor Key: " + compass, GOLD, g_bodyFont);
 					y += 24;
+					int left = num("enemiesleft");
+					if ( left > 0 )
+					{
+						swprintf(buf, 256, L"  or defeat all %d enemies left", left);
+						text(dc, 14, y, buf, DIM, g_bodyFont);
+						y += 22;
+					}
 				}
 				else if ( key == 1 ) { text(dc, 14, y, L"Floor Key: found, the stairs are open", GOOD, g_bodyFont); y += 24; }
 				int mino = num("minotaur");
@@ -259,7 +266,7 @@ namespace
 				int boxH = g_lootShort ? 44 : 44 + 6 * 21 + 14 + 22 + 22;
 				drawPanel(dc, 10, y, rc.right - 20, boxH);
 				g_lootBox = RECT{ 10, y, rc.right - 10, y + boxH };
-				text(dc, 20, y + 10, g_lootShort ? L"Other loot on this floor  (F4: more)" : L"Other loot on this floor", STEEL, g_bodyFont);
+				text(dc, 20, y + 10, g_lootShort ? L"Normal loot on this floor  (F4: more)" : L"Normal loot on this floor", STEEL, g_bodyFont);
 				swprintf(buf, 256, L"%d", num("loot_total"));
 				text(dc, rc.right - 60, y + 6, buf, num("loot_total") ? GOOD : DIM, g_titleFont);
 				if ( !g_lootShort )

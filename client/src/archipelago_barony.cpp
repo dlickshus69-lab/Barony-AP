@@ -1324,6 +1324,19 @@ namespace
 		};
 		int sx = (int)(pl->x / 16), sy = (int)(pl->y / 16);
 		if ( sx < 0 || sy < 0 || sx >= w || sy >= h ) { return false; }
+		// Gates (portcullises) only open with a lever, which may be hidden: treat them as walls, so
+		// nothing goes behind one. Doors still count as open (they can be opened, picked or kicked in).
+		std::vector<bool> gate(w * h, false);
+		if ( map.entities )
+		{
+			for ( node_t* node = map.entities->first; node; node = node->next )
+			{
+				Entity* e = (Entity*)node->element;
+				if ( !e || e->behavior != &actGate ) { continue; }
+				int gx = (int)(e->x / 16), gy = (int)(e->y / 16);
+				if ( gx >= 0 && gy >= 0 && gx < w && gy < h ) { gate[gx + gy * w] = true; }
+			}
+		}
 		std::vector<int> dist(w * h, -1);
 		std::vector<int> queue;
 		queue.push_back(sx + sy * w);
@@ -1336,7 +1349,7 @@ namespace
 			{
 				int nx = cx + dx[k], ny = cy + dy[k];
 				if ( nx < 0 || ny < 0 || nx >= w || ny >= h || dist[nx + ny * w] >= 0 ) { continue; }
-				if ( !walkable(nx, ny) ) { continue; }
+				if ( !walkable(nx, ny) || gate[nx + ny * w] ) { continue; }
 				dist[nx + ny * w] = dist[queue[q]] + 1;
 				queue.push_back(nx + ny * w);
 			}
@@ -1403,6 +1416,8 @@ namespace
 		int least = 30 * scale / 100;
 		bool on = minotaurSecs == -2 || (minotaurSecs >= 0 && minotaurSecs <= when && g_minotaurElapsed >= 30);
 		if ( minotaurSecs >= 0 && minotaurSecs <= least ) { on = true; }
+		// Any floor: after 5 minutes without finding it, the compass helps out.
+		if ( ticks - g_floorStartTicks >= (Uint32)(TICKS_PER_SECOND * 300) ) { on = true; }
 		if ( !g_floorNeedsKey || g_floorKeyFound || !on ) { return; }
 		Entity* pl = players[clientnum] ? players[clientnum]->entity : nullptr;
 		if ( !pl || !map.entities ) { return; }
@@ -1423,10 +1438,57 @@ namespace
 		}
 	}
 
-	// Picked up? Then the stairs open. Lost (a monster took it, it fell somewhere)? Put out a new one.
+	int g_enemiesLeft = -1; // hostile monsters still alive on this floor (-1 = not counted)
+
+	int countHostileEnemies()
+	{
+		if ( !map.creatures ) { return 0; }
+		Entity* pl = players[clientnum] ? players[clientnum]->entity : nullptr;
+		int n = 0;
+		for ( node_t* node = map.creatures->first; node; node = node->next )
+		{
+			Entity* e = (Entity*)node->element;
+			if ( !e || e->behavior != &actMonster ) { continue; }
+			Stat* st = e->getStats();
+			if ( !st || st->HP <= 0 ) { continue; }
+			if ( st->type == SHOPKEEPER || st->type == NOTHING || st->type == MINOTAUR ) { continue; }
+			if ( e->monsterAllySummonRank != 0 || e->monsterAllyGetPlayerLeader() ) { continue; } // your allies
+			if ( pl && e->checkFriend(pl) ) { continue; } // friendly people
+			++n;
+		}
+		return n;
+	}
+
+	void removeFloorKeyEntities()
+	{
+		if ( !map.entities ) { return; }
+		for ( node_t* node = map.entities->first; node; )
+		{
+			node_t* next = node->next;
+			if ( isFloorKeyEntity((Entity*)node->element) ) { list_RemoveNode(node); }
+			node = next;
+		}
+	}
+
+	// Picked up? Then the stairs open. Every enemy dead? That opens them too. Lost (a monster took it,
+	// it fell somewhere)? Put out a new one.
 	void updateFloorKey()
 	{
-		if ( !g_floorNeedsKey || g_floorKeyFound ) { return; }
+		if ( !g_floorNeedsKey || g_floorKeyFound ) { g_enemiesLeft = -1; return; }
+		if ( ticks - g_floorStartTicks > (Uint32)(TICKS_PER_SECOND * 5) ) // monsters are set up by now
+		{
+			g_enemiesLeft = countHostileEnemies();
+			if ( g_enemiesLeft == 0 )
+			{
+				g_floorKeyFound = true;
+				removeFloorKeyEntities();
+				messagePlayerColor(clientnum, MESSAGE_HINT, makeColorRGB(120, 230, 120),
+					"Every enemy on this floor is defeated! The stairs down are open.");
+				addLog("Defeated every enemy: the stairs are open.", makeColorRGB(120, 230, 120));
+				playSound(91, 64);
+				return;
+			}
+		}
 		for ( int p = 0; p < MAXPLAYERS; ++p )
 		{
 			if ( client_disconnected[p] || !stats[p] ) { continue; }
@@ -2094,6 +2156,7 @@ namespace
 		out << "minotaur=" << g_minotaurSecs << "\n";
 		out << "floorkey=" << (!g_floorNeedsKey ? 2 : g_floorKeyFound ? 1 : 0) << "\n";
 		out << "keycompass=" << g_keyCompass << "\n";
+		out << "enemiesleft=" << g_enemiesLeft << "\n";
 		{
 			int per = std::max(1, g_slot.kill_check_interval);
 			out << "es_mode=" << g_slot.enemy_sanity << "\nes_left=" << uncheckedCount(ap_ids::KILL_OFFSET, g_slot.kill_checks)
@@ -2681,7 +2744,31 @@ int adjustMinotaurTime(int ticks)
 namespace
 {
 	int g_apModelIndex = -1;
+	int g_floorKeyModelIndex = -1;
 	constexpr const char* AP_MODEL_PATH = "models/items/AP_Item.vox";
+	constexpr const char* FLOOR_KEY_MODEL_PATH = "models/items/AP_FloorKey.vox";
+
+	// Adds one .vox model after the game's own; returns its index, or -1.
+	int addModel(const char* file)
+	{
+		if ( !PHYSFS_getRealDir(file) ) { printlog("[Archipelago] %s not found.", file); return -1; }
+		char path[128];
+		snprintf(path, sizeof(path), "%s", file);
+		voxel_t* model = loadVoxel(path);
+		if ( !model ) { return -1; }
+		voxel_t** grown = (voxel_t**)realloc(models, sizeof(voxel_t*) * (nummodels + 1));
+		if ( grown ) { models = grown; }
+		polymodel_t* grownPoly = (polymodel_t*)realloc(polymodels, sizeof(polymodel_t) * (nummodels + 1));
+		if ( grownPoly ) { polymodels = grownPoly; }
+		if ( !grown || !grownPoly ) { return -1; }
+		int index = (int)nummodels;
+		models[index] = model;
+		memset(&polymodels[index], 0, sizeof(polymodel_t));
+		nummodels += 1;
+		generatePolyModels(index, index + 1, false);
+		printlog("[Archipelago] %s loaded as model %d.", file, index);
+		return index;
+	}
 }
 
 bool isMarkedEnemy(const Entity* entity)
@@ -2698,6 +2785,7 @@ bool isApItem(const Item* item)
 }
 
 int apItemModel() { return g_apModelIndex; }
+int floorKeyModel() { return g_floorKeyModelIndex; }
 const char* apItemIconPath() { return "items/images/AP_Item.png"; }
 const char* apItemName(bool withArticle) { return withArticle ? "an Archipelago item" : "Archipelago item"; }
 
@@ -2856,27 +2944,8 @@ void loadExtraModels()
 {
 	makeApTitle();
 	checkSteamDlc();
-	if ( !PHYSFS_getRealDir(AP_MODEL_PATH) )
-	{
-		printlog("[Archipelago] %s not found; the Archipelago item will look like a luckstone.", AP_MODEL_PATH);
-		return;
-	}
-	char path[128];
-	snprintf(path, sizeof(path), "%s", AP_MODEL_PATH);
-	voxel_t* model = loadVoxel(path);
-	if ( !model ) { return; }
-	voxel_t** grown = (voxel_t**)realloc(models, sizeof(voxel_t*) * (nummodels + 1));
-	polymodel_t* grownPoly = (polymodel_t*)realloc(polymodels, sizeof(polymodel_t) * (nummodels + 1));
-	if ( grown ) { models = grown; }
-	if ( grownPoly ) { polymodels = grownPoly; }
-	if ( !grown || !grownPoly ) { return; }
-	int index = (int)nummodels;
-	models[index] = model;
-	memset(&polymodels[index], 0, sizeof(polymodel_t));
-	nummodels += 1;
-	generatePolyModels(index, index + 1, false);
-	g_apModelIndex = index;
-	printlog("[Archipelago] Archipelago item model loaded as model %d.", index);
+	g_apModelIndex = addModel(AP_MODEL_PATH);
+	g_floorKeyModelIndex = addModel(FLOOR_KEY_MODEL_PATH);
 }
 
 // ---------------------------------------------------------------- Enemy Randomizer
@@ -3244,6 +3313,10 @@ void drawHud()
 		if ( g_floorNeedsKey && !g_floorKeyFound )
 		{
 			std::string keyLine = g_keyCompass.empty() ? std::string("Find the Floor Key") : "Floor Key: " + g_keyCompass;
+			if ( g_enemiesLeft > 0 )
+			{
+				keyLine += "  (or defeat all " + std::to_string(g_enemiesLeft) + " enemies)";
+			}
 			drawText(keyLine.c_str(), g_keyCompass.empty() ? HUD_FONT : BIG_FONT, makeColorRGB(255, 200, 90), 38, row);
 			row += g_keyCompass.empty() ? 18 : 22;
 		}

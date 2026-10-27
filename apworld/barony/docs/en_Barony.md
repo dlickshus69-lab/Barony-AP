@@ -34,7 +34,8 @@ Defeat Baron Herx, the Devil, or the twin liches of the Sanctum, depending on yo
 
 With Floor Keys on, every floor from floor 1 has a key lying somewhere you can walk to. The stairs down
 stay locked until you pick it up. It's only part of your own game: never an Archipelago item, so you
-never wait on someone else for it. The starting floor, secret areas and boss floors don't need one.
+never wait on someone else for it. The starting floor, secret areas and boss floors don't need one. Defeating every enemy on the floor also opens the stairs. The key looks like a gold key with the
+Archipelago colors in its ring; after 5 minutes on a floor you're shown which way it is.
 
 On a Minotaur floor, once the Minotaur is 30 seconds away (or already there), the screen and the
 tracker point you at the key: "Floor Key: 18 tiles NE" (directions as on the map, north up).
