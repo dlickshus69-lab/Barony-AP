@@ -62,9 +62,10 @@ nothing to dig or float with, so shuffled floors never lock you out of a secret 
 
 ## Traps
 
-Traps listed in Trap Countdown Traps warn you and count down before they go off. Polymorph and
-Blindness last as long as their duration options say. A trap never goes off between floors or on the
-death screen; it waits until you're back in the dungeon.
+Trap Chance sets how often filler becomes a trap, and each trap has its own weight slider (0 turns it
+off), so you can make the Minotaur rarer without turning it off. Polymorph and Blindness last as long
+as their duration options say. A trap never goes off between floors or on the death screen; it waits
+until you're back in the dungeon.
 
 ## How do checkpoints work?
 

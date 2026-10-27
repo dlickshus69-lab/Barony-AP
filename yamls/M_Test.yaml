@@ -50,18 +50,15 @@ Barony:
 
   # Traps
   trap_chance: 50
-  enabled_traps:
-  - Ambush Trap
-  - Blindness Trap
-  - Curse Trap
-  - Darkness Trap
-  - Fumble Trap
-  - Hunger Trap
-  - Minotaur Trap
-  - Polymorph Trap
-  - Teleport Trap
-  trap_countdown_traps: []
-  trap_countdown: 10
+  minotaur_trap_weight: 10
+  ambush_trap_weight: 10
+  polymorph_trap_weight: 10
+  fumble_trap_weight: 10
+  blindness_trap_weight: 10
+  teleport_trap_weight: 10
+  hunger_trap_weight: 10
+  darkness_trap_weight: 10
+  curse_trap_weight: 10
   polymorph_trap_duration: 30
   blindness_trap_duration: 15
 

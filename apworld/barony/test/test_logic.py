@@ -44,7 +44,7 @@ class TestFillerAndTraps(BaronyTestBase):
     options = {
         "trap_chance": 0, "xp_boost_weight": 0, "gold_pouch_weight": 0, "healing_potion_weight": 100,
         "food_ration_weight": 0, "random_item_weight": 0,
-        "trap_countdown_traps": ["Blindness Trap", "Minotaur Trap"], "trap_countdown": 7,
+        "minotaur_trap_weight": 0, "curse_trap_weight": 0,
         "polymorph_trap_duration": 60, "blindness_trap_duration": 20,
         "boss_level_scaling": "stronger_only", "death_penalty": "xp", "minotaur_time": 150, "death_link_mode": "lose_a_life",
     }
@@ -55,8 +55,6 @@ class TestFillerAndTraps(BaronyTestBase):
 
     def test_slot_data(self) -> None:
         slot = self.world.fill_slot_data()
-        self.assertEqual(slot["trap_countdown_mask"], (1 << 0) | (1 << 4))
-        self.assertEqual(slot["trap_countdown"], 7)
         self.assertEqual(slot["blindness_trap_duration"], 20)
         self.assertEqual(slot["boss_level_scaling"], 1)
         self.assertEqual(slot["death_penalty"], 3)
@@ -67,3 +65,16 @@ class TestFillerAndTraps(BaronyTestBase):
         from ..options import DeathPenalty
         names = [DeathPenalty.get_option_name(v) for v in DeathPenalty.name_lookup]
         self.assertEqual(names, ["None", "Gold", "XP", "Gold and XP"])
+
+
+class TestTrapWeights(BaronyTestBase):
+    """Only traps with a weight above 0 end up in the pool."""
+    options = {
+        "trap_chance": 100, "minotaur_trap_weight": 0, "ambush_trap_weight": 0, "polymorph_trap_weight": 0,
+        "fumble_trap_weight": 0, "blindness_trap_weight": 50, "teleport_trap_weight": 0, "hunger_trap_weight": 0,
+        "darkness_trap_weight": 0, "curse_trap_weight": 0,
+    }
+
+    def test_only_weighted_traps(self) -> None:
+        traps = {item.name for item in self.multiworld.itempool if item.classification == ItemClassification.trap}
+        self.assertEqual(traps, {"Blindness Trap"})

@@ -217,10 +217,21 @@ class BaronyWorld(World):
         chance = self.options.trap_chance.value
         if self.options.difficulty.value == self.options.difficulty.option_hard:
             chance = min(100, chance * 3 // 2)
-        traps = sorted(self.options.enabled_traps.value)
-        if traps and self.random.randint(1, 100) <= chance:
-            return self.random.choice(traps)
         o = self.options
+        trap_weights = {
+            "Minotaur Trap": o.minotaur_trap_weight.value,
+            "Ambush Trap": o.ambush_trap_weight.value,
+            "Polymorph Trap": o.polymorph_trap_weight.value,
+            "Fumble Trap": o.fumble_trap_weight.value,
+            "Blindness Trap": o.blindness_trap_weight.value,
+            "Teleport Trap": o.teleport_trap_weight.value,
+            "Hunger Trap": o.hunger_trap_weight.value,
+            "Darkness Trap": o.darkness_trap_weight.value,
+            "Curse Trap": o.curse_trap_weight.value,
+        }
+        if sum(trap_weights.values()) > 0 and self.random.randint(1, 100) <= chance:
+            names = list(trap_weights)
+            return self.random.choices(names, weights=[trap_weights[n] for n in names])[0]
         weights = {
             "XP Boost": o.xp_boost_weight.value,
             "Gold Pouch": o.gold_pouch_weight.value,
@@ -319,9 +330,7 @@ class BaronyWorld(World):
             "death_link_mode": o.death_link_mode.value,
             "boss_level_scaling": o.boss_level_scaling.value,
             "minotaur_time": o.minotaur_time.value,
-            "trap_countdown_mask": sum(1 << i for i, name in enumerate(data.TRAP_ITEMS)
-                                       if name in o.trap_countdown_traps.value),
-            "trap_countdown": o.trap_countdown.value,
+            "trap_countdown_mask": 0,
             "polymorph_trap_duration": o.polymorph_trap_duration.value,
             "blindness_trap_duration": o.blindness_trap_duration.value,
             "enemy_randomizer": o.enemy_randomizer.value,

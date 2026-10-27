@@ -4,7 +4,7 @@ from Options import (
     Choice, DeathLink, OptionGroup, OptionSet, PerGameCommonOptions, Range, Toggle, DefaultOnToggle,
 )
 
-from .data import MAX_KILL_CHECKS, MAX_LEVEL_CHECK, MAX_PICKUPS, MAX_SHOP_CHECKS, TRAP_ITEMS
+from .data import MAX_KILL_CHECKS, MAX_LEVEL_CHECK, MAX_PICKUPS, MAX_SHOP_CHECKS
 
 
 # ---------------------------------------------------------------- goal & checks
@@ -458,7 +458,8 @@ class DeathLinkMode(Choice):
 class TrapChance(Range):
     """
     Percent chance that each filler item is replaced with a trap. 0 = no traps, 100 = every filler item
-    is a trap. Only the traps in Enabled Traps are used.
+    is a trap. Which trap it is comes from the trap weights below. Hard mode makes traps half again as
+    likely.
     """
     display_name = "Trap Chance"
     range_start = 0
@@ -466,17 +467,91 @@ class TrapChance(Range):
     default = 20
 
 
-class EnabledTraps(OptionSet):
+class TrapWeight(Range):
+    range_start = 0
+    range_end = 100
+    default = 10
+
+
+class MinotaurTrapWeight(TrapWeight):
     """
-    Which traps can appear. Minotaur: the Minotaur hunts you (on the next normal floor if one is already
-    coming). Ambush: a few monsters appear around you. Polymorph: you turn into a random creature for a
-    while. Fumble: you drop your weapon. Blindness: you can't see for a while. Teleport: you're sent to a
-    random spot on the floor. Hunger: you become very hungry. Darkness: the next floor is dark. Curse:
-    one piece of your gear becomes cursed.
+    How often a trap is a Minotaur Trap, compared to the other trap weights: a trap's chance is its weight
+    divided by all the trap weights added up (all at 10 = each 1 in 9). 0 = never.
+    The Minotaur comes for you, with the usual warning and countdown (on the next normal floor if one is already coming).
     """
-    display_name = "Enabled Traps"
-    valid_keys = frozenset(TRAP_ITEMS)
-    default = frozenset(TRAP_ITEMS)
+    display_name = "Minotaur Trap Weight"
+
+
+class AmbushTrapWeight(TrapWeight):
+    """
+    How often a trap is a Ambush Trap, compared to the other trap weights: a trap's chance is its weight
+    divided by all the trap weights added up (all at 10 = each 1 in 9). 0 = never.
+    Two or three monsters from your floor appear around you.
+    """
+    display_name = "Ambush Trap Weight"
+
+
+class PolymorphTrapWeight(TrapWeight):
+    """
+    How often a trap is a Polymorph Trap, compared to the other trap weights: a trap's chance is its weight
+    divided by all the trap weights added up (all at 10 = each 1 in 9). 0 = never.
+    You turn into a random creature for a while (see Polymorph Trap Duration).
+    """
+    display_name = "Polymorph Trap Weight"
+
+
+class FumbleTrapWeight(TrapWeight):
+    """
+    How often a trap is a Fumble Trap, compared to the other trap weights: a trap's chance is its weight
+    divided by all the trap weights added up (all at 10 = each 1 in 9). 0 = never.
+    You drop your weapon.
+    """
+    display_name = "Fumble Trap Weight"
+
+
+class BlindnessTrapWeight(TrapWeight):
+    """
+    How often a trap is a Blindness Trap, compared to the other trap weights: a trap's chance is its weight
+    divided by all the trap weights added up (all at 10 = each 1 in 9). 0 = never.
+    You can't see for a while (see Blindness Trap Duration).
+    """
+    display_name = "Blindness Trap Weight"
+
+
+class TeleportTrapWeight(TrapWeight):
+    """
+    How often a trap is a Teleport Trap, compared to the other trap weights: a trap's chance is its weight
+    divided by all the trap weights added up (all at 10 = each 1 in 9). 0 = never.
+    You're sent to a random spot on the floor.
+    """
+    display_name = "Teleport Trap Weight"
+
+
+class HungerTrapWeight(TrapWeight):
+    """
+    How often a trap is a Hunger Trap, compared to the other trap weights: a trap's chance is its weight
+    divided by all the trap weights added up (all at 10 = each 1 in 9). 0 = never.
+    You become very hungry.
+    """
+    display_name = "Hunger Trap Weight"
+
+
+class DarknessTrapWeight(TrapWeight):
+    """
+    How often a trap is a Darkness Trap, compared to the other trap weights: a trap's chance is its weight
+    divided by all the trap weights added up (all at 10 = each 1 in 9). 0 = never.
+    The next floor is dark.
+    """
+    display_name = "Darkness Trap Weight"
+
+
+class CurseTrapWeight(TrapWeight):
+    """
+    How often a trap is a Curse Trap, compared to the other trap weights: a trap's chance is its weight
+    divided by all the trap weights added up (all at 10 = each 1 in 9). 0 = never.
+    One piece of your gear becomes cursed.
+    """
+    display_name = "Curse Trap Weight"
 
 
 class FillerWeight(Range):
@@ -527,27 +602,6 @@ class RandomItemWeight(FillerWeight):
     Random Item gives you a random item suited to your current floor.
     """
     display_name = "Random Item Weight"
-    default = 10
-
-
-class TrapCountdownTraps(OptionSet):
-    """
-    Which traps warn you first and count down before they go off ("Blindness Trap in 10...").
-    Traps not listed here go off as soon as you receive them.
-    """
-    display_name = "Trap Countdown Traps"
-    valid_keys = frozenset(TRAP_ITEMS)
-    default = frozenset()
-
-
-class TrapCountdown(Range):
-    """
-    How many seconds the countdown lasts for the traps in Trap Countdown Traps. You get a warning when
-    it starts and another at 3 seconds.
-    """
-    display_name = "Trap Countdown"
-    range_start = 1
-    range_end = 60
     default = 10
 
 
@@ -620,9 +674,15 @@ class BaronyOptions(PerGameCommonOptions):
     death_link: BaronyDeathLink
     death_link_mode: DeathLinkMode
     trap_chance: TrapChance
-    enabled_traps: EnabledTraps
-    trap_countdown_traps: TrapCountdownTraps
-    trap_countdown: TrapCountdown
+    minotaur_trap_weight: MinotaurTrapWeight
+    ambush_trap_weight: AmbushTrapWeight
+    polymorph_trap_weight: PolymorphTrapWeight
+    fumble_trap_weight: FumbleTrapWeight
+    blindness_trap_weight: BlindnessTrapWeight
+    teleport_trap_weight: TeleportTrapWeight
+    hunger_trap_weight: HungerTrapWeight
+    darkness_trap_weight: DarknessTrapWeight
+    curse_trap_weight: CurseTrapWeight
     polymorph_trap_duration: PolymorphTrapDuration
     blindness_trap_duration: BlindnessTrapDuration
     xp_boost_weight: XPBoostWeight
@@ -642,8 +702,8 @@ option_groups = [
     OptionGroup("Dungeon", [StairKeys, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemyPool, EnemySeed, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, MinotaurTime, DifficultyScaling, Difficulty]),
     OptionGroup("Lives & Checkpoints", [Lives, ExtraLivesInPool, CheckpointInterval]),
     OptionGroup("Death Link", [BaronyDeathLink, DeathLinkMode, DeathPenalty, DeathItems, FloorRestart, BossDeath]),
-    OptionGroup("Traps", [TrapChance, EnabledTraps, TrapCountdownTraps, TrapCountdown, PolymorphTrapDuration,
-                          BlindnessTrapDuration]),
+    OptionGroup("Traps", [TrapChance, MinotaurTrapWeight, AmbushTrapWeight, PolymorphTrapWeight, FumbleTrapWeight, BlindnessTrapWeight, TeleportTrapWeight, HungerTrapWeight, DarknessTrapWeight, CurseTrapWeight,
+                          PolymorphTrapDuration, BlindnessTrapDuration]),
     OptionGroup("Filler", [XPBoostWeight, GoldPouchWeight, HealingPotionWeight, FoodRationWeight, RandomItemWeight]),
     OptionGroup("Players", [Players]),
 ]
