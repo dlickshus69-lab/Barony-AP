@@ -82,6 +82,8 @@ namespace AP
 
 	// maps.cpp, monsterCurve(): Enemy Randomizer. Returns the monster type to spawn instead.
 	int randomizeMonster(int monsterType);
+	// maps.cpp, map monsters: the same for hand-made floors (named characters and story floors excluded).
+	int randomizePlacedMonster(int monsterType, bool named);
 
 	// sound_game.cpp, handleLevelMusic(): Music Shuffle. While one of these exists, the
 	// floor's name is swapped for the biome whose music should play.

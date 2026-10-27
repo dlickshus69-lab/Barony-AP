@@ -1,4 +1,4 @@
-From 1b675342d729553896dfbff9e511811430d15c47 Mon Sep 17 00:00:00 2001
+From a59f5c4ba26dd429024fbd47f1c838855ad820c0 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -12,8 +12,8 @@ Subject: [PATCH] Archipelago client hooks
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 3098 +++++++++++++++++++++++++++++
- src/archipelago_barony.hpp        |  100 +
+ src/archipelago_barony.cpp        | 3111 +++++++++++++++++++++++++++++
+ src/archipelago_barony.hpp        |  102 +
  src/archipelago_ids.hpp           |  118 ++
  src/engine/audio/sound_game.cpp   |    2 +
  src/files.cpp                     |    6 +
@@ -23,11 +23,11 @@ Subject: [PATCH] Archipelago client hooks
  src/interface/playerinventory.cpp |    5 +
  src/items.cpp                     |   25 +
  src/light.cpp                     |    3 +
- src/maps.cpp                      |   11 +
+ src/maps.cpp                      |   28 +
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   10 +
  src/ui/MainMenu.cpp               |    5 +-
- 23 files changed, 3873 insertions(+), 4 deletions(-)
+ 23 files changed, 3905 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -648,10 +648,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..cdc0030
+index 0000000..6dadcc6
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,3098 @@
+@@ -0,0 +1,3111 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -3516,6 +3516,19 @@ index 0000000..cdc0030
 +	return replacement;
 +}
 +
++int randomizePlacedMonster(int monsterType, bool named)
++{
++	// Hand-made floors: their own spawn lists and monsters placed in the map editor. Story floors
++	// (secret areas, the town, boss arenas), named characters and people are left alone.
++	if ( !g_ready || g_slot.enemy_randomizer == 0 || multiplayer == CLIENT ) { return monsterType; }
++	if ( named || secretlevel || isSpecialMap() || monsterType == HUMAN ) { return monsterType; }
++	if ( currentlevel < 1 ) { return monsterType; } // the starting floor stays as it is
++	bool isEnemy = false;
++	for ( auto& m : ap_ids::BESTIARY ) { if ( m.monster == monsterType ) { isEnemy = true; break; } }
++	if ( !isEnemy ) { return monsterType; } // bots, decoys and other special things
++	return randomizeMonster(monsterType);
++}
++
 +// ---------------------------------------------------------------- Music Shuffle
 +namespace
 +{
@@ -3752,10 +3765,10 @@ index 0000000..cdc0030
 +} // namespace AP
 diff --git a/src/archipelago_barony.hpp b/src/archipelago_barony.hpp
 new file mode 100644
-index 0000000..9c090ce
+index 0000000..8472731
 --- /dev/null
 +++ b/src/archipelago_barony.hpp
-@@ -0,0 +1,100 @@
+@@ -0,0 +1,102 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client.
@@ -3840,6 +3853,8 @@ index 0000000..9c090ce
 +
 +	// maps.cpp, monsterCurve(): Enemy Randomizer. Returns the monster type to spawn instead.
 +	int randomizeMonster(int monsterType);
++	// maps.cpp, map monsters: the same for hand-made floors (named characters and story floors excluded).
++	int randomizePlacedMonster(int monsterType, bool named);
 +
 +	// sound_game.cpp, handleLevelMusic(): Music Shuffle. While one of these exists, the
 +	// floor's name is swapped for the biome whose music should play.
@@ -4212,7 +4227,7 @@ index f9102fe..f81e171 100644
              LightDef def;
              const auto& name = it.name.GetString();
 diff --git a/src/maps.cpp b/src/maps.cpp
-index 0ae7725..80a36a6 100644
+index 0ae7725..3544058 100644
 --- a/src/maps.cpp
 +++ b/src/maps.cpp
 @@ -11,6 +11,7 @@
@@ -4255,6 +4270,30 @@ index 0ae7725..80a36a6 100644
  
  	mapList.first = nullptr;
  	mapList.last = nullptr;
+@@ -7878,6 +7889,23 @@ void assignActions(map_t* map)
+ 					}
+ 				}
+ 
++#ifndef EDITOR
++				// Archipelago: Enemy Randomizer on hand-made floors too (their own spawn lists and placed monsters).
++				if ( monsterIsFixedSprite || customMonsterCurveExists )
++				{
++					bool named = myStats && myStats->name[0] != '\0';
++					Monster apType = static_cast<Monster>(AP::randomizePlacedMonster(monsterType, named));
++					if ( apType != monsterType )
++					{
++						monsterType = apType;
++						if ( monsterIsFixedSprite )
++						{
++							entity->sprite = 10; // now a "random" monster: its stats are set up for the new type below
++							monsterIsFixedSprite = false;
++						}
++					}
++				}
++#endif
+ 				if ( monsterType == MIMIC )
+ 				{
+ 					entity->yaw = 90 * (map_rng.rand() % 4) * PI / 180.0;
 diff --git a/src/monster_minotaur.cpp b/src/monster_minotaur.cpp
 index f9a26a3..a309479 100644
 --- a/src/monster_minotaur.cpp

@@ -210,8 +210,10 @@ class EnemyRandomizer(Choice):
     spiders, say). A kind can roll itself, so some stay the same.
     Every Spawn: every monster is picked at random.
     See Enemy Seed for whether this changes when you die.
-    Bosses, shopkeepers and Minotaurs are never changed. With difficulty scaling on, monsters that
-    normally live deeper are weakened to match your floor.
+    Hand-made floors (like the ones between biomes) are randomized too. Bosses, shopkeepers, Minotaurs,
+    people and named characters are never changed, and neither are the starting floor, the town, secret
+    areas or boss arenas. With difficulty scaling on, monsters that normally live deeper are weakened to
+    match your floor.
     """
     display_name = "Enemy Randomizer"
     option_off = 0

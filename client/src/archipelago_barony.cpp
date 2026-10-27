@@ -2862,6 +2862,19 @@ int randomizeMonster(int monsterType)
 	return replacement;
 }
 
+int randomizePlacedMonster(int monsterType, bool named)
+{
+	// Hand-made floors: their own spawn lists and monsters placed in the map editor. Story floors
+	// (secret areas, the town, boss arenas), named characters and people are left alone.
+	if ( !g_ready || g_slot.enemy_randomizer == 0 || multiplayer == CLIENT ) { return monsterType; }
+	if ( named || secretlevel || isSpecialMap() || monsterType == HUMAN ) { return monsterType; }
+	if ( currentlevel < 1 ) { return monsterType; } // the starting floor stays as it is
+	bool isEnemy = false;
+	for ( auto& m : ap_ids::BESTIARY ) { if ( m.monster == monsterType ) { isEnemy = true; break; } }
+	if ( !isEnemy ) { return monsterType; } // bots, decoys and other special things
+	return randomizeMonster(monsterType);
+}
+
 // ---------------------------------------------------------------- Music Shuffle
 namespace
 {
