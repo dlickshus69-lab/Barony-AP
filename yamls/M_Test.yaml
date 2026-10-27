@@ -28,6 +28,7 @@ Barony:
   # Dungeon
   floor_keys: true
   key_compass_time: 30
+  floor_size: normal
   floor_shuffle: full
   layout_seed: locked
   enemy_randomizer: off

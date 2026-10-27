@@ -1,4 +1,4 @@
-From 8fc631c1af81197c536938997300ad5cde4545e3 Mon Sep 17 00:00:00 2001
+From bfe3871581d6eb130aaf9017bb55a3ca18004499 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -12,23 +12,23 @@ Subject: [PATCH] Archipelago client hooks
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 3169 +++++++++++++++++++++++++++++
- src/archipelago_barony.hpp        |  104 +
+ src/archipelago_barony.cpp        | 3199 +++++++++++++++++++++++++++++
+ src/archipelago_barony.hpp        |  109 +
  src/archipelago_ids.hpp           |  133 ++
  src/charclass.cpp                 |    4 +
  src/engine/audio/sound_game.cpp   |    2 +
- src/files.cpp                     |    6 +
+ src/files.cpp                     |   44 +
  src/game.cpp                      |    6 +
  src/init.cpp                      |    6 +
  src/init_game.cpp                 |    6 +
  src/interface/playerinventory.cpp |    5 +
  src/items.cpp                     |   25 +
  src/light.cpp                     |    3 +
- src/maps.cpp                      |   28 +
+ src/maps.cpp                      |   34 +
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   10 +
  src/ui/MainMenu.cpp               |    5 +-
- 24 files changed, 3984 insertions(+), 4 deletions(-)
+ 24 files changed, 4063 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -649,10 +649,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..b5a73b5
+index 0000000..a528af1
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,3169 @@
+@@ -0,0 +1,3199 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -740,7 +740,8 @@ index 0000000..b5a73b5
 +		int enemy_randomizer_secret = 0; // Enemy Randomizer also in secret areas (never Minetown)
 +		int skill_checks = 0;         // 0 off, 1 any class, 2.. a class (Barony class index + 2)
 +		int skill_check_max_rank = 3; // 1 Basic .. 5 Legendary
-+		int lock_class = 0;           // new characters always get the Skill Checks class    // Minotaur floors: seconds before he arrives that the key compass turns on
++		int lock_class = 0;
++		int floor_size = 0;           // 0 normal, 1 bigger, 2 much bigger           // new characters always get the Skill Checks class    // Minotaur floors: seconds before he arrives that the key compass turns on
 +		int floor_shuffle = 0;        // 0 off, 1 sections, 2 full
 +		int floor_shuffle_seed = 0;
 +		int difficulty_scaling = 1;
@@ -1153,6 +1154,7 @@ index 0000000..b5a73b5
 +		registerSlotInt("enemy_randomizer_secret", &SlotOptions::enemy_randomizer_secret);
 +		registerSlotInt("skill_check_max_rank", &SlotOptions::skill_check_max_rank);
 +		registerSlotInt("lock_class", &SlotOptions::lock_class);
++		registerSlotInt("floor_size", &SlotOptions::floor_size);
 +		registerSlotInt("floor_shuffle", &SlotOptions::floor_shuffle);
 +		registerSlotInt("floor_shuffle_seed", &SlotOptions::floor_shuffle_seed);
 +		registerSlotInt("difficulty_scaling", &SlotOptions::difficulty_scaling);
@@ -3371,6 +3373,34 @@ index 0000000..b5a73b5
 +	}
 +}
 +
++// Floor Size: bigger generated floors, with more monsters and loot to match.
++namespace { int g_floorSizePending = 100; }
++
++static int floorSizePercent()
++{
++	if ( !g_ready || multiplayer == CLIENT ) { return 100; }
++	switch ( g_slot.floor_size ) { case 1: return 120; case 2: return 140; default: return 100; }
++}
++
++void requestFloorSize()
++{
++	g_floorSizePending = floorSizePercent();
++}
++
++int takeFloorSizePercent()
++{
++	int pct = g_floorSizePending;
++	g_floorSizePending = 100;
++	return pct;
++}
++
++int scaleFloorEntities(int count)
++{
++	int pct = floorSizePercent();
++	if ( pct <= 100 ) { return count; }
++	return count * pct * pct / 10000; // the area grows with the square of the size
++}
++
 +int lockedClass(int player, int currentClass)
 +{
 +	// Lock Class: with Skill Checks set to a class, new characters always get that class (looks,
@@ -3824,10 +3854,10 @@ index 0000000..b5a73b5
 +} // namespace AP
 diff --git a/src/archipelago_barony.hpp b/src/archipelago_barony.hpp
 new file mode 100644
-index 0000000..7593b00
+index 0000000..f0d96bf
 --- /dev/null
 +++ b/src/archipelago_barony.hpp
-@@ -0,0 +1,104 @@
+@@ -0,0 +1,109 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client.
@@ -3899,7 +3929,12 @@ index 0000000..7593b00
 +	bool isApItem(const Item* item);
 +	bool isFloorKey(const Item* item);
 +	// charclass.cpp, initClass(): Lock Class (the class chosen for Skill Checks).
-+	int lockedClass(int player, int currentClass);  // this floor's Floor Key (a marked skeleton key)
++	int lockedClass(int player, int currentClass);
++	// maps.cpp / files.cpp: Floor Size. requestFloorSize() before a generated floor's base map loads;
++	// loadMap takes the percent once; scaleFloorEntities() raises the monster/item/decoration count.
++	void requestFloorSize();
++	int takeFloorSizePercent();
++	int scaleFloorEntities(int count);  // this floor's Floor Key (a marked skeleton key)
 +	int apItemModel();                 // model index, or -1 if the model didn't load
 +	const char* apItemIconPath();
 +	const char* apItemName(bool withArticle);
@@ -4114,7 +4149,7 @@ index ccbe0af..9e022e3 100644
  	if (players[clientnum] && players[clientnum]->entity)
  	{
 diff --git a/src/files.cpp b/src/files.cpp
-index 12ae3dd..91a6c9c 100644
+index 12ae3dd..a7f9ac0 100644
 --- a/src/files.cpp
 +++ b/src/files.cpp
 @@ -22,6 +22,9 @@
@@ -4127,7 +4162,52 @@ index 12ae3dd..91a6c9c 100644
  #include "engine/audio/sound.hpp"
  #include "entity.hpp"
  #include "book.hpp"
-@@ -3763,6 +3766,9 @@ int physfsLoadMapFile(int levelToLoad, Uint32 seed, bool useRandSeed, int* check
+@@ -2620,6 +2623,44 @@ int loadMap(const char* filename2, map_t* destmap, list_t* entlist, list_t* crea
+         }
+     }
+ 
++#ifndef EDITOR
++	// Archipelago: Floor Size. A generated floor's base map is made bigger before the rooms go in,
++	// so the generator fits more rooms. New space copies the base map's edge (solid wall).
++	if ( destmap == &map )
++	{
++		int pct = AP::takeFloorSizePercent();
++		if ( pct > 100 && destmap->width > 0 && destmap->height > 0 )
++		{
++			const Uint32 ow = destmap->width, oh = destmap->height;
++			const Uint32 nw = std::min<Uint32>(ow * pct / 100, 250), nh = std::min<Uint32>(oh * pct / 100, 250);
++			Sint32* tiles = (Sint32*)malloc(sizeof(Sint32) * nw * nh * MAPLAYERS);
++			for ( Uint32 x = 0; x < nw; ++x )
++			{
++				for ( Uint32 y = 0; y < nh; ++y )
++				{
++					Uint32 sx = std::min(x, ow - 1), sy = std::min(y, oh - 1);
++					for ( int l = 0; l < MAPLAYERS; ++l )
++					{
++						tiles[l + y * MAPLAYERS + x * MAPLAYERS * nh] = destmap->tiles[l + sy * MAPLAYERS + sx * MAPLAYERS * oh];
++					}
++				}
++			}
++			free(destmap->tiles);
++			destmap->tiles = tiles;
++			destmap->width = nw;
++			destmap->height = nh;
++			if ( menucam.vismap ) { free(menucam.vismap); }
++			menucam.vismap = (bool*)calloc(nw * nh, sizeof(bool));
++			for ( int i = 0; i < MAXPLAYERS; ++i )
++			{
++				if ( cameras[i].vismap ) { free(cameras[i].vismap); }
++				cameras[i].vismap = (bool*)calloc(nw * nh, sizeof(bool));
++			}
++			printlog("[Archipelago] Floor Size: base map %ux%u -> %ux%u", ow, oh, nw, nh);
++		}
++	}
++#endif
++
+ 	for (c = 0; c < numentities; c++)
+ 	{
+ 		fp->read(&sprite, sizeof(Sint32), 1);
+@@ -3763,6 +3804,9 @@ int physfsLoadMapFile(int levelToLoad, Uint32 seed, bool useRandSeed, int* check
  		printlog("Maps directory: %s", mapsDirectory.c_str());
  		std::vector<std::string> levelsList = getLinesFromDataFile(mapsDirectory);
  		line = levelsList.front();
@@ -4325,7 +4405,7 @@ index f9102fe..f81e171 100644
              LightDef def;
              const auto& name = it.name.GetString();
 diff --git a/src/maps.cpp b/src/maps.cpp
-index 0ae7725..3544058 100644
+index 0ae7725..1147a23 100644
 --- a/src/maps.cpp
 +++ b/src/maps.cpp
 @@ -11,6 +11,7 @@
@@ -4349,7 +4429,17 @@ index 0ae7725..3544058 100644
  {
  	if ( svFlags & SV_FLAG_CHEATS )
  	{
-@@ -1396,6 +1402,8 @@ int generateDungeon(char* levelset, Uint32 seed, std::tuple<int, int, int, int>
+@@ -1279,6 +1285,9 @@ int generateDungeon(char* levelset, Uint32 seed, std::tuple<int, int, int, int>
+ 	{
+ 		std::string fullMapPath;
+ 		fullMapPath = physfsFormatMapName(levelset);
++#ifndef EDITOR
++		AP::requestFloorSize(); // Archipelago: Floor Size (the base map is enlarged as it loads)
++#endif
+ 
+ 		if ( fullMapPath.empty() || loadMap(fullMapPath.c_str(), &map, map.entities, map.creatures, &checkMapHash) == -1 )
+ 		{
+@@ -1396,6 +1405,8 @@ int generateDungeon(char* levelset, Uint32 seed, std::tuple<int, int, int, int>
  		}
  	}
  
@@ -4358,7 +4448,7 @@ index 0ae7725..3544058 100644
  	// secret stuff
  	if ( !secretlevel )
  	{
-@@ -1440,6 +1448,9 @@ int generateDungeon(char* levelset, Uint32 seed, std::tuple<int, int, int, int>
+@@ -1440,6 +1451,9 @@ int generateDungeon(char* levelset, Uint32 seed, std::tuple<int, int, int, int>
  			minotaurlevel = false;
  		}
  	}
@@ -4368,7 +4458,17 @@ index 0ae7725..3544058 100644
  
  	mapList.first = nullptr;
  	mapList.last = nullptr;
-@@ -7878,6 +7889,23 @@ void assignActions(map_t* map)
+@@ -3883,6 +3897,9 @@ int generateDungeon(char* levelset, Uint32 seed, std::tuple<int, int, int, int>
+ 		// revert to old mechanics.
+ 		j = std::min<Uint32>(30 + map_rng.rand() % 10, numpossiblelocations); //TODO: Why are Uint32 and Sin32 being compared?
+ 	}
++#ifndef EDITOR
++	j = std::min<Uint32>(AP::scaleFloorEntities(j), numpossiblelocations); // Archipelago: Floor Size, more to find
++#endif
+ 	int forcedMonsterSpawns = 0;
+ 	int forcedLootSpawns = 0;
+ 	int forcedDecorationSpawns = 0;
+@@ -7878,6 +7895,23 @@ void assignActions(map_t* map)
  					}
  				}
  

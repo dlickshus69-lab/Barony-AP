@@ -174,6 +174,22 @@ class FloorKeys(DefaultOnToggle):
     display_name = "Floor Keys"
 
 
+class FloorSize(Choice):
+    """
+    Makes the generated floors bigger, with more rooms to explore and more monsters, items and loot to
+    match. Hand-made floors (the start, transitions, the town, boss arenas, secret areas) keep their size.
+    Normal: the usual size.
+    Bigger: about 1.4 times the area.
+    Much Bigger: about twice the area.
+    The Minotaur's timer doesn't change, so bigger floors make Minotaur floors harder (see Minotaur Time).
+    """
+    display_name = "Floor Size"
+    option_normal = 0
+    option_bigger = 1
+    option_much_bigger = 2
+    default = option_normal
+
+
 class KeyCompassTime(Range):
     """
     On Minotaur floors (with Floor Keys on), how many seconds before the Minotaur arrives the screen starts
@@ -751,6 +767,7 @@ class BaronyOptions(PerGameCommonOptions):
     skill_check_max_rank: SkillCheckMaxRank
     lock_class: LockClass
     key_compass_time: KeyCompassTime
+    floor_size: FloorSize
     floor_shuffle: FloorShuffle
     layout_seed: LayoutSeed
     enemy_randomizer: EnemyRandomizer
@@ -800,7 +817,7 @@ option_groups = [
         ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),
     OptionGroup("Skills", [SkillChecks, SkillCheckMaxRank, LockClass]),
-    OptionGroup("Dungeon", [FloorKeys, KeyCompassTime, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemyRandomizerSecretAreas, EnemyPool, EnemySeed, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, MinotaurTime, DifficultyScaling, Difficulty]),
+    OptionGroup("Dungeon", [FloorKeys, KeyCompassTime, FloorSize, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemyRandomizerSecretAreas, EnemyPool, EnemySeed, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, MinotaurTime, DifficultyScaling, Difficulty]),
     OptionGroup("Lives & Checkpoints", [Lives, ExtraLivesInPool, CheckpointInterval]),
     OptionGroup("Death Link", [BaronyDeathLink, DeathLinkMode, DeathPenalty, DeathItems, FloorRestart, BossDeath]),
     OptionGroup("Traps", [TrapChance, MinotaurTrapWeight, AmbushTrapWeight, PolymorphTrapWeight, FumbleTrapWeight, BlindnessTrapWeight, TeleportTrapWeight, HungerTrapWeight, DarknessTrapWeight, CurseTrapWeight,

@@ -85,7 +85,8 @@ namespace
 		int enemy_randomizer_secret = 0; // Enemy Randomizer also in secret areas (never Minetown)
 		int skill_checks = 0;         // 0 off, 1 any class, 2.. a class (Barony class index + 2)
 		int skill_check_max_rank = 3; // 1 Basic .. 5 Legendary
-		int lock_class = 0;           // new characters always get the Skill Checks class    // Minotaur floors: seconds before he arrives that the key compass turns on
+		int lock_class = 0;
+		int floor_size = 0;           // 0 normal, 1 bigger, 2 much bigger           // new characters always get the Skill Checks class    // Minotaur floors: seconds before he arrives that the key compass turns on
 		int floor_shuffle = 0;        // 0 off, 1 sections, 2 full
 		int floor_shuffle_seed = 0;
 		int difficulty_scaling = 1;
@@ -498,6 +499,7 @@ namespace
 		registerSlotInt("enemy_randomizer_secret", &SlotOptions::enemy_randomizer_secret);
 		registerSlotInt("skill_check_max_rank", &SlotOptions::skill_check_max_rank);
 		registerSlotInt("lock_class", &SlotOptions::lock_class);
+		registerSlotInt("floor_size", &SlotOptions::floor_size);
 		registerSlotInt("floor_shuffle", &SlotOptions::floor_shuffle);
 		registerSlotInt("floor_shuffle_seed", &SlotOptions::floor_shuffle_seed);
 		registerSlotInt("difficulty_scaling", &SlotOptions::difficulty_scaling);
@@ -2714,6 +2716,34 @@ namespace
 		if ( title ) { SDL_FreeSurface(title); }
 		if ( patch ) { SDL_FreeSurface(patch); }
 	}
+}
+
+// Floor Size: bigger generated floors, with more monsters and loot to match.
+namespace { int g_floorSizePending = 100; }
+
+static int floorSizePercent()
+{
+	if ( !g_ready || multiplayer == CLIENT ) { return 100; }
+	switch ( g_slot.floor_size ) { case 1: return 120; case 2: return 140; default: return 100; }
+}
+
+void requestFloorSize()
+{
+	g_floorSizePending = floorSizePercent();
+}
+
+int takeFloorSizePercent()
+{
+	int pct = g_floorSizePending;
+	g_floorSizePending = 100;
+	return pct;
+}
+
+int scaleFloorEntities(int count)
+{
+	int pct = floorSizePercent();
+	if ( pct <= 100 ) { return count; }
+	return count * pct * pct / 10000; // the area grows with the square of the size
 }
 
 int lockedClass(int player, int currentClass)

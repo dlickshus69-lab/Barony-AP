@@ -69,7 +69,12 @@ namespace AP
 	bool isApItem(const Item* item);
 	bool isFloorKey(const Item* item);
 	// charclass.cpp, initClass(): Lock Class (the class chosen for Skill Checks).
-	int lockedClass(int player, int currentClass);  // this floor's Floor Key (a marked skeleton key)
+	int lockedClass(int player, int currentClass);
+	// maps.cpp / files.cpp: Floor Size. requestFloorSize() before a generated floor's base map loads;
+	// loadMap takes the percent once; scaleFloorEntities() raises the monster/item/decoration count.
+	void requestFloorSize();
+	int takeFloorSizePercent();
+	int scaleFloorEntities(int count);  // this floor's Floor Key (a marked skeleton key)
 	int apItemModel();                 // model index, or -1 if the model didn't load
 	const char* apItemIconPath();
 	const char* apItemName(bool withArticle);
