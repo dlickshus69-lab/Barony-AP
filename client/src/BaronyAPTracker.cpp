@@ -494,7 +494,7 @@ namespace
 		g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
 		g.SetInterpolationMode(Gdiplus::InterpolationModeNearestNeighbor);
 		g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
-		float icon = (float)std::clamp(cell * 3 / 2, 14, 28);
+		float icon = (float)std::min(28, std::max(14, cell * 3 / 2));
 		auto sx = [&](double tx) { return (float)(mx + tx * cell); };
 		auto sy = [&](double ty) { return (float)(my + ty * cell); };
 		auto tileCenterX = [&](int tx) { return (float)(mx + tx * cell + cell / 2.0); };

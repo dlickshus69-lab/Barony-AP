@@ -1,4 +1,4 @@
-From 7119c825ae09833ab8a669c7e890c5a655c82e05 Mon Sep 17 00:00:00 2001
+From 4855f97bd96a7f3f009b372e22516d8cd4f4cd9e Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -80,7 +80,7 @@ index 4e9ed8f..c2b0e9a 100644
      # Only for MinGW...
 diff --git a/src/BaronyAPTracker.cpp b/src/BaronyAPTracker.cpp
 new file mode 100644
-index 0000000..400a5bf
+index 0000000..a4435cb
 --- /dev/null
 +++ b/src/BaronyAPTracker.cpp
 @@ -0,0 +1,1070 @@
@@ -580,7 +580,7 @@ index 0000000..400a5bf
 +		g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
 +		g.SetInterpolationMode(Gdiplus::InterpolationModeNearestNeighbor);
 +		g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
-+		float icon = (float)std::clamp(cell * 3 / 2, 14, 28);
++		float icon = (float)std::min(28, std::max(14, cell * 3 / 2));
 +		auto sx = [&](double tx) { return (float)(mx + tx * cell); };
 +		auto sy = [&](double ty) { return (float)(my + ty * cell); };
 +		auto tileCenterX = [&](int tx) { return (float)(mx + tx * cell + cell / 2.0); };
