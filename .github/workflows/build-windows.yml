@@ -99,7 +99,14 @@ jobs:
         shell: pwsh
         run: |
           cmake --build build --config Release --target barony -- /m /v:minimal 2>&1 | Tee-Object -FilePath build.log
-          if ($LASTEXITCODE -ne 0) { throw "build failed" }
+          if ($LASTEXITCODE -ne 0) {
+            # Show the compiler errors as annotations (readable from the API without the log).
+            Select-String -Path build.log -Pattern ": (fatal )?error " | Select-Object -First 40 | ForEach-Object {
+              $line = $_.Line -replace '^.*[\\/]src[\\/]', 'src/'
+              Write-Output "::error::$line"
+            }
+            throw "build failed"
+          }
 
       - name: Package
         shell: pwsh
