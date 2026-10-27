@@ -28,6 +28,7 @@ Barony:
   # Dungeon
   floor_keys: true
   key_compass_time: 30
+  minotaur_time: 100
   floor_shuffle: full
   layout_seed: locked
   enemy_randomizer: off
@@ -40,7 +41,6 @@ Barony:
   boss_level_scaling: off
   difficulty_scaling: true
   difficulty: normal
-  minotaur_time: 100
 
   # Extras
   floor_size: normal

@@ -852,7 +852,7 @@ option_groups = [
         ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),
     OptionGroup("Skills", [SkillChecks, SkillCheckMaxRank, LockClass]),
-    OptionGroup("Dungeon", [FloorKeys, KeyCompassTime, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemySeed, EnemyRandomizerSecretAreas, EnemyPool, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, DifficultyScaling, Difficulty, MinotaurTime]),
+    OptionGroup("Dungeon", [FloorKeys, KeyCompassTime, MinotaurTime, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemySeed, EnemyRandomizerSecretAreas, EnemyPool, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, DifficultyScaling, Difficulty]),
     OptionGroup("Extras", [FloorSize, ExtraMonsters, MusicMods]),
     OptionGroup("Lives & Checkpoints", [Lives, ExtraLivesInPool, CheckpointInterval]),
     OptionGroup("Death Link", [BaronyDeathLink, DeathLinkMode, DeathPenalty, DeathItems, FloorRestart, BossDeath]),
