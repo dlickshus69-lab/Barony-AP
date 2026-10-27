@@ -1,25 +1,25 @@
-From 231e7e51585dce2f441f8e63e9e7ab424687b3ff Mon Sep 17 00:00:00 2001
+From 308f9258c746f4124160c36c5dc981ef43bf24b9 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
 
 ---
  CMakeLists.txt                    |   32 +
- src/BaronyAPTracker.cpp           |  642 +++++
+ src/BaronyAPTracker.cpp           |  682 +++++
  src/CMakeLists.txt                |    1 +
  src/actchest.cpp                  |    7 +
  src/actgeneral.cpp                |    2 +
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 3809 +++++++++++++++++++++++++++++
- src/archipelago_barony.hpp        |  119 +
+ src/archipelago_barony.cpp        | 3870 +++++++++++++++++++++++++++++
+ src/archipelago_barony.hpp        |  120 +
  src/archipelago_ids.hpp           |  134 +
  src/charclass.cpp                 |    4 +
  src/engine/audio/music.cpp        |    4 +
  src/engine/audio/sound_game.cpp   |    2 +
  src/files.cpp                     |   47 +
- src/game.cpp                      |    6 +
+ src/game.cpp                      |    7 +
  src/init.cpp                      |    6 +
  src/init_game.cpp                 |    6 +
  src/interface/playerinventory.cpp |   13 +
@@ -29,7 +29,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   10 +
  src/ui/MainMenu.cpp               |    5 +-
- 25 files changed, 4947 insertions(+), 4 deletions(-)
+ 25 files changed, 5050 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -80,10 +80,10 @@ index 4e9ed8f..c2b0e9a 100644
      # Only for MinGW...
 diff --git a/src/BaronyAPTracker.cpp b/src/BaronyAPTracker.cpp
 new file mode 100644
-index 0000000..364821a
+index 0000000..f1c8ac0
 --- /dev/null
 +++ b/src/BaronyAPTracker.cpp
-@@ -0,0 +1,642 @@
+@@ -0,0 +1,682 @@
 +// Barony Archipelago tracker window.
 +//
 +// Barony (the Archipelago build) starts this with the game, and writes
@@ -101,6 +101,7 @@ index 0000000..364821a
 +#include <algorithm>
 +#include <fstream>
 +#include <map>
++#include <cstring>
 +#include <string>
 +#include <vector>
 +
@@ -128,6 +129,10 @@ index 0000000..364821a
 +	std::wstring g_formNote;     // "enter a port", etc.
 +	HBRUSH g_editBrush = nullptr;
 +	const int ID_CONNECT = 101;
++	const int ID_PLAIN = 102;
++	HWND g_btnPlain = nullptr;
++	bool g_launcher = false;          // opened by barony.exe before the game starts: choose how to play
++	ULONGLONG g_gameStartedAt = 0;    // when Connect & Play let the game start
 +	HFONT g_titleFont = nullptr, g_bodyFont = nullptr;
 +	// Barony's own art, read from the Barony folder this program sits in.
 +	Gdiplus::Image* g_logo = nullptr;
@@ -282,7 +287,7 @@ index 0000000..364821a
 +		{
 +			g_formNote = L"Type your name (your slot name from your YAML).";
 +		}
-+		else if ( !gameRunning() )
++		else if ( !g_launcher && !gameRunning() )
 +		{
 +			g_formNote = L"Start Barony first, then press Connect.";
 +		}
@@ -296,9 +301,27 @@ index 0000000..364821a
 +			}
 +			std::ofstream out(dir + "\\connect.txt", std::ios::trunc);
 +			out << "server=" << host << ":" << port << "\nslot=" << name << "\n";
++			out.close();
 +			g_formNote = L"Connecting...";
++			if ( g_launcher )
++			{
++				// Let the waiting barony.exe start the game; this window becomes the tracker.
++				HANDLE ev = OpenEventA(EVENT_MODIFY_STATE, FALSE, "BaronyAPLaunchConnect");
++				if ( ev ) { SetEvent(ev); CloseHandle(ev); }
++				g_launcher = false;
++				g_gameStartedAt = GetTickCount64();
++				ShowWindow(g_btnPlain, SW_HIDE);
++				InvalidateRect(g_btnConnect, nullptr, TRUE);
++			}
 +		}
 +		InvalidateRect(g_main, nullptr, FALSE);
++	}
++
++	void playPlain()
++	{
++		HANDLE ev = OpenEventA(EVENT_MODIFY_STATE, FALSE, "BaronyAPLaunchPlain");
++		if ( ev ) { SetEvent(ev); CloseHandle(ev); }
++		DestroyWindow(g_main);
 +	}
 +
 +	void showForm(bool show)
@@ -310,6 +333,7 @@ index 0000000..364821a
 +		ShowWindow(g_editPort, cmd);
 +		ShowWindow(g_editName, cmd);
 +		ShowWindow(g_btnConnect, cmd);
++		ShowWindow(g_btnPlain, show && g_launcher ? SW_SHOW : SW_HIDE);
 +		if ( show ) { SetFocus(GetWindowTextLengthW(g_editPort) ? g_editName : g_editPort); }
 +		else { SetFocus(g_main); g_formNote.clear(); }
 +	}
@@ -322,7 +346,8 @@ index 0000000..364821a
 +		SetWindowPos(g_editServer, nullptr, x, top, w, 34, SWP_NOZORDER);
 +		SetWindowPos(g_editPort, nullptr, x, top + 44, 140, 34, SWP_NOZORDER);
 +		SetWindowPos(g_editName, nullptr, x, top + 88, w, 34, SWP_NOZORDER);
-+		SetWindowPos(g_btnConnect, nullptr, x, top + 136, 170, 42, SWP_NOZORDER);
++		SetWindowPos(g_btnConnect, nullptr, x, top + 136, 210, 42, SWP_NOZORDER);
++		SetWindowPos(g_btnPlain, nullptr, 20, top + 196, width - 40, 42, SWP_NOZORDER);
 +	}
 +
 +	void drawPanel(HDC dc, int x, int y, int w, int h)
@@ -395,9 +420,13 @@ index 0000000..364821a
 +		if ( !connected )
 +		{
 +			std::string status = running ? g_state.values["status"] : std::string("off");
++			if ( !running && g_gameStartedAt && GetTickCount64() - g_gameStartedAt < 90000 ) { status = "starting"; }
++			if ( g_launcher ) { status = "launcher"; }
 +			std::wstring line;
 +			COLORREF c = TEXT;
-+			if ( status == "off" ) { line = L"Start Barony, then connect here."; c = DIM; }
++			if ( status == "launcher" ) { line = L"Connect to your Archipelago room, or play without it:"; }
++			else if ( status == "starting" ) { line = L"Starting Barony..."; c = GOLD; }
++			else if ( status == "off" ) { line = L"Start Barony, then connect here."; c = DIM; }
 +			else if ( status == "connecting" )
 +			{
 +				line = L"Connecting to " + widen(g_state.values["server"]) + L" as " + widen(g_state.values["slot"]) + L"...";
@@ -415,7 +444,7 @@ index 0000000..364821a
 +			text(dc, 20, y + 46, L"Port", TEXT, g_bodyFont);
 +			text(dc, 20, y + 90, L"Name", TEXT, g_bodyFont);
 +			placeForm(y, rc.right);
-+			y += 190;
++			y += g_launcher ? 250 : 190;
 +			if ( !g_formNote.empty() && g_formNote != L"Connecting..." && status != "connecting" )
 +			{
 +				RECT nr{ 14, y, rc.right - 14, y + 60 };
@@ -600,6 +629,7 @@ index 0000000..364821a
 +				return 0;
 +			case WM_COMMAND:
 +				if ( LOWORD(wp) == ID_CONNECT ) { doConnect(); }
++				if ( LOWORD(wp) == ID_PLAIN ) { playPlain(); }
 +				return 0;
 +			case WM_CTLCOLOREDIT:
 +				SetTextColor((HDC)wp, TEXT);
@@ -608,16 +638,18 @@ index 0000000..364821a
 +			case WM_DRAWITEM:
 +			{
 +				auto* di = (DRAWITEMSTRUCT*)lp;
-+				if ( di->CtlID != ID_CONNECT ) { break; }
++				if ( di->CtlID != ID_CONNECT && di->CtlID != ID_PLAIN ) { break; }
++				bool plain = di->CtlID == ID_PLAIN;
 +				bool down = (di->itemState & ODS_SELECTED) != 0;
 +				fill(di->hDC, di->rcItem, down ? RGB(90, 70, 30) : RGB(60, 46, 26));
-+				HBRUSH border = CreateSolidBrush(GOLD);
++				HBRUSH border = CreateSolidBrush(plain ? DIM : GOLD);
 +				FrameRect(di->hDC, &di->rcItem, border);
 +				DeleteObject(border);
 +				SetBkMode(di->hDC, TRANSPARENT);
 +				SelectObject(di->hDC, g_bodyFont);
-+				SetTextColor(di->hDC, GOLD);
-+				DrawTextW(di->hDC, L"Connect", -1, &di->rcItem, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
++				SetTextColor(di->hDC, plain ? TEXT : GOLD);
++				const wchar_t* label = plain ? L"Play without Archipelago" : g_launcher ? L"Connect & Play" : L"Connect";
++				DrawTextW(di->hDC, label, -1, &di->rcItem, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 +				return TRUE;
 +			}
 +			case WM_SIZE:
@@ -646,9 +678,15 @@ index 0000000..364821a
 +
 +int WINAPI WinMain(HINSTANCE inst, HINSTANCE, LPSTR, int show)
 +{
-+	// Only one tracker at a time.
++	g_launcher = strstr(GetCommandLineA(), "--launcher") != nullptr;
++	// Only one tracker at a time. The launcher replaces an old tracker window that's still open.
 +	HANDLE mutex = CreateMutexA(nullptr, TRUE, "BaronyAPTrackerSingleInstance");
-+	if ( GetLastError() == ERROR_ALREADY_EXISTS ) { return 0; }
++	if ( GetLastError() == ERROR_ALREADY_EXISTS )
++	{
++		if ( !g_launcher ) { return 0; }
++		if ( HWND old = FindWindowW(L"BaronyAPTracker", nullptr) ) { PostMessageW(old, WM_CLOSE, 0, 0); }
++		WaitForSingleObject(mutex, 3000);
++	}
 +
 +	Gdiplus::GdiplusStartupInput gdiplusInput;
 +	ULONG_PTR gdiplusToken = 0;
@@ -693,6 +731,8 @@ index 0000000..364821a
 +	g_editName = makeEdit(0);
 +	g_btnConnect = CreateWindowExW(0, L"BUTTON", L"Connect", WS_CHILD | BS_OWNERDRAW,
 +		0, 0, 10, 10, hwnd, (HMENU)(INT_PTR)ID_CONNECT, inst, nullptr);
++	g_btnPlain = CreateWindowExW(0, L"BUTTON", L"Play without Archipelago", WS_CHILD | BS_OWNERDRAW,
++		0, 0, 10, 10, hwnd, (HMENU)(INT_PTR)ID_PLAIN, inst, nullptr);
 +	fillForm();
 +	ShowWindow(hwnd, show);
 +	SetTimer(hwnd, 1, 1000, nullptr);
@@ -880,10 +920,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..0eef936
+index 0000000..52dd29b
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,3809 @@
+@@ -0,0 +1,3870 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -1044,6 +1084,8 @@ index 0000000..0eef936
 +	bool g_started = false;                    // AP_Start has been called
 +	bool g_ready = false;                      // authenticated, slot data + save loaded
 +	bool g_triedAutoConnect = false;
++	bool g_apOff = false;        // "Play without Archipelago" in the launcher (or barony.exe -ap-off)
++	bool g_viaLauncher = false;  // started from the tracker's launcher: it's already open, connect.txt waiting
 +	std::string g_server, g_slotName, g_password;
 +	std::string g_savePath;
 +	SlotOptions g_slot;
@@ -3421,11 +3463,17 @@ index 0000000..0eef936
 +#endif
 +		std::filesystem::create_directories("archipelago");
 +		std::error_code ec;
-+		std::filesystem::remove("archipelago/connect.txt", ec); // left over from last time
-+		// With the tracker window, you connect from there; otherwise archipelago.cfg connects on start.
-+		if ( std::filesystem::exists("BaronyAPTracker.exe", ec) ) { launchTracker(); }
-+		else { autoConnectFromConfig(); }
++		if ( g_apOff ) { printlog("[Archipelago] Playing without Archipelago."); }
++		else if ( g_viaLauncher ) { printlog("[Archipelago] Started from the launcher."); }
++		else
++		{
++			std::filesystem::remove("archipelago/connect.txt", ec); // left over from last time
++			// With the tracker window, you connect from there; otherwise archipelago.cfg connects on start.
++			if ( std::filesystem::exists("BaronyAPTracker.exe", ec) ) { launchTracker(); }
++			else { autoConnectFromConfig(); }
++		}
 +	}
++	if ( g_apOff ) { return; }
 +	if ( ticks % (TICKS_PER_SECOND / 2) == 0 ) { pollTrackerConnect(); }
 +	if ( !g_ready && ticks % TICKS_PER_SECOND == 0 ) { writeConnectStatus(); }
 +	if ( !g_started ) { return; }
@@ -4657,6 +4705,59 @@ index 0000000..0eef936
 +	}
 +}
 +
++bool launcherGate()
++{
++#ifdef WINDOWS
++	// barony.exe opens the launcher (the tracker window) first and waits for it: Connect & Play
++	// starts the game connected, Play without Archipelago starts it plain, closing the window quits.
++	// The game stays this same process the whole time, so Steam sees it running as usual.
++	std::string cmdLine = GetCommandLineA();
++	if ( cmdLine.find("-ap-off") != std::string::npos ) { g_apOff = true; return true; }
++	char exePath[MAX_PATH] = {};
++	GetModuleFileNameA(nullptr, exePath, MAX_PATH);
++	std::string dir = exePath;
++	size_t slash = dir.find_last_of("\\/");
++	dir = slash == std::string::npos ? std::string(".") : dir.substr(0, slash);
++	std::string tracker = dir + "\\BaronyAPTracker.exe";
++	if ( GetFileAttributesA(tracker.c_str()) == INVALID_FILE_ATTRIBUTES ) { return true; }
++
++	HANDLE evConnect = CreateEventA(nullptr, TRUE, FALSE, "BaronyAPLaunchConnect");
++	HANDLE evPlain = CreateEventA(nullptr, TRUE, FALSE, "BaronyAPLaunchPlain");
++	if ( !evConnect || !evPlain ) { return true; }
++	ResetEvent(evConnect);
++	ResetEvent(evPlain);
++	STARTUPINFOA si{};
++	si.cb = sizeof(si);
++	PROCESS_INFORMATION pi{};
++	std::string cmd = "\"" + tracker + "\" --launcher";
++	std::vector<char> cmdBuf(cmd.begin(), cmd.end());
++	cmdBuf.push_back('\0');
++	if ( !CreateProcessA(nullptr, cmdBuf.data(), nullptr, nullptr, FALSE, 0, nullptr, dir.c_str(), &si, &pi) )
++	{
++		return true; // no launcher; start as before
++	}
++	CloseHandle(pi.hThread);
++	HANDLE waits[] = { evConnect, evPlain, pi.hProcess };
++	DWORD r = WaitForMultipleObjects(3, waits, FALSE, INFINITE);
++	bool play = true;
++	if ( r == WAIT_OBJECT_0 ) { g_viaLauncher = true; }
++	else if ( r == WAIT_OBJECT_0 + 1 ) { g_apOff = true; }
++	else
++	{
++		// The window was closed: quit, unless it picked a choice just as it closed.
++		if ( WaitForSingleObject(evConnect, 0) == WAIT_OBJECT_0 ) { g_viaLauncher = true; }
++		else if ( WaitForSingleObject(evPlain, 0) == WAIT_OBJECT_0 ) { g_apOff = true; }
++		else { play = false; }
++	}
++	CloseHandle(pi.hProcess);
++	CloseHandle(evConnect);
++	CloseHandle(evPlain);
++	return play;
++#else
++	return true;
++#endif
++}
++
 +bool holidayThemeAllowed()
 +{
 +	// Barony's holiday themes (Halloween, Christmas) replace the music and art; off unless
@@ -4695,10 +4796,10 @@ index 0000000..0eef936
 +} // namespace AP
 diff --git a/src/archipelago_barony.hpp b/src/archipelago_barony.hpp
 new file mode 100644
-index 0000000..07e1980
+index 0000000..f099999
 --- /dev/null
 +++ b/src/archipelago_barony.hpp
-@@ -0,0 +1,119 @@
+@@ -0,0 +1,120 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client.
@@ -4812,6 +4913,7 @@ index 0000000..07e1980
 +	// engine/audio/music.cpp, playMusic(): Music Mods. Takes and returns an FMOD::Sound*: the track to
 +	// play, which may be a mod's version of the same track.
 +	void* pickMusicVersion(void* sound);
++	bool launcherGate();        // start of main(): the launcher window first; false = quit
 +	bool holidayThemeAllowed(); // Barony's Halloween/Christmas themes, off unless archipelago.cfg says holiday_theme=1
 +
 +	// Status for the console and the UI.
@@ -5102,7 +5204,7 @@ index 12ae3dd..f801f09 100644
  		if ( levelToLoad > 0 ) // if level == 0, then load up the first map.
  		{
 diff --git a/src/game.cpp b/src/game.cpp
-index 7837966..10ef450 100644
+index 7837966..7b958b0 100644
 --- a/src/game.cpp
 +++ b/src/game.cpp
 @@ -12,6 +12,7 @@
@@ -5130,7 +5232,15 @@ index 7837966..10ef450 100644
  					if ( forceMapSeed > 0 )
  					{
  						mapseed = forceMapSeed;
-@@ -7663,6 +7667,7 @@ int main(int argc, char** argv)
+@@ -7093,6 +7097,7 @@ int main(int argc, char** argv)
+ {
+ #ifdef WINDOWS
+ 	SetUnhandledExceptionFilter(unhandled_handler);
++	if ( !AP::launcherGate() ) { return 0; } // Archipelago: the launcher window opens first
+ #ifdef _DEBUG
+ 	//_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+ #endif
+@@ -7663,6 +7668,7 @@ int main(int argc, char** argv)
  						MainMenu::doMainMenu(!intro);
  						UIToastNotificationManager.drawNotifications(MainMenu::isCutsceneActive(), true); // draw this before the cursor
                          framesProcResult = doFrames();
@@ -5138,7 +5248,7 @@ index 7837966..10ef450 100644
  
  #ifdef USE_IMGUI
  						ImGui_t::render();
-@@ -7981,6 +7986,7 @@ int main(int argc, char** argv)
+@@ -7981,6 +7987,7 @@ int main(int argc, char** argv)
  				framesProcResult = doFrames();
  				DebugStats.t6Messages = std::chrono::high_resolution_clock::now();
  				ingameHud();

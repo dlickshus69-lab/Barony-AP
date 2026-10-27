@@ -17,10 +17,12 @@ The main choices are your goal, how often floors give checks, Floor Keys, floor 
 
 ## Connecting
 
-Start Barony. The tracker window opens with it. Type the room's **port** (the digits after
-`archipelago.gg:`) and your **name** (your slot name), then press **Enter** or **Connect**. The server
+Start Barony from Steam. The Barony Archipelago window opens before the game. Type the room's
+**port** (the digits after `archipelago.gg:`) and your **name** (your slot name), then press
+**Connect & Play**: the game starts and connects, and the window stays open as your tracker. The server
 box is already `archipelago.gg`, and there's no password box: rooms without a password don't need one.
-The tracker remembers what you typed for next time, so usually you only change the port.
+It remembers what you typed, so usually you only change the port. **Play without Archipelago** starts
+the normal game.
 
 Without the tracker, put `archipelago.cfg` next to your Archipelago `barony.exe`:
 

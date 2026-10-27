@@ -158,6 +158,8 @@ namespace
 	bool g_started = false;                    // AP_Start has been called
 	bool g_ready = false;                      // authenticated, slot data + save loaded
 	bool g_triedAutoConnect = false;
+	bool g_apOff = false;        // "Play without Archipelago" in the launcher (or barony.exe -ap-off)
+	bool g_viaLauncher = false;  // started from the tracker's launcher: it's already open, connect.txt waiting
 	std::string g_server, g_slotName, g_password;
 	std::string g_savePath;
 	SlotOptions g_slot;
@@ -2535,11 +2537,17 @@ void tick()
 #endif
 		std::filesystem::create_directories("archipelago");
 		std::error_code ec;
-		std::filesystem::remove("archipelago/connect.txt", ec); // left over from last time
-		// With the tracker window, you connect from there; otherwise archipelago.cfg connects on start.
-		if ( std::filesystem::exists("BaronyAPTracker.exe", ec) ) { launchTracker(); }
-		else { autoConnectFromConfig(); }
+		if ( g_apOff ) { printlog("[Archipelago] Playing without Archipelago."); }
+		else if ( g_viaLauncher ) { printlog("[Archipelago] Started from the launcher."); }
+		else
+		{
+			std::filesystem::remove("archipelago/connect.txt", ec); // left over from last time
+			// With the tracker window, you connect from there; otherwise archipelago.cfg connects on start.
+			if ( std::filesystem::exists("BaronyAPTracker.exe", ec) ) { launchTracker(); }
+			else { autoConnectFromConfig(); }
+		}
 	}
+	if ( g_apOff ) { return; }
 	if ( ticks % (TICKS_PER_SECOND / 2) == 0 ) { pollTrackerConnect(); }
 	if ( !g_ready && ticks % TICKS_PER_SECOND == 0 ) { writeConnectStatus(); }
 	if ( !g_started ) { return; }
@@ -3769,6 +3777,59 @@ void drawHud()
 	{
 		drawDeathScreen();
 	}
+}
+
+bool launcherGate()
+{
+#ifdef WINDOWS
+	// barony.exe opens the launcher (the tracker window) first and waits for it: Connect & Play
+	// starts the game connected, Play without Archipelago starts it plain, closing the window quits.
+	// The game stays this same process the whole time, so Steam sees it running as usual.
+	std::string cmdLine = GetCommandLineA();
+	if ( cmdLine.find("-ap-off") != std::string::npos ) { g_apOff = true; return true; }
+	char exePath[MAX_PATH] = {};
+	GetModuleFileNameA(nullptr, exePath, MAX_PATH);
+	std::string dir = exePath;
+	size_t slash = dir.find_last_of("\\/");
+	dir = slash == std::string::npos ? std::string(".") : dir.substr(0, slash);
+	std::string tracker = dir + "\\BaronyAPTracker.exe";
+	if ( GetFileAttributesA(tracker.c_str()) == INVALID_FILE_ATTRIBUTES ) { return true; }
+
+	HANDLE evConnect = CreateEventA(nullptr, TRUE, FALSE, "BaronyAPLaunchConnect");
+	HANDLE evPlain = CreateEventA(nullptr, TRUE, FALSE, "BaronyAPLaunchPlain");
+	if ( !evConnect || !evPlain ) { return true; }
+	ResetEvent(evConnect);
+	ResetEvent(evPlain);
+	STARTUPINFOA si{};
+	si.cb = sizeof(si);
+	PROCESS_INFORMATION pi{};
+	std::string cmd = "\"" + tracker + "\" --launcher";
+	std::vector<char> cmdBuf(cmd.begin(), cmd.end());
+	cmdBuf.push_back('\0');
+	if ( !CreateProcessA(nullptr, cmdBuf.data(), nullptr, nullptr, FALSE, 0, nullptr, dir.c_str(), &si, &pi) )
+	{
+		return true; // no launcher; start as before
+	}
+	CloseHandle(pi.hThread);
+	HANDLE waits[] = { evConnect, evPlain, pi.hProcess };
+	DWORD r = WaitForMultipleObjects(3, waits, FALSE, INFINITE);
+	bool play = true;
+	if ( r == WAIT_OBJECT_0 ) { g_viaLauncher = true; }
+	else if ( r == WAIT_OBJECT_0 + 1 ) { g_apOff = true; }
+	else
+	{
+		// The window was closed: quit, unless it picked a choice just as it closed.
+		if ( WaitForSingleObject(evConnect, 0) == WAIT_OBJECT_0 ) { g_viaLauncher = true; }
+		else if ( WaitForSingleObject(evPlain, 0) == WAIT_OBJECT_0 ) { g_apOff = true; }
+		else { play = false; }
+	}
+	CloseHandle(pi.hProcess);
+	CloseHandle(evConnect);
+	CloseHandle(evPlain);
+	return play;
+#else
+	return true;
+#endif
 }
 
 bool holidayThemeAllowed()

@@ -15,6 +15,7 @@ namespace Gdiplus { using std::min; using std::max; } // gdiplus.h needs these w
 #include <algorithm>
 #include <fstream>
 #include <map>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -42,6 +43,10 @@ namespace
 	std::wstring g_formNote;     // "enter a port", etc.
 	HBRUSH g_editBrush = nullptr;
 	const int ID_CONNECT = 101;
+	const int ID_PLAIN = 102;
+	HWND g_btnPlain = nullptr;
+	bool g_launcher = false;          // opened by barony.exe before the game starts: choose how to play
+	ULONGLONG g_gameStartedAt = 0;    // when Connect & Play let the game start
 	HFONT g_titleFont = nullptr, g_bodyFont = nullptr;
 	// Barony's own art, read from the Barony folder this program sits in.
 	Gdiplus::Image* g_logo = nullptr;
@@ -196,7 +201,7 @@ namespace
 		{
 			g_formNote = L"Type your name (your slot name from your YAML).";
 		}
-		else if ( !gameRunning() )
+		else if ( !g_launcher && !gameRunning() )
 		{
 			g_formNote = L"Start Barony first, then press Connect.";
 		}
@@ -210,9 +215,27 @@ namespace
 			}
 			std::ofstream out(dir + "\\connect.txt", std::ios::trunc);
 			out << "server=" << host << ":" << port << "\nslot=" << name << "\n";
+			out.close();
 			g_formNote = L"Connecting...";
+			if ( g_launcher )
+			{
+				// Let the waiting barony.exe start the game; this window becomes the tracker.
+				HANDLE ev = OpenEventA(EVENT_MODIFY_STATE, FALSE, "BaronyAPLaunchConnect");
+				if ( ev ) { SetEvent(ev); CloseHandle(ev); }
+				g_launcher = false;
+				g_gameStartedAt = GetTickCount64();
+				ShowWindow(g_btnPlain, SW_HIDE);
+				InvalidateRect(g_btnConnect, nullptr, TRUE);
+			}
 		}
 		InvalidateRect(g_main, nullptr, FALSE);
+	}
+
+	void playPlain()
+	{
+		HANDLE ev = OpenEventA(EVENT_MODIFY_STATE, FALSE, "BaronyAPLaunchPlain");
+		if ( ev ) { SetEvent(ev); CloseHandle(ev); }
+		DestroyWindow(g_main);
 	}
 
 	void showForm(bool show)
@@ -224,6 +247,7 @@ namespace
 		ShowWindow(g_editPort, cmd);
 		ShowWindow(g_editName, cmd);
 		ShowWindow(g_btnConnect, cmd);
+		ShowWindow(g_btnPlain, show && g_launcher ? SW_SHOW : SW_HIDE);
 		if ( show ) { SetFocus(GetWindowTextLengthW(g_editPort) ? g_editName : g_editPort); }
 		else { SetFocus(g_main); g_formNote.clear(); }
 	}
@@ -236,7 +260,8 @@ namespace
 		SetWindowPos(g_editServer, nullptr, x, top, w, 34, SWP_NOZORDER);
 		SetWindowPos(g_editPort, nullptr, x, top + 44, 140, 34, SWP_NOZORDER);
 		SetWindowPos(g_editName, nullptr, x, top + 88, w, 34, SWP_NOZORDER);
-		SetWindowPos(g_btnConnect, nullptr, x, top + 136, 170, 42, SWP_NOZORDER);
+		SetWindowPos(g_btnConnect, nullptr, x, top + 136, 210, 42, SWP_NOZORDER);
+		SetWindowPos(g_btnPlain, nullptr, 20, top + 196, width - 40, 42, SWP_NOZORDER);
 	}
 
 	void drawPanel(HDC dc, int x, int y, int w, int h)
@@ -309,9 +334,13 @@ namespace
 		if ( !connected )
 		{
 			std::string status = running ? g_state.values["status"] : std::string("off");
+			if ( !running && g_gameStartedAt && GetTickCount64() - g_gameStartedAt < 90000 ) { status = "starting"; }
+			if ( g_launcher ) { status = "launcher"; }
 			std::wstring line;
 			COLORREF c = TEXT;
-			if ( status == "off" ) { line = L"Start Barony, then connect here."; c = DIM; }
+			if ( status == "launcher" ) { line = L"Connect to your Archipelago room, or play without it:"; }
+			else if ( status == "starting" ) { line = L"Starting Barony..."; c = GOLD; }
+			else if ( status == "off" ) { line = L"Start Barony, then connect here."; c = DIM; }
 			else if ( status == "connecting" )
 			{
 				line = L"Connecting to " + widen(g_state.values["server"]) + L" as " + widen(g_state.values["slot"]) + L"...";
@@ -329,7 +358,7 @@ namespace
 			text(dc, 20, y + 46, L"Port", TEXT, g_bodyFont);
 			text(dc, 20, y + 90, L"Name", TEXT, g_bodyFont);
 			placeForm(y, rc.right);
-			y += 190;
+			y += g_launcher ? 250 : 190;
 			if ( !g_formNote.empty() && g_formNote != L"Connecting..." && status != "connecting" )
 			{
 				RECT nr{ 14, y, rc.right - 14, y + 60 };
@@ -514,6 +543,7 @@ namespace
 				return 0;
 			case WM_COMMAND:
 				if ( LOWORD(wp) == ID_CONNECT ) { doConnect(); }
+				if ( LOWORD(wp) == ID_PLAIN ) { playPlain(); }
 				return 0;
 			case WM_CTLCOLOREDIT:
 				SetTextColor((HDC)wp, TEXT);
@@ -522,16 +552,18 @@ namespace
 			case WM_DRAWITEM:
 			{
 				auto* di = (DRAWITEMSTRUCT*)lp;
-				if ( di->CtlID != ID_CONNECT ) { break; }
+				if ( di->CtlID != ID_CONNECT && di->CtlID != ID_PLAIN ) { break; }
+				bool plain = di->CtlID == ID_PLAIN;
 				bool down = (di->itemState & ODS_SELECTED) != 0;
 				fill(di->hDC, di->rcItem, down ? RGB(90, 70, 30) : RGB(60, 46, 26));
-				HBRUSH border = CreateSolidBrush(GOLD);
+				HBRUSH border = CreateSolidBrush(plain ? DIM : GOLD);
 				FrameRect(di->hDC, &di->rcItem, border);
 				DeleteObject(border);
 				SetBkMode(di->hDC, TRANSPARENT);
 				SelectObject(di->hDC, g_bodyFont);
-				SetTextColor(di->hDC, GOLD);
-				DrawTextW(di->hDC, L"Connect", -1, &di->rcItem, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+				SetTextColor(di->hDC, plain ? TEXT : GOLD);
+				const wchar_t* label = plain ? L"Play without Archipelago" : g_launcher ? L"Connect & Play" : L"Connect";
+				DrawTextW(di->hDC, label, -1, &di->rcItem, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 				return TRUE;
 			}
 			case WM_SIZE:
@@ -560,9 +592,15 @@ namespace
 
 int WINAPI WinMain(HINSTANCE inst, HINSTANCE, LPSTR, int show)
 {
-	// Only one tracker at a time.
+	g_launcher = strstr(GetCommandLineA(), "--launcher") != nullptr;
+	// Only one tracker at a time. The launcher replaces an old tracker window that's still open.
 	HANDLE mutex = CreateMutexA(nullptr, TRUE, "BaronyAPTrackerSingleInstance");
-	if ( GetLastError() == ERROR_ALREADY_EXISTS ) { return 0; }
+	if ( GetLastError() == ERROR_ALREADY_EXISTS )
+	{
+		if ( !g_launcher ) { return 0; }
+		if ( HWND old = FindWindowW(L"BaronyAPTracker", nullptr) ) { PostMessageW(old, WM_CLOSE, 0, 0); }
+		WaitForSingleObject(mutex, 3000);
+	}
 
 	Gdiplus::GdiplusStartupInput gdiplusInput;
 	ULONG_PTR gdiplusToken = 0;
@@ -607,6 +645,8 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE, LPSTR, int show)
 	g_editName = makeEdit(0);
 	g_btnConnect = CreateWindowExW(0, L"BUTTON", L"Connect", WS_CHILD | BS_OWNERDRAW,
 		0, 0, 10, 10, hwnd, (HMENU)(INT_PTR)ID_CONNECT, inst, nullptr);
+	g_btnPlain = CreateWindowExW(0, L"BUTTON", L"Play without Archipelago", WS_CHILD | BS_OWNERDRAW,
+		0, 0, 10, 10, hwnd, (HMENU)(INT_PTR)ID_PLAIN, inst, nullptr);
 	fillForm();
 	ShowWindow(hwnd, show);
 	SetTimer(hwnd, 1, 1000, nullptr);
