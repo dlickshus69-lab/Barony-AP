@@ -42,3 +42,9 @@ to what you had when you entered that floor: potions you drank and gear that bro
 items you found on that floor are lost. Death Link deaths also cost a life.
 
 The top left of the screen shows whether you're connected, and the top right shows your lives.
+
+## How do checkpoints work?
+
+With Checkpoint Interval on, reaching floor 5, 10, 15... (or every 10, 15 or 20 floors) saves your
+whole character: level, stats, skills, items, gold and spells. If you die with no lives left, your
+next run starts at that checkpoint with everything you had when you reached it.

@@ -13,6 +13,7 @@
 #pragma once
 
 #include <string>
+#include <cstdint>
 #include <vector>
 
 class Entity;
@@ -47,6 +48,9 @@ namespace AP
 	// actladder.cpp: may the party take the stairs down to the next floor?
 	// Shows a message and returns false when a Stair Key is missing.
 	bool canDescend(int player);
+
+	// game.cpp, when the next floor's map seed is picked: Layout Seed (same map every time).
+	uint32_t lockedMapSeed(uint32_t seed);
 
 	// monster_minotaur.cpp, getMinotaurTimeToArrive(): hard mode brings him sooner.
 	int adjustMinotaurTime(int ticks);

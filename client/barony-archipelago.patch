@@ -1,4 +1,4 @@
-From f567e57905fb5daab7af81147a852760e65424c7 Mon Sep 17 00:00:00 2001
+From 8d7f0934c140d1ba8cf10198356a2d7e7a0156bd Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -11,12 +11,12 @@ Subject: [PATCH] Archipelago client hooks
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 1740 +++++++++++++++++++++++++++++
- src/archipelago_barony.hpp        |   86 ++
+ src/archipelago_barony.cpp        | 1909 +++++++++++++++++++++++++++++
+ src/archipelago_barony.hpp        |   90 ++
  src/archipelago_ids.hpp           |   95 ++
  src/engine/audio/sound_game.cpp   |    2 +
  src/files.cpp                     |    6 +
- src/game.cpp                      |    5 +
+ src/game.cpp                      |    6 +
  src/init.cpp                      |    6 +
  src/init_game.cpp                 |    6 +
  src/interface/playerinventory.cpp |    5 +
@@ -24,7 +24,7 @@ Subject: [PATCH] Archipelago client hooks
  src/light.cpp                     |    3 +
  src/maps.cpp                      |    8 +
  src/monster_minotaur.cpp          |    3 +-
- 20 files changed, 2032 insertions(+), 2 deletions(-)
+ 20 files changed, 2206 insertions(+), 2 deletions(-)
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
  create mode 100644 src/archipelago_ids.hpp
@@ -219,10 +219,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..02c48c7
+index 0000000..29e6baf
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,1740 @@
+@@ -0,0 +1,1909 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -250,6 +250,7 @@ index 0000000..02c48c7
 +#include "player.hpp"
 +#include "prng.hpp"
 +#include "files.hpp"
++#include "magic/magic.hpp"
 +#include "init.hpp"
 +#include "interface/consolecommand.hpp"
 +#include "input.hpp"
@@ -314,6 +315,8 @@ index 0000000..02c48c7
 +		int enemy_seed = 0;           // 0 locked to the seed, 1 re-rolled every time a floor loads
 +		int music_shuffle = 0;        // 0 off, 1 biome music, 2 all music
 +		int music_seed = 0;           // 0 locked per floor, 1 random every time a song starts
++		int checkpoint_interval = 0;  // 0 off, else a checkpoint every this many floors
++		int layout_seed = 0;          // 0 locked (each floor's map comes from the seed), 1 random
 +		int players = 1;
 +	};
 +
@@ -370,6 +373,7 @@ index 0000000..02c48c7
 +	bool g_savedGodmode = false;
 +	bool g_confirmWasDown = true;               // edge detection: needs a fresh press
 +	void endDeathScreen();
++	void readCheckpoint();
 +	int apItemsLyingAround();
 +	std::set<Uint32> g_countedDeaths;          // monster uids already counted
 +
@@ -588,6 +592,8 @@ index 0000000..02c48c7
 +		registerSlotInt("enemy_seed", &SlotOptions::enemy_seed);
 +		registerSlotInt("music_shuffle", &SlotOptions::music_shuffle);
 +		registerSlotInt("music_seed", &SlotOptions::music_seed);
++		registerSlotInt("checkpoint_interval", &SlotOptions::checkpoint_interval);
++		registerSlotInt("layout_seed", &SlotOptions::layout_seed);
 +		registerSlotInt("players", &SlotOptions::players);
 +
 +		AP_Start();
@@ -632,6 +638,7 @@ index 0000000..02c48c7
 +		std::filesystem::create_directories("archipelago");
 +		g_savePath = "archipelago/" + sanitize(info.seed_name) + "_" + sanitize(g_slotName) + ".txt";
 +		readSave();
++		readCheckpoint();
 +		g_ready = true;
 +		g_lastCharLevelSent = 1;
 +		say(COLOR_AP, "Archipelago: connected. Goal: %s.",
@@ -1230,6 +1237,148 @@ index 0000000..02c48c7
 +		writeSave();
 +	}
 +
++	// ------------------------------------------------------- checkpoints
++	struct Checkpoint
++	{
++		bool valid = false;
++		int floor = 0;
++		int cls = 0;
++		Sint32 LVL = 1, EXP = 0, STR = 0, DEX = 0, CON = 0, INT = 0, PER = 0, CHR = 0;
++		Sint32 MAXHP = 10, MAXMP = 10, GOLD = 0;
++		Sint32 prof[NUMPROFICIENCIES] = {};
++		int permApplied[8] = {};
++		std::vector<ItemSnapshot> items;
++		std::vector<int> spells;
++	};
++	Checkpoint g_checkpoint;
++	bool g_resumePending = false;
++
++	std::string checkpointPath()
++	{
++		if ( g_savePath.size() < 4 ) { return ""; }
++		return g_savePath.substr(0, g_savePath.size() - 4) + "_checkpoint.txt";
++	}
++
++	void writeCheckpoint()
++	{
++		std::string path = checkpointPath();
++		if ( path.empty() ) { return; }
++		std::ofstream out(path, std::ios::trunc);
++		if ( !out ) { return; }
++		const Checkpoint& c = g_checkpoint;
++		out << "floor=" << c.floor << "\nclass=" << c.cls << "\nLVL=" << c.LVL << "\nEXP=" << c.EXP
++			<< "\nSTR=" << c.STR << "\nDEX=" << c.DEX << "\nCON=" << c.CON << "\nINT=" << c.INT
++			<< "\nPER=" << c.PER << "\nCHR=" << c.CHR << "\nMAXHP=" << c.MAXHP << "\nMAXMP=" << c.MAXMP
++			<< "\nGOLD=" << c.GOLD << "\n";
++		for ( int i = 0; i < NUMPROFICIENCIES; ++i ) { out << "prof" << i << "=" << c.prof[i] << "\n"; }
++		for ( int i = 0; i < 8; ++i ) { out << "perm" << i << "=" << c.permApplied[i] << "\n"; }
++		for ( auto& it : c.items )
++		{
++			out << "item=" << (int)it.type << "," << (int)it.status << "," << it.beatitude << "," << it.count << ","
++				<< it.appearance << "," << (it.identified ? 1 : 0) << "," << it.uid << "," << it.x << "," << it.y << ","
++				<< it.equipSlot << "\n";
++		}
++		for ( int sp : c.spells ) { out << "spell=" << sp << "\n"; }
++	}
++
++	void readCheckpoint()
++	{
++		g_checkpoint = Checkpoint();
++		std::ifstream in(checkpointPath());
++		if ( !in ) { return; }
++		std::string line;
++		while ( std::getline(in, line) )
++		{
++			auto eq = line.find('=');
++			if ( eq == std::string::npos ) { continue; }
++			std::string k = line.substr(0, eq), v = line.substr(eq + 1);
++			long long n = atoll(v.c_str());
++			Checkpoint& c = g_checkpoint;
++			if ( k == "floor" ) { c.floor = (int)n; c.valid = n > 0; }
++			else if ( k == "class" ) { c.cls = (int)n; }
++			else if ( k == "LVL" ) { c.LVL = (Sint32)n; } else if ( k == "EXP" ) { c.EXP = (Sint32)n; }
++			else if ( k == "STR" ) { c.STR = (Sint32)n; } else if ( k == "DEX" ) { c.DEX = (Sint32)n; }
++			else if ( k == "CON" ) { c.CON = (Sint32)n; } else if ( k == "INT" ) { c.INT = (Sint32)n; }
++			else if ( k == "PER" ) { c.PER = (Sint32)n; } else if ( k == "CHR" ) { c.CHR = (Sint32)n; }
++			else if ( k == "MAXHP" ) { c.MAXHP = (Sint32)n; } else if ( k == "MAXMP" ) { c.MAXMP = (Sint32)n; }
++			else if ( k == "GOLD" ) { c.GOLD = (Sint32)n; }
++			else if ( k.compare(0, 4, "prof") == 0 ) { int i = atoi(k.c_str() + 4); if ( i >= 0 && i < NUMPROFICIENCIES ) { c.prof[i] = (Sint32)n; } }
++			else if ( k.compare(0, 4, "perm") == 0 ) { int i = atoi(k.c_str() + 4); if ( i >= 0 && i < 8 ) { c.permApplied[i] = (int)n; } }
++			else if ( k == "spell" ) { c.spells.push_back((int)n); }
++			else if ( k == "item" )
++			{
++				long long f[10] = {};
++				int fi = 0;
++				std::stringstream ss(v);
++				std::string part;
++				while ( fi < 10 && std::getline(ss, part, ',') ) { f[fi++] = atoll(part.c_str()); }
++				if ( fi < 10 ) { continue; }
++				ItemSnapshot it{ (ItemType)f[0], (Status)f[1], (Sint16)f[2], (Sint16)f[3], (Uint32)f[4], f[5] != 0,
++					(Uint32)f[6], (Sint32)f[7], (Sint32)f[8], (int)f[9] };
++				c.items.push_back(it);
++			}
++		}
++	}
++
++	// Saves the character as it entered this floor (the floor-start inventory snapshot).
++	void saveCheckpoint(int p)
++	{
++		Stat* s = stats[p];
++		if ( !s || !g_hasFloorSnapshot[p] ) { return; }
++		Checkpoint c;
++		c.valid = true;
++		c.floor = currentlevel;
++		c.cls = client_classes[p];
++		c.LVL = s->LVL; c.EXP = s->EXP;
++		c.STR = s->STR; c.DEX = s->DEX; c.CON = s->CON; c.INT = s->INT; c.PER = s->PER; c.CHR = s->CHR;
++		c.MAXHP = s->MAXHP; c.MAXMP = s->MAXMP; c.GOLD = s->GOLD;
++		for ( int i = 0; i < NUMPROFICIENCIES; ++i ) { c.prof[i] = s->getProficiency(i); }
++		for ( int i = 0; i < 8; ++i ) { c.permApplied[i] = g_save.permApplied[i]; }
++		for ( auto& it : g_floorStartInventory[p] )
++		{
++			if ( it.type == SPELL_ITEM ) { c.spells.push_back((int)it.appearance); }
++			else { c.items.push_back(it); }
++		}
++		g_checkpoint = c;
++		writeCheckpoint();
++		say(COLOR_AP, "Checkpoint reached! A new run will start here, on floor %d.", c.floor);
++	}
++
++	// A new run with a checkpoint saved: bring the character back, then jump to that floor.
++	void resumeFromCheckpoint(int p)
++	{
++		Stat* s = stats[p];
++		const Checkpoint& c = g_checkpoint;
++		if ( !s || !c.valid ) { return; }
++		client_classes[p] = c.cls;
++		s->LVL = c.LVL; s->EXP = c.EXP;
++		s->STR = c.STR; s->DEX = c.DEX; s->CON = c.CON; s->INT = c.INT; s->PER = c.PER; s->CHR = c.CHR;
++		s->MAXHP = c.MAXHP; s->HP = c.MAXHP; s->MAXMP = c.MAXMP; s->MP = c.MAXMP; s->GOLD = c.GOLD;
++		for ( int i = 0; i < NUMPROFICIENCIES; ++i ) { s->setProficiencyUnsafe(i, c.prof[i]); }
++		for ( int i = 0; i < 8; ++i ) { g_save.permApplied[i] = c.permApplied[i]; }
++
++		// Inventory: exactly the checkpoint's items. Spells: keep the new character's, add the saved ones.
++		g_floorStartInventory[p].clear();
++		for ( node_t* node = s->inventory.first; node; node = node->next )
++		{
++			Item* item = (Item*)node->element;
++			if ( item && item->type == SPELL_ITEM )
++			{
++				g_floorStartInventory[p].push_back(ItemSnapshot{ item->type, item->status, item->beatitude, item->count,
++					item->appearance, item->identified, item->uid, item->x, item->y, -1 });
++			}
++		}
++		for ( auto& it : c.items ) { g_floorStartInventory[p].push_back(it); }
++		g_hasFloorSnapshot[p] = true;
++		restoreInventory(p);
++		for ( int sp : c.spells ) { addSpell(sp, p, true); }
++
++		skipLevelsOnLoad = c.floor - currentlevel - 1;
++		loadnextlevel = true;
++		writeSave();
++		say(COLOR_AP, "Resuming from your checkpoint on floor %d.", c.floor);
++	}
++
 +	void onNewFloor()
 +	{
 +		endDeathScreen();
@@ -1238,6 +1387,11 @@ index 0000000..02c48c7
 +		spawnFloorPickups();
 +		g_restartPending = false;
 +		snapshotInventories();
++		if ( g_slot.checkpoint_interval > 0 && !secretlevel && currentlevel > 0
++			&& currentlevel % g_slot.checkpoint_interval == 0 && currentlevel != g_checkpoint.floor )
++		{
++			saveCheckpoint(clientnum);
++		}
 +		if ( g_savedBossFloor != currentlevel )
 +		{
 +			g_savedBossHP.clear();
@@ -1351,9 +1505,15 @@ index 0000000..02c48c7
 +	if ( g_save.runKey != uniqueGameKey && stats[clientnum]->HP > 0 )
 +	{
 +		initRun();
++		g_resumePending = g_slot.checkpoint_interval > 0 && g_checkpoint.valid && currentlevel < g_checkpoint.floor;
 +	}
 +	applyNewItems();
 +	syncPermanents();
++	if ( g_resumePending && !loadnextlevel && players[clientnum]->entity && stats[clientnum]->HP > 0 )
++	{
++		g_resumePending = false;
++		resumeFromCheckpoint(clientnum);
++	}
 +	handleDeathLinkIn();
 +
 +	// A floor load makes a new player entity, which also catches a same-layout restart.
@@ -1662,6 +1822,15 @@ index 0000000..02c48c7
 +	return false;
 +}
 +
++uint32_t lockedMapSeed(uint32_t seed)
++{
++	if ( !g_ready || g_slot.layout_seed != 0 || multiplayer == CLIENT ) { return seed; }
++	Uint32 h = (Uint32)g_slot.floor_shuffle_seed * 2654435761u ^ (Uint32)(currentlevel + 1) * 2246822519u
++		^ (secretlevel ? 0x9E3779B9u : 0u);
++	h ^= h >> 15; h *= 2246822519u; h ^= h >> 13;
++	return h ? h : 1;
++}
++
 +int adjustMinotaurTime(int ticks)
 +{
 +	if ( g_ready && g_slot.difficulty == 1 )
@@ -1965,10 +2134,10 @@ index 0000000..02c48c7
 +} // namespace AP
 diff --git a/src/archipelago_barony.hpp b/src/archipelago_barony.hpp
 new file mode 100644
-index 0000000..1c9dd37
+index 0000000..d76be97
 --- /dev/null
 +++ b/src/archipelago_barony.hpp
-@@ -0,0 +1,86 @@
+@@ -0,0 +1,90 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client.
@@ -1984,6 +2153,7 @@ index 0000000..1c9dd37
 +#pragma once
 +
 +#include <string>
++#include <cstdint>
 +#include <vector>
 +
 +class Entity;
@@ -2018,6 +2188,9 @@ index 0000000..1c9dd37
 +	// actladder.cpp: may the party take the stairs down to the next floor?
 +	// Shows a message and returns false when a Stair Key is missing.
 +	bool canDescend(int player);
++
++	// game.cpp, when the next floor's map seed is picked: Layout Seed (same map every time).
++	uint32_t lockedMapSeed(uint32_t seed);
 +
 +	// monster_minotaur.cpp, getMinotaurTimeToArrive(): hard mode brings him sooner.
 +	int adjustMinotaurTime(int ticks);
@@ -2201,7 +2374,7 @@ index 12ae3dd..91a6c9c 100644
  		if ( levelToLoad > 0 ) // if level == 0, then load up the first map.
  		{
 diff --git a/src/game.cpp b/src/game.cpp
-index 7837966..f3c5395 100644
+index 7837966..10ef450 100644
 --- a/src/game.cpp
 +++ b/src/game.cpp
 @@ -12,6 +12,7 @@
@@ -2221,7 +2394,15 @@ index 7837966..f3c5395 100644
  #ifdef NINTENDO
  	(void)nxUpdateCrashMessage();
  #endif
-@@ -7663,6 +7666,7 @@ int main(int argc, char** argv)
+@@ -2106,6 +2109,7 @@ void gameLogic(void)
+ 						mapseed = map_sequence_rng.rand();
+ 					}
+ 					lastEntityUIDs = entity_uids;
++					mapseed = AP::lockedMapSeed(mapseed); // Archipelago: Layout Seed
+ 					if ( forceMapSeed > 0 )
+ 					{
+ 						mapseed = forceMapSeed;
+@@ -7663,6 +7667,7 @@ int main(int argc, char** argv)
  						MainMenu::doMainMenu(!intro);
  						UIToastNotificationManager.drawNotifications(MainMenu::isCutsceneActive(), true); // draw this before the cursor
                          framesProcResult = doFrames();
@@ -2229,7 +2410,7 @@ index 7837966..f3c5395 100644
  
  #ifdef USE_IMGUI
  						ImGui_t::render();
-@@ -7981,6 +7985,7 @@ int main(int argc, char** argv)
+@@ -7981,6 +7986,7 @@ int main(int argc, char** argv)
  				framesProcResult = doFrames();
  				DebugStats.t6Messages = std::chrono::high_resolution_clock::now();
  				ingameHud();

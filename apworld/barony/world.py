@@ -303,6 +303,8 @@ class BaronyWorld(World):
             "enemy_seed": o.enemy_seed.value,
             "music_shuffle": o.music_shuffle.value,
             "music_seed": o.music_seed.value,
+            "checkpoint_interval": o.checkpoint_interval.value,
+            "layout_seed": o.layout_seed.value,
             "death_link": int(bool(o.death_link)),
             "players": o.players.value,
         }

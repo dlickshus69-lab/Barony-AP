@@ -25,6 +25,7 @@
 #include "player.hpp"
 #include "prng.hpp"
 #include "files.hpp"
+#include "magic/magic.hpp"
 #include "init.hpp"
 #include "interface/consolecommand.hpp"
 #include "input.hpp"
@@ -89,6 +90,8 @@ namespace
 		int enemy_seed = 0;           // 0 locked to the seed, 1 re-rolled every time a floor loads
 		int music_shuffle = 0;        // 0 off, 1 biome music, 2 all music
 		int music_seed = 0;           // 0 locked per floor, 1 random every time a song starts
+		int checkpoint_interval = 0;  // 0 off, else a checkpoint every this many floors
+		int layout_seed = 0;          // 0 locked (each floor's map comes from the seed), 1 random
 		int players = 1;
 	};
 
@@ -145,6 +148,7 @@ namespace
 	bool g_savedGodmode = false;
 	bool g_confirmWasDown = true;               // edge detection: needs a fresh press
 	void endDeathScreen();
+	void readCheckpoint();
 	int apItemsLyingAround();
 	std::set<Uint32> g_countedDeaths;          // monster uids already counted
 
@@ -363,6 +367,8 @@ namespace
 		registerSlotInt("enemy_seed", &SlotOptions::enemy_seed);
 		registerSlotInt("music_shuffle", &SlotOptions::music_shuffle);
 		registerSlotInt("music_seed", &SlotOptions::music_seed);
+		registerSlotInt("checkpoint_interval", &SlotOptions::checkpoint_interval);
+		registerSlotInt("layout_seed", &SlotOptions::layout_seed);
 		registerSlotInt("players", &SlotOptions::players);
 
 		AP_Start();
@@ -407,6 +413,7 @@ namespace
 		std::filesystem::create_directories("archipelago");
 		g_savePath = "archipelago/" + sanitize(info.seed_name) + "_" + sanitize(g_slotName) + ".txt";
 		readSave();
+		readCheckpoint();
 		g_ready = true;
 		g_lastCharLevelSent = 1;
 		say(COLOR_AP, "Archipelago: connected. Goal: %s.",
@@ -1005,6 +1012,148 @@ namespace
 		writeSave();
 	}
 
+	// ------------------------------------------------------- checkpoints
+	struct Checkpoint
+	{
+		bool valid = false;
+		int floor = 0;
+		int cls = 0;
+		Sint32 LVL = 1, EXP = 0, STR = 0, DEX = 0, CON = 0, INT = 0, PER = 0, CHR = 0;
+		Sint32 MAXHP = 10, MAXMP = 10, GOLD = 0;
+		Sint32 prof[NUMPROFICIENCIES] = {};
+		int permApplied[8] = {};
+		std::vector<ItemSnapshot> items;
+		std::vector<int> spells;
+	};
+	Checkpoint g_checkpoint;
+	bool g_resumePending = false;
+
+	std::string checkpointPath()
+	{
+		if ( g_savePath.size() < 4 ) { return ""; }
+		return g_savePath.substr(0, g_savePath.size() - 4) + "_checkpoint.txt";
+	}
+
+	void writeCheckpoint()
+	{
+		std::string path = checkpointPath();
+		if ( path.empty() ) { return; }
+		std::ofstream out(path, std::ios::trunc);
+		if ( !out ) { return; }
+		const Checkpoint& c = g_checkpoint;
+		out << "floor=" << c.floor << "\nclass=" << c.cls << "\nLVL=" << c.LVL << "\nEXP=" << c.EXP
+			<< "\nSTR=" << c.STR << "\nDEX=" << c.DEX << "\nCON=" << c.CON << "\nINT=" << c.INT
+			<< "\nPER=" << c.PER << "\nCHR=" << c.CHR << "\nMAXHP=" << c.MAXHP << "\nMAXMP=" << c.MAXMP
+			<< "\nGOLD=" << c.GOLD << "\n";
+		for ( int i = 0; i < NUMPROFICIENCIES; ++i ) { out << "prof" << i << "=" << c.prof[i] << "\n"; }
+		for ( int i = 0; i < 8; ++i ) { out << "perm" << i << "=" << c.permApplied[i] << "\n"; }
+		for ( auto& it : c.items )
+		{
+			out << "item=" << (int)it.type << "," << (int)it.status << "," << it.beatitude << "," << it.count << ","
+				<< it.appearance << "," << (it.identified ? 1 : 0) << "," << it.uid << "," << it.x << "," << it.y << ","
+				<< it.equipSlot << "\n";
+		}
+		for ( int sp : c.spells ) { out << "spell=" << sp << "\n"; }
+	}
+
+	void readCheckpoint()
+	{
+		g_checkpoint = Checkpoint();
+		std::ifstream in(checkpointPath());
+		if ( !in ) { return; }
+		std::string line;
+		while ( std::getline(in, line) )
+		{
+			auto eq = line.find('=');
+			if ( eq == std::string::npos ) { continue; }
+			std::string k = line.substr(0, eq), v = line.substr(eq + 1);
+			long long n = atoll(v.c_str());
+			Checkpoint& c = g_checkpoint;
+			if ( k == "floor" ) { c.floor = (int)n; c.valid = n > 0; }
+			else if ( k == "class" ) { c.cls = (int)n; }
+			else if ( k == "LVL" ) { c.LVL = (Sint32)n; } else if ( k == "EXP" ) { c.EXP = (Sint32)n; }
+			else if ( k == "STR" ) { c.STR = (Sint32)n; } else if ( k == "DEX" ) { c.DEX = (Sint32)n; }
+			else if ( k == "CON" ) { c.CON = (Sint32)n; } else if ( k == "INT" ) { c.INT = (Sint32)n; }
+			else if ( k == "PER" ) { c.PER = (Sint32)n; } else if ( k == "CHR" ) { c.CHR = (Sint32)n; }
+			else if ( k == "MAXHP" ) { c.MAXHP = (Sint32)n; } else if ( k == "MAXMP" ) { c.MAXMP = (Sint32)n; }
+			else if ( k == "GOLD" ) { c.GOLD = (Sint32)n; }
+			else if ( k.compare(0, 4, "prof") == 0 ) { int i = atoi(k.c_str() + 4); if ( i >= 0 && i < NUMPROFICIENCIES ) { c.prof[i] = (Sint32)n; } }
+			else if ( k.compare(0, 4, "perm") == 0 ) { int i = atoi(k.c_str() + 4); if ( i >= 0 && i < 8 ) { c.permApplied[i] = (int)n; } }
+			else if ( k == "spell" ) { c.spells.push_back((int)n); }
+			else if ( k == "item" )
+			{
+				long long f[10] = {};
+				int fi = 0;
+				std::stringstream ss(v);
+				std::string part;
+				while ( fi < 10 && std::getline(ss, part, ',') ) { f[fi++] = atoll(part.c_str()); }
+				if ( fi < 10 ) { continue; }
+				ItemSnapshot it{ (ItemType)f[0], (Status)f[1], (Sint16)f[2], (Sint16)f[3], (Uint32)f[4], f[5] != 0,
+					(Uint32)f[6], (Sint32)f[7], (Sint32)f[8], (int)f[9] };
+				c.items.push_back(it);
+			}
+		}
+	}
+
+	// Saves the character as it entered this floor (the floor-start inventory snapshot).
+	void saveCheckpoint(int p)
+	{
+		Stat* s = stats[p];
+		if ( !s || !g_hasFloorSnapshot[p] ) { return; }
+		Checkpoint c;
+		c.valid = true;
+		c.floor = currentlevel;
+		c.cls = client_classes[p];
+		c.LVL = s->LVL; c.EXP = s->EXP;
+		c.STR = s->STR; c.DEX = s->DEX; c.CON = s->CON; c.INT = s->INT; c.PER = s->PER; c.CHR = s->CHR;
+		c.MAXHP = s->MAXHP; c.MAXMP = s->MAXMP; c.GOLD = s->GOLD;
+		for ( int i = 0; i < NUMPROFICIENCIES; ++i ) { c.prof[i] = s->getProficiency(i); }
+		for ( int i = 0; i < 8; ++i ) { c.permApplied[i] = g_save.permApplied[i]; }
+		for ( auto& it : g_floorStartInventory[p] )
+		{
+			if ( it.type == SPELL_ITEM ) { c.spells.push_back((int)it.appearance); }
+			else { c.items.push_back(it); }
+		}
+		g_checkpoint = c;
+		writeCheckpoint();
+		say(COLOR_AP, "Checkpoint reached! A new run will start here, on floor %d.", c.floor);
+	}
+
+	// A new run with a checkpoint saved: bring the character back, then jump to that floor.
+	void resumeFromCheckpoint(int p)
+	{
+		Stat* s = stats[p];
+		const Checkpoint& c = g_checkpoint;
+		if ( !s || !c.valid ) { return; }
+		client_classes[p] = c.cls;
+		s->LVL = c.LVL; s->EXP = c.EXP;
+		s->STR = c.STR; s->DEX = c.DEX; s->CON = c.CON; s->INT = c.INT; s->PER = c.PER; s->CHR = c.CHR;
+		s->MAXHP = c.MAXHP; s->HP = c.MAXHP; s->MAXMP = c.MAXMP; s->MP = c.MAXMP; s->GOLD = c.GOLD;
+		for ( int i = 0; i < NUMPROFICIENCIES; ++i ) { s->setProficiencyUnsafe(i, c.prof[i]); }
+		for ( int i = 0; i < 8; ++i ) { g_save.permApplied[i] = c.permApplied[i]; }
+
+		// Inventory: exactly the checkpoint's items. Spells: keep the new character's, add the saved ones.
+		g_floorStartInventory[p].clear();
+		for ( node_t* node = s->inventory.first; node; node = node->next )
+		{
+			Item* item = (Item*)node->element;
+			if ( item && item->type == SPELL_ITEM )
+			{
+				g_floorStartInventory[p].push_back(ItemSnapshot{ item->type, item->status, item->beatitude, item->count,
+					item->appearance, item->identified, item->uid, item->x, item->y, -1 });
+			}
+		}
+		for ( auto& it : c.items ) { g_floorStartInventory[p].push_back(it); }
+		g_hasFloorSnapshot[p] = true;
+		restoreInventory(p);
+		for ( int sp : c.spells ) { addSpell(sp, p, true); }
+
+		skipLevelsOnLoad = c.floor - currentlevel - 1;
+		loadnextlevel = true;
+		writeSave();
+		say(COLOR_AP, "Resuming from your checkpoint on floor %d.", c.floor);
+	}
+
 	void onNewFloor()
 	{
 		endDeathScreen();
@@ -1013,6 +1162,11 @@ namespace
 		spawnFloorPickups();
 		g_restartPending = false;
 		snapshotInventories();
+		if ( g_slot.checkpoint_interval > 0 && !secretlevel && currentlevel > 0
+			&& currentlevel % g_slot.checkpoint_interval == 0 && currentlevel != g_checkpoint.floor )
+		{
+			saveCheckpoint(clientnum);
+		}
 		if ( g_savedBossFloor != currentlevel )
 		{
 			g_savedBossHP.clear();
@@ -1126,9 +1280,15 @@ void tick()
 	if ( g_save.runKey != uniqueGameKey && stats[clientnum]->HP > 0 )
 	{
 		initRun();
+		g_resumePending = g_slot.checkpoint_interval > 0 && g_checkpoint.valid && currentlevel < g_checkpoint.floor;
 	}
 	applyNewItems();
 	syncPermanents();
+	if ( g_resumePending && !loadnextlevel && players[clientnum]->entity && stats[clientnum]->HP > 0 )
+	{
+		g_resumePending = false;
+		resumeFromCheckpoint(clientnum);
+	}
 	handleDeathLinkIn();
 
 	// A floor load makes a new player entity, which also catches a same-layout restart.
@@ -1435,6 +1595,15 @@ bool canDescend(int player)
 		"The stairs are sealed. You need %d Progressive Stair Key%s to go deeper (you have %d).",
 		needed, needed == 1 ? "" : "s", have);
 	return false;
+}
+
+uint32_t lockedMapSeed(uint32_t seed)
+{
+	if ( !g_ready || g_slot.layout_seed != 0 || multiplayer == CLIENT ) { return seed; }
+	Uint32 h = (Uint32)g_slot.floor_shuffle_seed * 2654435761u ^ (Uint32)(currentlevel + 1) * 2246822519u
+		^ (secretlevel ? 0x9E3779B9u : 0u);
+	h ^= h >> 15; h *= 2246822519u; h ^= h >> 13;
+	return h ? h : 1;
 }
 
 int adjustMinotaurTime(int ticks)

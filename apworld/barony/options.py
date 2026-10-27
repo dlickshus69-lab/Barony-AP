@@ -218,6 +218,36 @@ class MusicSeed(Choice):
     default = option_locked
 
 
+class CheckpointInterval(Choice):
+    """
+    Checkpoints save your whole character (level, stats, skills, items, gold and spells) when you
+    reach them. If you die with no lives left, your next run starts at your last checkpoint with
+    everything you had when you got there.
+    Off: no checkpoints, a new run starts on floor 1.
+    Every 5 / 10 / 15 / 20 Floors: a checkpoint on floor 5, 10, 15... (or 10, 20, 30...).
+    """
+    display_name = "Checkpoint Interval"
+    option_off = 0
+    option_every_5_floors = 5
+    option_every_10_floors = 10
+    option_every_15_floors = 15
+    option_every_20_floors = 20
+    default = option_every_5_floors
+
+
+class LayoutSeed(Choice):
+    """
+    Whether each floor's map is part of the seed.
+    Locked: floor 7 is always the same map whenever you play this seed, run after run.
+    New Each Run: every run builds new maps.
+    Floor Restart still decides what you get after losing a life.
+    """
+    display_name = "Layout Seed"
+    option_locked = 0
+    option_new_each_run = 1
+    default = option_locked
+
+
 class DifficultyScaling(DefaultOnToggle):
     """
     Monsters are scaled to how deep you actually are, not to where they normally live.
@@ -354,6 +384,7 @@ class BaronyOptions(PerGameCommonOptions):
     special_area_checks: SpecialAreaChecks
     stair_keys: StairKeys
     floor_shuffle: FloorShuffle
+    layout_seed: LayoutSeed
     enemy_randomizer: EnemyRandomizer
     enemy_pool: EnemyPool
     enemy_seed: EnemySeed
@@ -366,6 +397,7 @@ class BaronyOptions(PerGameCommonOptions):
     death_penalty: DeathPenalty
     boss_death: BossDeath
     floor_restart: FloorRestart
+    checkpoint_interval: CheckpointInterval
     death_link: BaronyDeathLink
     trap_chance: TrapChance
     enabled_traps: EnabledTraps
@@ -377,7 +409,7 @@ option_groups = [
         Goal, FloorCheckInterval, LevelChecks, KillChecks, KillCheckInterval, BestiaryChecks,
         ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),
-    OptionGroup("Dungeon", [StairKeys, FloorShuffle, EnemyRandomizer, EnemyPool, EnemySeed, MusicShuffle, MusicSeed, DifficultyScaling, Difficulty]),
-    OptionGroup("Lives & Death", [Lives, ExtraLivesInPool, DeathPenalty, BossDeath, FloorRestart, BaronyDeathLink]),
+    OptionGroup("Dungeon", [StairKeys, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemyPool, EnemySeed, MusicShuffle, MusicSeed, DifficultyScaling, Difficulty]),
+    OptionGroup("Lives & Death", [Lives, ExtraLivesInPool, DeathPenalty, BossDeath, FloorRestart, CheckpointInterval, BaronyDeathLink]),
     OptionGroup("Traps & Players", [TrapChance, EnabledTraps, Players]),
 ]

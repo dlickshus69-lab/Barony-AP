@@ -33,5 +33,5 @@ class TestStairKeys(BaronyTestBase):
 class TestRandomizers(BaronyTestBase):
     options = {
         "enemy_randomizer": "every_spawn", "enemy_pool": "anywhere", "enemy_seed": "reroll", "music_shuffle": "all_music", "music_seed": "always_random",
-        "bestiary_checks": "all", "floor_restart": "same_layout",
+        "bestiary_checks": "all", "floor_restart": "same_layout", "checkpoint_interval": "every_20_floors", "layout_seed": "new_each_run",
     }
