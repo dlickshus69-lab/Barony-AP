@@ -1,4 +1,4 @@
-From bd1431b85b1f098c3340027e6b5e82083ba1c81a Mon Sep 17 00:00:00 2001
+From 75c8188b949374512a16ed85a285c04ee7733425 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -12,7 +12,7 @@ Subject: [PATCH] Archipelago client hooks
  src/actladder.cpp                 |   25 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 4604 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 4623 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |  126 +
  src/archipelago_ids.hpp           |  245 ++
  src/charclass.cpp                 |    4 +
@@ -31,7 +31,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   15 +
  src/ui/MainMenu.cpp               |    5 +-
- 27 files changed, 6771 insertions(+), 4 deletions(-)
+ 27 files changed, 6790 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -1789,10 +1789,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..606228e
+index 0000000..b7cf05a
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,4604 @@
+@@ -0,0 +1,4623 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -5039,8 +5039,27 @@ index 0000000..606228e
 +
 +int remapShuffledLine(int levelToLoad, const std::vector<std::string>& levelsList);
 +
++// Custom Dungeon Length past floor 34: bonus floors drawn from the last areas' generated floors
++// (Caves and Citadel), the same for a floor number every time.
++static int bonusFloorLine(int level, const std::vector<std::string>& levelsList)
++{
++	int last = (int)levelsList.size() - 1;
++	if ( !bossRushOn() || secretlevel || level < last || level > g_slot.dungeon_floors ) { return -1; }
++	std::vector<int> late;
++	for ( int i = std::max(1, last - 10); i < last; ++i )
++	{
++		if ( levelsList[i].compare(0, 4, "gen:") == 0 ) { late.push_back(i); }
++	}
++	if ( late.empty() ) { return -1; }
++	uint32_t h = (uint32_t)g_slot.floor_shuffle_seed * 2654435761u ^ (uint32_t)level * 40503u;
++	h ^= h >> 13;
++	return late[h % late.size()];
++}
++
 +int remapLevelLine(int levelToLoad, const std::vector<std::string>& levelsList)
 +{
++	int bonus = bonusFloorLine(levelToLoad, levelsList);
++	if ( bonus >= 0 ) { return bonus; }
 +	int mapped = remapShuffledLine(levelToLoad, levelsList);
 +	return skipRushBossLine(mapped, levelsList);
 +}
@@ -6531,7 +6550,7 @@ index 0000000..2b62aed
 +}
 diff --git a/src/archipelago_ids.hpp b/src/archipelago_ids.hpp
 new file mode 100644
-index 0000000..1df5497
+index 0000000..8e07376
 --- /dev/null
 +++ b/src/archipelago_ids.hpp
 @@ -0,0 +1,245 @@
@@ -6553,7 +6572,7 @@ index 0000000..1df5497
 +constexpr int64_t SPELLBOOK_OFFSET = 1100;
 +constexpr int64_t SPELL_ITEM_OFFSET = 100;
 +constexpr int64_t BOUNTY_OFFSET = 1200;
-+constexpr int MAX_FLOOR = 35;
++constexpr int MAX_FLOOR = 45;
 +constexpr int FLOORS_PER_SECTION = 5;
 +
 +// Items

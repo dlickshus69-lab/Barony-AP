@@ -227,3 +227,12 @@ class TestNormalLength(BaronyTestBase):
     def test_normal(self) -> None:
         sd = self.world.fill_slot_data()
         self.assertEqual((sd["goal_floor"], sd["dungeon_floors"]), (24, 0))
+
+
+class TestBonusFloors(BaronyTestBase):
+    options = {"goal": "sanctum", "custom_dungeon_length": True, "dungeon_floors": 44, "floor_shuffle": "full"}
+
+    def test_bonus(self) -> None:
+        names = {loc.name for loc in self.multiworld.get_locations(self.player)}
+        self.assertIn("Reach Floor 44", names)
+        self.assertEqual(self.world.fill_slot_data()["goal_floor"], 44)

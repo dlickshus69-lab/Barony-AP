@@ -32,7 +32,7 @@ GOAL_FLOOR = {
     GOAL_BOSS_RUSH: 10,  # the default; Dungeon Floors changes it
 }
 
-MAX_FLOOR = 35
+MAX_FLOOR = 45  # Barony's 35, plus up to 10 bonus floors with Custom Dungeon Length
 
 
 def section_of_floor(floor: int) -> int:

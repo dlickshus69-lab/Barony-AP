@@ -40,7 +40,8 @@ each item's kind (a potion becomes a different potion), Anything lets it become 
 Defeat Baron Herx, the Devil, or the twin liches of the Sanctum, depending on your options.
 
 Custom Dungeon Length lets any goal have a set number of floors (Dungeon Floors: 10 for a short run,
-20 for a medium one, up to 34 for a long one) before the goal boss. Boss floors on the way
+20 for a medium one, 34 for all of Barony's floors, and up to 44 with bonus Caves and Citadel floors
+past the end) before the goal boss. Boss floors on the way
 down are skipped, and taking the stairs off the last floor takes you to the goal boss.
 
 Boss Rush: play the dungeon (Dungeon Floors, 10 by default), then

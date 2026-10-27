@@ -3244,8 +3244,27 @@ static int skipRushBossLine(int line, const std::vector<std::string>& levelsList
 
 int remapShuffledLine(int levelToLoad, const std::vector<std::string>& levelsList);
 
+// Custom Dungeon Length past floor 34: bonus floors drawn from the last areas' generated floors
+// (Caves and Citadel), the same for a floor number every time.
+static int bonusFloorLine(int level, const std::vector<std::string>& levelsList)
+{
+	int last = (int)levelsList.size() - 1;
+	if ( !bossRushOn() || secretlevel || level < last || level > g_slot.dungeon_floors ) { return -1; }
+	std::vector<int> late;
+	for ( int i = std::max(1, last - 10); i < last; ++i )
+	{
+		if ( levelsList[i].compare(0, 4, "gen:") == 0 ) { late.push_back(i); }
+	}
+	if ( late.empty() ) { return -1; }
+	uint32_t h = (uint32_t)g_slot.floor_shuffle_seed * 2654435761u ^ (uint32_t)level * 40503u;
+	h ^= h >> 13;
+	return late[h % late.size()];
+}
+
 int remapLevelLine(int levelToLoad, const std::vector<std::string>& levelsList)
 {
+	int bonus = bonusFloorLine(levelToLoad, levelsList);
+	if ( bonus >= 0 ) { return bonus; }
 	int mapped = remapShuffledLine(levelToLoad, levelsList);
 	return skipRushBossLine(mapped, levelsList);
 }

@@ -37,12 +37,14 @@ class CustomDungeonLength(Toggle):
 class DungeonFloors(Range):
     """
     With Custom Dungeon Length (or the Boss Rush goal): how many dungeon floors the run has before the
-    goal boss. 10 is a short run, 20 a medium one, 34 a long one. Boss floors on the way down are
-    skipped (you play a normal floor there instead), so bosses only come at the end.
+    goal boss. 10 is a short run, 20 a medium one, 34 is all of Barony's floors. 35 to 44 adds up to 10
+    bonus floors past the end of the normal dungeon (more Caves and Citadel floors, as hard as the
+    deepest ones). Boss floors on the way down are skipped (you play a normal floor there instead),
+    so bosses only come at the end.
     """
     display_name = "Dungeon Floors"
     range_start = 10
-    range_end = 34
+    range_end = 44
     default = 10
 
 
