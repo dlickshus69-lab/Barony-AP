@@ -103,6 +103,10 @@ namespace AP
 		bool active = false;
 	};
 
+	// engine/audio/music.cpp, playMusic(): Music Mods. Takes and returns an FMOD::Sound*: the track to
+	// play, which may be a mod's version of the same track.
+	void* pickMusicVersion(void* sound);
+
 	// Status for the console and the UI.
 	bool isConnected();
 	std::string statusLine();

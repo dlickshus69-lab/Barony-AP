@@ -37,6 +37,7 @@ Barony:
   enemy_seed: locked
   music_shuffle: off
   music_seed: locked
+  music_mods: mixed
   enemy_level_scaling: off
   boss_level_scaling: off
   minotaur_time: 100

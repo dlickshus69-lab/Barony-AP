@@ -328,6 +328,23 @@ class LayoutSeed(Choice):
     default = option_locked
 
 
+class MusicMods(Choice):
+    """
+    Uses music mods you have: any Barony Workshop mod you're subscribed to on Steam (or a mod in the
+    game's mods folder) that replaces Barony's music, like a Zelda soundtrack.
+    Off: only Barony's own music.
+    Mixed: each time a track plays it's the original or a mod's version of it, picked at random, so the
+    two soundtracks are combined.
+    Mods Only: always a mod's version when one exists.
+    Works with Music Shuffle. Each player hears the mods installed on their own computer.
+    """
+    display_name = "Music Mods"
+    option_off = 0
+    option_mixed = 1
+    option_mods_only = 2
+    default = option_off
+
+
 class EnemyLevelScaling(Choice):
     """
     Enemies scale to your character level.
@@ -776,6 +793,7 @@ class BaronyOptions(PerGameCommonOptions):
     enemy_seed: EnemySeed
     music_shuffle: MusicShuffle
     music_seed: MusicSeed
+    music_mods: MusicMods
     enemy_level_scaling: EnemyLevelScaling
     boss_level_scaling: BossLevelScaling
     minotaur_time: MinotaurTime
@@ -817,7 +835,7 @@ option_groups = [
         ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),
     OptionGroup("Skills", [SkillChecks, SkillCheckMaxRank, LockClass]),
-    OptionGroup("Dungeon", [FloorKeys, KeyCompassTime, FloorSize, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemyRandomizerSecretAreas, EnemyPool, EnemySeed, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, MinotaurTime, DifficultyScaling, Difficulty]),
+    OptionGroup("Dungeon", [FloorKeys, KeyCompassTime, FloorSize, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemyRandomizerSecretAreas, EnemyPool, EnemySeed, MusicShuffle, MusicSeed, MusicMods, EnemyLevelScaling, BossLevelScaling, MinotaurTime, DifficultyScaling, Difficulty]),
     OptionGroup("Lives & Checkpoints", [Lives, ExtraLivesInPool, CheckpointInterval]),
     OptionGroup("Death Link", [BaronyDeathLink, DeathLinkMode, DeathPenalty, DeathItems, FloorRestart, BossDeath]),
     OptionGroup("Traps", [TrapChance, MinotaurTrapWeight, AmbushTrapWeight, PolymorphTrapWeight, FumbleTrapWeight, BlindnessTrapWeight, TeleportTrapWeight, HungerTrapWeight, DarknessTrapWeight, CurseTrapWeight,

@@ -292,6 +292,7 @@ class BaronyWorld(World):
             "skill_check_max_rank": o.skill_check_max_rank.value,
             "lock_class": int(bool(o.lock_class)),
             "floor_size": o.floor_size.value,
+            "music_mods": o.music_mods.value,
             "floor_shuffle": o.floor_shuffle.value,
             "floor_shuffle_seed": self.floor_shuffle_seed,
             "difficulty_scaling": int(bool(o.difficulty_scaling)),

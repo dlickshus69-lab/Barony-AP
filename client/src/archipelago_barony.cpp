@@ -86,7 +86,8 @@ namespace
 		int skill_checks = 0;         // 0 off, 1 any class, 2.. a class (Barony class index + 2)
 		int skill_check_max_rank = 3; // 1 Basic .. 5 Legendary
 		int lock_class = 0;
-		int floor_size = 0;           // 0 normal, 1 bigger, 2 much bigger           // new characters always get the Skill Checks class    // Minotaur floors: seconds before he arrives that the key compass turns on
+		int floor_size = 0;           // 0 normal, 1 bigger, 2 much bigger
+		int music_mods = 0;           // 0 off, 1 mixed with the original, 2 mods only           // new characters always get the Skill Checks class    // Minotaur floors: seconds before he arrives that the key compass turns on
 		int floor_shuffle = 0;        // 0 off, 1 sections, 2 full
 		int floor_shuffle_seed = 0;
 		int difficulty_scaling = 1;
@@ -500,6 +501,7 @@ namespace
 		registerSlotInt("skill_check_max_rank", &SlotOptions::skill_check_max_rank);
 		registerSlotInt("lock_class", &SlotOptions::lock_class);
 		registerSlotInt("floor_size", &SlotOptions::floor_size);
+		registerSlotInt("music_mods", &SlotOptions::music_mods);
 		registerSlotInt("floor_shuffle", &SlotOptions::floor_shuffle);
 		registerSlotInt("floor_shuffle_seed", &SlotOptions::floor_shuffle_seed);
 		registerSlotInt("difficulty_scaling", &SlotOptions::difficulty_scaling);
@@ -2961,6 +2963,98 @@ int randomizePlacedMonster(int monsterType, bool named)
 	for ( auto& m : ap_ids::BESTIARY ) { if ( m.monster == monsterType ) { isEnemy = true; break; } }
 	if ( !isEnemy ) { return monsterType; } // bots, decoys and other special things
 	return randomizeMonster(monsterType);
+}
+
+// ---------------------------------------------------------------- Music Mods
+// Music Mods: Workshop or local mods that replace Barony's music (same file names, like
+// music/mines01.ogg) are mixed in with the original soundtrack, or replace it. The mods are read
+// from your own Steam Workshop folder and the game's mods folder; nothing is downloaded or shipped.
+namespace
+{
+	std::map<std::string, std::vector<std::string>> g_modMusic; // "mines01.ogg" -> files from mods
+	bool g_modMusicScanned = false;
+#ifdef USE_FMOD
+	std::map<std::string, FMOD::Sound*> g_modMusicLoaded;      // file -> loaded stream
+	std::map<FMOD::Sound*, FMOD::Sound*> g_musicChoice;        // this floor's pick for each track
+	Uint32 g_musicChoiceLoad = 0xFFFFFFFFu;
+#endif
+
+	void scanModMusic()
+	{
+		if ( g_modMusicScanned ) { return; }
+		g_modMusicScanned = true;
+		namespace fs = std::filesystem;
+		std::vector<fs::path> roots = { fs::path("mods"), fs::path("../../workshop/content/371970") };
+		std::error_code ec;
+		for ( auto& root : roots )
+		{
+			if ( !fs::is_directory(root, ec) ) { continue; }
+			for ( auto& mod : fs::directory_iterator(root, ec) )
+			{
+				fs::path dir = mod.path() / "music";
+				if ( !fs::is_directory(dir, ec) ) { continue; }
+				int count = 0;
+				for ( auto& f : fs::directory_iterator(dir, ec) )
+				{
+					if ( !f.is_regular_file(ec) ) { continue; }
+					std::string name = f.path().filename().string();
+					std::string lower = name;
+					std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+					if ( lower.size() < 4 || lower.substr(lower.size() - 4) != ".ogg" ) { continue; }
+					g_modMusic[lower].push_back(f.path().string());
+					++count;
+				}
+				if ( count ) { printlog("[Archipelago] Music Mods: %d tracks in %s", count, dir.string().c_str()); }
+			}
+		}
+	}
+}
+
+void* pickMusicVersion(void* soundPtr)
+{
+#ifdef USE_FMOD
+	FMOD::Sound* sound = (FMOD::Sound*)soundPtr;
+	if ( !sound || !g_ready || g_slot.music_mods == 0 || !fmod_system ) { return soundPtr; }
+	scanModMusic();
+	if ( g_modMusic.empty() ) { return soundPtr; }
+	// Our own mod streams pass straight through.
+	for ( auto& l : g_modMusicLoaded ) { if ( l.second == sound ) { return soundPtr; } }
+	// One pick per track per floor, so the music doesn't flip while you play.
+	if ( g_musicChoiceLoad != g_floorLoads ) { g_musicChoice.clear(); g_musicChoiceLoad = g_floorLoads; }
+	auto chosen = g_musicChoice.find(sound);
+	if ( chosen != g_musicChoice.end() ) { return chosen->second; }
+
+	FMOD::Sound* result = sound;
+	char nameBuf[512] = "";
+	if ( sound->getName(nameBuf, sizeof(nameBuf)) == FMOD_OK )
+	{
+		std::string name = std::filesystem::path(nameBuf).filename().string();
+		std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+		auto it = g_modMusic.find(name);
+		// Mixed: original or one of the mod versions, all equally likely. Mods Only: always a mod version.
+		if ( it != g_modMusic.end() && !it->second.empty() )
+		{
+			int options = (int)it->second.size() + (g_slot.music_mods == 1 ? 1 : 0);
+			int pick = local_rng.rand() % options;
+			if ( pick < (int)it->second.size() )
+			{
+				const std::string& file = it->second[pick];
+				FMOD::Sound* alt = nullptr;
+				auto loaded = g_modMusicLoaded.find(file);
+				if ( loaded != g_modMusicLoaded.end() ) { alt = loaded->second; }
+				else if ( fmod_system->createStream(file.c_str(), FMOD_2D, nullptr, &alt) == FMOD_OK )
+				{
+					g_modMusicLoaded[file] = alt;
+				}
+				if ( alt ) { result = alt; }
+			}
+		}
+	}
+	g_musicChoice[sound] = result;
+	return result;
+#else
+	return soundPtr;
+#endif
 }
 
 // ---------------------------------------------------------------- Music Shuffle
