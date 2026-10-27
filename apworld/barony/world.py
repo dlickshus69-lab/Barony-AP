@@ -291,6 +291,7 @@ class BaronyWorld(World):
             "stair_keys": 0,
             "floor_keys": int(bool(o.floor_keys)),
             "key_compass_time": o.key_compass_time.value,
+            "floor_key_on_tracker_map": o.floor_key_on_tracker_map.value,
             "floor_key_requirement": o.floor_key_requirement.value,
             "compass": o.compass.value,
             "compass_mode": o.compass_mode.value,

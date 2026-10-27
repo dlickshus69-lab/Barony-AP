@@ -1,4 +1,4 @@
-From 1837186ad5960dc6a90ef187588226cf2d5a12d5 Mon Sep 17 00:00:00 2001
+From 7119c825ae09833ab8a669c7e890c5a655c82e05 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -12,7 +12,7 @@ Subject: [PATCH] Archipelago client hooks
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 3993 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 3997 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |  120 +
  src/archipelago_ids.hpp           |  134 +
  src/charclass.cpp                 |    4 +
@@ -29,7 +29,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   10 +
  src/ui/MainMenu.cpp               |    5 +-
- 25 files changed, 5561 insertions(+), 4 deletions(-)
+ 25 files changed, 5565 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -1308,10 +1308,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..2d4431c
+index 0000000..37841e5
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,3993 @@
+@@ -0,0 +1,3997 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -1408,6 +1408,7 @@ index 0000000..2d4431c
 +		int skill_check_max_rank = 3; // 1 Basic .. 5 Legendary
 +		int lock_class = 0;
 +		int floor_size_mask = 1;      // Floor Size: bit 1 Normal, 2 Bigger, 4 Much Bigger
++		int floor_key_on_tracker_map = 0; // 1: the tracker map always shows the Floor Key
 +		int randomize_loot = 0;       // 0 off, 1 same kind, 2 anything
 +		int music_mods = 0;           // 0 off, 1 mixed with the original, 2 mods only
 +		int extra_monsters = 0;       // how many more monsters per floor (0 to 20)           // new characters always get the Skill Checks class    // Minotaur floors: seconds before he arrives that the key compass turns on
@@ -1836,6 +1837,7 @@ index 0000000..2d4431c
 +		registerSlotInt("floor_size_mask", &SlotOptions::floor_size_mask);
 +		registerSlotInt("music_mods", &SlotOptions::music_mods);
 +		registerSlotInt("randomize_loot", &SlotOptions::randomize_loot);
++		registerSlotInt("floor_key_on_tracker_map", &SlotOptions::floor_key_on_tracker_map);
 +		registerSlotInt("extra_monsters", &SlotOptions::extra_monsters);
 +		registerSlotInt("floor_shuffle", &SlotOptions::floor_shuffle);
 +		registerSlotInt("floor_shuffle_seed", &SlotOptions::floor_shuffle_seed);
@@ -3772,7 +3774,9 @@ index 0000000..2d4431c
 +				Entity* pl = players[clientnum]->entity;
 +				out << "player=" << pl->x / 16.0 << "\t" << pl->y / 16.0 << "\t" << pl->yaw << "\n";
 +			}
-+			bool keyVisible = g_compassShowing || !g_keyCompass.empty();
++			// Always with Floor Key on Tracker Map; else only while the Compass, the Minotaur warning or
++			// Key Compass Time points at it.
++			bool keyVisible = g_slot.floor_key_on_tracker_map != 0 || g_compassShowing || !g_keyCompass.empty();
 +			for ( node_t* node = map.entities ? map.entities->first : nullptr; node; node = node->next )
 +			{
 +				Entity* e = (Entity*)node->element;

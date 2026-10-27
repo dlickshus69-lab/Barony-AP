@@ -29,6 +29,7 @@ Barony:
   compass_recharge: 90
   key_compass_time: 30
   minotaur_time: 100
+  floor_key_on_tracker_map: false
   floor_shuffle: full
   layout_seed: locked
   enemy_randomizer: off

@@ -94,6 +94,7 @@ namespace
 		int skill_check_max_rank = 3; // 1 Basic .. 5 Legendary
 		int lock_class = 0;
 		int floor_size_mask = 1;      // Floor Size: bit 1 Normal, 2 Bigger, 4 Much Bigger
+		int floor_key_on_tracker_map = 0; // 1: the tracker map always shows the Floor Key
 		int randomize_loot = 0;       // 0 off, 1 same kind, 2 anything
 		int music_mods = 0;           // 0 off, 1 mixed with the original, 2 mods only
 		int extra_monsters = 0;       // how many more monsters per floor (0 to 20)           // new characters always get the Skill Checks class    // Minotaur floors: seconds before he arrives that the key compass turns on
@@ -522,6 +523,7 @@ namespace
 		registerSlotInt("floor_size_mask", &SlotOptions::floor_size_mask);
 		registerSlotInt("music_mods", &SlotOptions::music_mods);
 		registerSlotInt("randomize_loot", &SlotOptions::randomize_loot);
+		registerSlotInt("floor_key_on_tracker_map", &SlotOptions::floor_key_on_tracker_map);
 		registerSlotInt("extra_monsters", &SlotOptions::extra_monsters);
 		registerSlotInt("floor_shuffle", &SlotOptions::floor_shuffle);
 		registerSlotInt("floor_shuffle_seed", &SlotOptions::floor_shuffle_seed);
@@ -2458,7 +2460,9 @@ namespace
 				Entity* pl = players[clientnum]->entity;
 				out << "player=" << pl->x / 16.0 << "\t" << pl->y / 16.0 << "\t" << pl->yaw << "\n";
 			}
-			bool keyVisible = g_compassShowing || !g_keyCompass.empty();
+			// Always with Floor Key on Tracker Map; else only while the Compass, the Minotaur warning or
+			// Key Compass Time points at it.
+			bool keyVisible = g_slot.floor_key_on_tracker_map != 0 || g_compassShowing || !g_keyCompass.empty();
 			for ( node_t* node = map.entities ? map.entities->first : nullptr; node; node = node->next )
 			{
 				Entity* e = (Entity*)node->element;

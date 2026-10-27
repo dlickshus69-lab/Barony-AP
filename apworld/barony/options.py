@@ -254,6 +254,15 @@ class CompassRecharge(Range):
     default = 90
 
 
+class FloorKeyOnTrackerMap(Toggle):
+    """
+    Shows where the Floor Key is on the tracker window's floor map, all the time.
+    Off: the map only shows the key while the Compass points at it, during the Minotaur warning
+    (30 seconds before it arrives, even with this off), or after Key Compass Time.
+    """
+    display_name = "Floor Key on Tracker Map"
+
+
 class KeyCompassTime(Range):
     """
     On Minotaur floors (with Floor Keys on), how many seconds before the Minotaur arrives the screen starts
@@ -880,6 +889,7 @@ class BaronyOptions(PerGameCommonOptions):
     skill_check_max_rank: SkillCheckMaxRank
     lock_class: LockClass
     key_compass_time: KeyCompassTime
+    floor_key_on_tracker_map: FloorKeyOnTrackerMap
     floor_key_requirement: FloorKeyRequirement
     compass: Compass
     compass_mode: CompassMode
@@ -937,7 +947,7 @@ option_groups = [
         EnemySanityPerFloor, BestiaryChecks,
         ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),
-    OptionGroup("Dungeon", [FloorKeys, FloorKeyRequirement, Compass, CompassMode, CompassPingTime, CompassRecharge, KeyCompassTime, MinotaurTime, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemySeed, EnemyRandomizerSecretAreas, EnemyPool, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, DifficultyScaling, Difficulty]),
+    OptionGroup("Dungeon", [FloorKeys, FloorKeyRequirement, Compass, CompassMode, CompassPingTime, CompassRecharge, KeyCompassTime, MinotaurTime, FloorKeyOnTrackerMap, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemySeed, EnemyRandomizerSecretAreas, EnemyPool, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, DifficultyScaling, Difficulty]),
     OptionGroup("Class & Skills", [SkillChecks, SkillCheckMaxRank, LockClass]),
     OptionGroup("Lives & Checkpoints", [Lives, ExtraLivesInPool, CheckpointInterval]),
     OptionGroup("Filler", [XPBoostWeight, GoldPouchWeight, HealingPotionWeight, FoodRationWeight, RandomItemWeight]),
