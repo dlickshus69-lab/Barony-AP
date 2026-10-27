@@ -220,8 +220,18 @@ class BaronyWorld(World):
         traps = sorted(self.options.enabled_traps.value)
         if traps and self.random.randint(1, 100) <= chance:
             return self.random.choice(traps)
-        names = list(data.FILLER_WEIGHTS)
-        return self.random.choices(names, weights=[data.FILLER_WEIGHTS[n] for n in names])[0]
+        o = self.options
+        weights = {
+            "XP Boost": o.xp_boost_weight.value,
+            "Gold Pouch": o.gold_pouch_weight.value,
+            "Healing Potion": o.healing_potion_weight.value,
+            "Food Ration": o.food_ration_weight.value,
+            "Random Item": o.random_item_weight.value,
+        }
+        if sum(weights.values()) == 0:
+            weights = dict(data.FILLER_WEIGHTS)
+        names = list(weights)
+        return self.random.choices(names, weights=[weights[n] for n in names])[0]
 
     def _keys_to_precollect(self) -> int:
         """
@@ -305,6 +315,13 @@ class BaronyWorld(World):
             "death_penalty": o.death_penalty.value,
             "boss_death": o.boss_death.value,
             "floor_restart": o.floor_restart.value,
+            "death_items": o.death_items.value,
+            "boss_level_scaling": o.boss_level_scaling.value,
+            "trap_countdown_mask": sum(1 << i for i, name in enumerate(data.TRAP_ITEMS)
+                                       if name in o.trap_countdown_traps.value),
+            "trap_countdown": o.trap_countdown.value,
+            "polymorph_trap_duration": o.polymorph_trap_duration.value,
+            "blindness_trap_duration": o.blindness_trap_duration.value,
             "enemy_randomizer": o.enemy_randomizer.value,
             "enemy_pool": o.enemy_pool.value,
             "enemy_seed": o.enemy_seed.value,

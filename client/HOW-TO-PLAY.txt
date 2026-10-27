@@ -13,6 +13,13 @@ Barony Archipelago
 
 3. Start Barony from Steam as usual. The message log says "Archipelago: connected".
 
+In game:
+  Top left   Archipelago status, and how many Archipelago things are left on this floor
+  Top right  lives, and the skull with the total death count
+  F1  items you received      F2  full log      F3  deaths per player
+  BaronyAPTracker.exe opens by itself when you connect: a window with the same information
+  (close it any time; it opens again the next time you start Barony).
+
 Chat commands (type in the in-game chat):
   /ap_status    connection, Stair Keys, lives, kills, waiting traps
   /ap_connect host:port slot [password]   connect by hand

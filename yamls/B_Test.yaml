@@ -7,7 +7,7 @@ Barony:
   goal: devil
   floor_check_interval: 1
   level_checks: 15
-  enemy_sanity: kill_count
+  enemy_sanity: marked_enemies
   enemy_sanity_checks: 10
   enemy_sanity_kills_per_check: 10
   enemy_sanity_per_floor: 2
@@ -21,10 +21,12 @@ Barony:
   floor_shuffle: full
   difficulty_scaling: true
   difficulty: normal
+  boss_level_scaling: off
   lives: 5
   extra_lives_in_pool: 2
   death_penalty: none
   boss_death: keep_damage
+  death_items: floor_start
   death_link: true
   trap_chance: 50
   enabled_traps:
@@ -37,6 +39,15 @@ Barony:
   - Minotaur Trap
   - Polymorph Trap
   - Teleport Trap
+  trap_countdown_traps: []
+  trap_countdown: 10
+  polymorph_trap_duration: 30
+  blindness_trap_duration: 15
+  xp_boost_weight: 30
+  gold_pouch_weight: 25
+  healing_potion_weight: 20
+  food_ration_weight: 15
+  random_item_weight: 10
   players: 1
   local_items: []
   non_local_items: []

@@ -48,6 +48,9 @@ jobs:
           cd extern/APCpp
           git checkout -q $env:APCPP_COMMIT
           git submodule update --init --recursive --depth 1
+          cd ../..
+          python ../tools/patch_apcpp.py extern/APCpp
+          if ($LASTEXITCODE -ne 0) { throw "APCpp patch failed" }
 
       - name: Install libraries
         shell: pwsh
@@ -104,6 +107,7 @@ jobs:
           $out = "package/BaronyAP"
           New-Item -ItemType Directory -Force $out | Out-Null
           Copy-Item build/Release/barony.exe $out
+          if (Test-Path build/Release/BaronyAPTracker.exe) { Copy-Item build/Release/BaronyAPTracker.exe $out }
           Copy-Item build/Release/*.dll $out
           Copy-Item client/archipelago-example.cfg $out
           Copy-Item client/HOW-TO-PLAY.txt $out

@@ -52,6 +52,10 @@ namespace AP
 	// game.cpp, when the next floor's map seed is picked: Layout Seed (same map every time).
 	uint32_t lockedMapSeed(uint32_t seed);
 
+	// maps.cpp, generateDungeon(): this floor has a secret-area entrance (0 = none). The player
+	// gets a pickaxe and a levitation potion if they have nothing to dig or float with.
+	void noteSecretExit(int secretLevelExit);
+
 	// monster_minotaur.cpp, getMinotaurTimeToArrive(): hard mode brings him sooner.
 	int adjustMinotaurTime(int ticks);
 

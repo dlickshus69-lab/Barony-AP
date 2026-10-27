@@ -39,9 +39,29 @@ next normal floor instead.
 With lives left, dying costs a life and shows a death screen. Press confirm to restart the floor
 you were on, with a new layout or the same one (the Floor Restart option). Your inventory goes back
 to what you had when you entered that floor: potions you drank and gear that broke come back, and
-items you found on that floor are lost. Death Link deaths also cost a life.
+items you found on that floor are lost. With Death Items set to Keep Everything, you keep everything
+you carry instead, and items you already picked up (and chests you emptied) on that floor stay gone.
 
-The top left of the screen shows whether you're connected, and the top right shows your lives.
+Each floor has a fixed number of Archipelago items, decided on your first try. After a restart only
+the ones you haven't found yet come back. A game over resets everything.
+
+Death Link deaths also cost a life, with the same Death Penalty (none, gold, XP, or gold and XP).
+
+The top left of the screen shows whether you're connected and how many Archipelago things are left on
+the floor. The top right shows your lives and the total death count. F1 shows received items, F2
+the full log, F3 deaths per player. BaronyAPTracker.exe opens next to the game with the same
+information.
+
+## Secret areas
+
+On a floor with a secret-area entrance you're given a pickaxe and a levitation potion if you have
+nothing to dig or float with, so shuffled floors never lock you out of a secret area.
+
+## Traps
+
+Traps listed in Trap Countdown Traps warn you and count down before they go off. Polymorph and
+Blindness last as long as their duration options say. A trap never goes off between floors or on the
+death screen; it waits until you're back in the dungeon.
 
 ## How do checkpoints work?
 

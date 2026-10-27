@@ -10,6 +10,8 @@ when updating to a newer Barony.
 | `src/game.cpp` | `gameLogic()` | `AP::tick()` | Runs the client every game tick: connection, received items, floor/level checks, Death Link in, pickups |
 | `src/files.cpp` | `physfsLoadMapFile()` | `AP::remapLevelLine()` | Floor shuffle: picks which line of `maps/levels.txt` each floor uses |
 | `src/maps.cpp` | `generateDungeon()` | `AP::onDungeonGenerated()` | Applies queued Minotaur and Darkness traps to a new normal floor |
+| `src/maps.cpp` | `generateDungeon()`, after the secret-exit choice | `AP::noteSecretExit()` | Gives a pickaxe and levitation potion on floors with a secret entrance |
+| `CMakeLists.txt` | Windows | `BaronyAPTracker` target | The tracker window (`src/BaronyAPTracker.cpp`) |
 | `src/actmonster.cpp` | `actMonster()` init | `AP::onMonsterInit()` | Shop AP items, difficulty scaling, boss keeps damage |
 | `src/actmonster.cpp` | `actMonster()` death | `AP::onMonsterDeath()` | Kill milestones, bestiary, boss checks, goal |
 | `src/actplayer.cpp` | `actPlayer()` | `AP::tryConsumeLife()` | Lives: restart the floor instead of dying |

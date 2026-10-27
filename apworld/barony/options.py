@@ -288,6 +288,20 @@ class EnemyLevelScaling(Choice):
     default = option_off
 
 
+class BossLevelScaling(Choice):
+    """
+    Bosses scale to your character level, the same way Enemy Level Scaling does for enemies.
+    Off: bosses keep their normal strength.
+    Stronger Only: bosses below your level are made stronger to match you.
+    Match Level: bosses are set to your level, stronger or weaker.
+    """
+    display_name = "Boss Level Scaling"
+    option_off = 0
+    option_stronger_only = 1
+    option_match_level = 2
+    default = option_off
+
+
 class DifficultyScaling(DefaultOnToggle):
     """
     Monsters are scaled to how deep you actually are, not to where they normally live.
@@ -337,13 +351,17 @@ class DeathPenalty(Choice):
     """
     What losing a life costs you.
     Gold: lose a quarter of your gold.
-    Gold and XP: also lose half of your progress toward the next level.
-    You can never lose a level, so a seed always stays beatable.
+    None: you only lose the life.
+    Gold: lose a quarter of your gold.
+    XP: lose half of your progress toward the next level.
+    Gold and XP: both.
+    Lives lost to Death Link cost the same. You can never lose a level, so a seed always stays beatable.
     """
     display_name = "Death Penalty"
     option_none = 0
     option_gold = 1
     option_gold_and_xp = 2
+    option_xp = 3
     default = option_none
 
 
@@ -371,6 +389,22 @@ class FloorRestart(Choice):
     default = option_new_layout
 
 
+class DeathItems(Choice):
+    """
+    What you keep when you lose a life and the floor restarts.
+    Floor Start: you go back to the items you had when you entered the floor. Anything you found on
+    that floor is lost (and can be found again).
+    Keep Everything: you keep everything you're carrying. Items you already picked up and chests you
+    already emptied on that floor stay gone after the restart.
+    Either way, Archipelago items you already found on the floor don't come back, and a game over
+    sends you back to the start (or your checkpoint) with what you had there.
+    """
+    display_name = "Death Items"
+    option_floor_start = 0
+    option_keep_everything = 1
+    default = option_floor_start
+
+
 class BaronyDeathLink(DeathLink):
     """
     When you die, everyone else with Death Link dies too, and the other way around.
@@ -396,6 +430,75 @@ class EnabledTraps(OptionSet):
     display_name = "Enabled Traps"
     valid_keys = frozenset(TRAP_ITEMS)
     default = frozenset(TRAP_ITEMS)
+
+
+class FillerWeight(Range):
+    range_start = 0
+    range_end = 100
+
+
+class XPBoostWeight(FillerWeight):
+    """How often XP Boost shows up as filler, compared to the other filler weights. 0 = never."""
+    display_name = "XP Boost Weight"
+    default = 30
+
+
+class GoldPouchWeight(FillerWeight):
+    """How often Gold Pouch shows up as filler. 0 = never."""
+    display_name = "Gold Pouch Weight"
+    default = 25
+
+
+class HealingPotionWeight(FillerWeight):
+    """How often Healing Potion shows up as filler. 0 = never."""
+    display_name = "Healing Potion Weight"
+    default = 20
+
+
+class FoodRationWeight(FillerWeight):
+    """How often Food Ration shows up as filler. 0 = never."""
+    display_name = "Food Ration Weight"
+    default = 15
+
+
+class RandomItemWeight(FillerWeight):
+    """How often Random Item shows up as filler. 0 = never."""
+    display_name = "Random Item Weight"
+    default = 10
+
+
+class TrapCountdownTraps(OptionSet):
+    """
+    Which traps warn you first and count down before they go off ("Blindness Trap in 10...").
+    Traps not listed here go off as soon as you receive them.
+    """
+    display_name = "Trap Countdown Traps"
+    valid_keys = frozenset(TRAP_ITEMS)
+    default = frozenset()
+
+
+class TrapCountdown(Range):
+    """Seconds of countdown for the traps in Trap Countdown Traps."""
+    display_name = "Trap Countdown"
+    range_start = 1
+    range_end = 60
+    default = 10
+
+
+class PolymorphTrapDuration(Range):
+    """How many seconds a Polymorph Trap lasts."""
+    display_name = "Polymorph Trap Duration"
+    range_start = 5
+    range_end = 300
+    default = 30
+
+
+class BlindnessTrapDuration(Range):
+    """How many seconds a Blindness Trap lasts."""
+    display_name = "Blindness Trap Duration"
+    range_start = 5
+    range_end = 300
+    default = 15
 
 
 class Players(Range):
@@ -433,6 +536,7 @@ class BaronyOptions(PerGameCommonOptions):
     music_shuffle: MusicShuffle
     music_seed: MusicSeed
     enemy_level_scaling: EnemyLevelScaling
+    boss_level_scaling: BossLevelScaling
     difficulty_scaling: DifficultyScaling
     difficulty: Difficulty
     lives: Lives
@@ -440,10 +544,20 @@ class BaronyOptions(PerGameCommonOptions):
     death_penalty: DeathPenalty
     boss_death: BossDeath
     floor_restart: FloorRestart
+    death_items: DeathItems
     checkpoint_interval: CheckpointInterval
     death_link: BaronyDeathLink
     trap_chance: TrapChance
     enabled_traps: EnabledTraps
+    trap_countdown_traps: TrapCountdownTraps
+    trap_countdown: TrapCountdown
+    polymorph_trap_duration: PolymorphTrapDuration
+    blindness_trap_duration: BlindnessTrapDuration
+    xp_boost_weight: XPBoostWeight
+    gold_pouch_weight: GoldPouchWeight
+    healing_potion_weight: HealingPotionWeight
+    food_ration_weight: FoodRationWeight
+    random_item_weight: RandomItemWeight
     players: Players
 
 
@@ -453,7 +567,10 @@ option_groups = [
         EnemySanityPerFloor, BestiaryChecks,
         ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),
-    OptionGroup("Dungeon", [StairKeys, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemyPool, EnemySeed, MusicShuffle, MusicSeed, EnemyLevelScaling, DifficultyScaling, Difficulty]),
-    OptionGroup("Lives & Death", [Lives, ExtraLivesInPool, DeathPenalty, BossDeath, FloorRestart, CheckpointInterval, BaronyDeathLink]),
-    OptionGroup("Traps & Players", [TrapChance, EnabledTraps, Players]),
+    OptionGroup("Dungeon", [StairKeys, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemyPool, EnemySeed, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, DifficultyScaling, Difficulty]),
+    OptionGroup("Lives & Death", [Lives, ExtraLivesInPool, DeathPenalty, BossDeath, FloorRestart, DeathItems, CheckpointInterval, BaronyDeathLink]),
+    OptionGroup("Traps", [TrapChance, EnabledTraps, TrapCountdownTraps, TrapCountdown, PolymorphTrapDuration,
+                          BlindnessTrapDuration]),
+    OptionGroup("Filler", [XPBoostWeight, GoldPouchWeight, HealingPotionWeight, FoodRationWeight, RandomItemWeight]),
+    OptionGroup("Players", [Players]),
 ]

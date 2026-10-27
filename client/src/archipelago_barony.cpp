@@ -39,6 +39,7 @@
 #include "archipelago_ids.hpp"
 
 #include <algorithm>
+#include <initializer_list>
 #include <atomic>
 #include <cstdarg>
 #include <cstdio>
@@ -95,6 +96,12 @@ namespace
 		int checkpoint_interval = 0;  // 0 off, else a checkpoint every this many floors
 		int layout_seed = 0;          // 0 locked (each floor's map comes from the seed), 1 random
 		int enemy_level_scaling = 0;  // 0 off, 1 stronger only, 2 match your level both ways
+		int boss_level_scaling = 0;   // the same, for bosses
+		int trap_countdown_mask = 0;  // bit n: trap n (Minotaur = 0) counts down before going off
+		int trap_countdown = 10;      // seconds
+		int polymorph_trap_duration = 30;
+		int blindness_trap_duration = 15;
+		int death_items = 0;          // 0 back to what you had entering the floor, 1 keep everything you had
 		int players = 1;
 	};
 
@@ -110,6 +117,7 @@ namespace
 		int goalBossesKilled = 0;     // bit per goal boss
 		bool goalSent = false;
 		int permApplied[8] = {};      // permanent items already given to the current run's character
+		std::map<std::string, int> deaths; // death counter: deaths per slot name in this multiworld
 	};
 
 	const int64_t PERMANENT_ITEMS[8] = {
@@ -120,6 +128,7 @@ namespace
 	// --------------------------------------------------------------- shared with the network thread
 	std::mutex g_netMutex;
 	std::vector<int64_t> g_inbox;              // received items not yet handled
+	std::vector<std::string> g_deathSources;   // Death Link senders not yet counted
 	bool g_inboxClearRequested = false;
 	std::set<int64_t> g_serverChecked;         // locations the server says are checked
 	SlotOptions g_slotIncoming;
@@ -140,6 +149,23 @@ namespace
 	size_t g_floorLineMapSource = 0;
 	bool g_dyingFromDeathLink = false;
 	bool g_restartPending = false;              // floor reload requested, waiting for it to finish
+
+	// A fixed number of Archipelago items per floor. The first try at a floor decides how many it has
+	// (on the ground, in chests, in breakables); a restart only brings back the ones not found yet.
+	int g_floorApTotal = 0;        // AP items this floor has had (first try)
+	int g_floorApFound = 0;        // of those, picked up on this floor
+	int g_attemptApMade = 0;       // AP items made during the current try
+	int g_restartApBudget = 0;     // on a restarted floor, how many may still appear
+	bool g_floorIsRestart = false; // the current floor is a restart
+	bool g_floorReady = false;     // onNewFloor finished; the next generation starts a new count
+
+	int g_secretExitThisFloor = 0; // set by generateDungeon, used once in onNewFloor
+
+	void noteApItemMade()
+	{
+		++g_attemptApMade;
+		if ( !g_floorIsRestart ) { ++g_floorApTotal; }
+	}
 	Uint32 g_floorLoads = 0;                    // counts floor generations, for re-rolled enemies
 
 	// Death screen: a life was lost, waiting for the player to press confirm.
@@ -151,6 +177,8 @@ namespace
 	bool g_savedGodmode = false;
 	bool g_confirmWasDown = true;               // edge detection: needs a fresh press
 	void endDeathScreen();
+	void launchTracker();
+	Uint32 g_stairsWarnedAt = 0;
 	void readCheckpoint();
 	int apItemsLyingAround();
 	std::set<Uint32> g_countedDeaths;          // monster uids already counted
@@ -183,6 +211,25 @@ namespace
 	int g_tickCounter = 0;
 
 	// ----------------------------------------------------------- helpers
+	// Archipelago log for the F1 / F2 panels and the tracker window.
+	struct LogLine { std::string text; Uint32 color; bool item; };
+	std::vector<LogLine> g_log;
+	constexpr size_t LOG_KEEP = 200;
+
+	bool isItemMessage(const std::string& t)
+	{
+		static const char* const keys[] = { "Received", "Found an Archipelago", "Trap", " sent to ", " found their ",
+			"Marked enemy", "Stair Key", "Extra Life", "Lives:" };
+		for ( const char* k : keys ) { if ( t.find(k) != std::string::npos ) { return true; } }
+		return false;
+	}
+
+	void addLog(const std::string& text, Uint32 color)
+	{
+		g_log.push_back(LogLine{ text, color, isItemMessage(text) });
+		if ( g_log.size() > LOG_KEEP ) { g_log.erase(g_log.begin(), g_log.begin() + (g_log.size() - LOG_KEEP)); }
+	}
+
 	void say(Uint32 color, const char* fmt, ...)
 	{
 		char buf[512];
@@ -192,6 +239,7 @@ namespace
 		va_end(args);
 		messagePlayerColor(clientnum, MESSAGE_HINT, color, "%s", buf);
 		printlog("[Archipelago] %s", buf);
+		addLog(buf, color);
 	}
 
 	bool inGame()
@@ -254,6 +302,7 @@ namespace
 		out << "darknessQueue=" << g_save.darknessQueue << "\n";
 		out << "goalBossesKilled=" << g_save.goalBossesKilled << "\n";
 		out << "goalSent=" << (g_save.goalSent ? 1 : 0) << "\n";
+		for ( auto& d : g_save.deaths ) { out << "death:" << d.first << "=" << d.second << "\n"; }
 		for ( int i = 0; i < 8; ++i ) { out << "perm" << i << "=" << g_save.permApplied[i] << "\n"; }
 	}
 
@@ -264,9 +313,14 @@ namespace
 		std::string line;
 		while ( std::getline(in, line) )
 		{
-			auto eq = line.find('=');
+			auto eq = line.rfind('=');
 			if ( eq == std::string::npos ) { continue; }
 			std::string key = line.substr(0, eq);
+			if ( key.compare(0, 6, "death:") == 0 )
+			{
+				g_save.deaths[key.substr(6)] = atoi(line.c_str() + eq + 1);
+				continue;
+			}
 			long long value = atoll(line.c_str() + eq + 1);
 			if ( key == "processedItems" ) { g_save.processedItems = (int)value; }
 			else if ( key == "totalKills" ) { g_save.totalKills = (long)value; }
@@ -281,6 +335,31 @@ namespace
 				g_save.permApplied[key[4] - '0'] = (int)value;
 			}
 		}
+	}
+
+	// Death counter.
+	void recordDeath(const std::string& who)
+	{
+		if ( who.empty() ) { return; }
+		++g_save.deaths[who];
+		writeSave();
+	}
+
+	int totalDeaths()
+	{
+		int n = 0;
+		for ( auto& d : g_save.deaths ) { n += d.second; }
+		return n;
+	}
+
+	void pullDeathSources()
+	{
+		std::vector<std::string> sources;
+		{
+			std::lock_guard<std::mutex> lock(g_netMutex);
+			sources.swap(g_deathSources);
+		}
+		for ( auto& src : sources ) { recordDeath(src); }
 	}
 
 	std::string sanitize(std::string s)
@@ -342,7 +421,13 @@ namespace
 			g_serverChecked.insert(loc);
 		});
 		AP_SetDeathLinkSupported(true);
-		AP_SetDeathLinkRecvCallback([]() { g_deathLinkIn = true; });
+		AP_SetDeathLinkRecvCallback([](std::string source, std::string) {
+			{
+				std::lock_guard<std::mutex> lock(g_netMutex);
+				g_deathSources.push_back(source);
+			}
+			g_deathLinkIn = true;
+		});
 
 		registerSlotInt("goal", &SlotOptions::goal);
 		registerSlotInt("goal_floor", &SlotOptions::goal_floor);
@@ -375,6 +460,12 @@ namespace
 		registerSlotInt("checkpoint_interval", &SlotOptions::checkpoint_interval);
 		registerSlotInt("layout_seed", &SlotOptions::layout_seed);
 		registerSlotInt("enemy_level_scaling", &SlotOptions::enemy_level_scaling);
+		registerSlotInt("boss_level_scaling", &SlotOptions::boss_level_scaling);
+		registerSlotInt("trap_countdown_mask", &SlotOptions::trap_countdown_mask);
+		registerSlotInt("trap_countdown", &SlotOptions::trap_countdown);
+		registerSlotInt("polymorph_trap_duration", &SlotOptions::polymorph_trap_duration);
+		registerSlotInt("blindness_trap_duration", &SlotOptions::blindness_trap_duration);
+		registerSlotInt("death_items", &SlotOptions::death_items);
 		registerSlotInt("players", &SlotOptions::players);
 
 		AP_Start();
@@ -422,6 +513,7 @@ namespace
 		readCheckpoint();
 		g_ready = true;
 		g_lastCharLevelSent = 1;
+		launchTracker();
 		say(COLOR_AP, "Archipelago: connected. Goal: %s.",
 			g_slot.goal == 0 ? "defeat Baron Herx" : g_slot.goal == 1 ? "defeat the Devil" : "defeat the twin liches");
 	}
@@ -555,21 +647,30 @@ namespace
 		}
 	}
 
-	void applyTrap(int64_t item)
+	// Traps wait here until they can go off: after their countdown, and only while a player is
+	// alive and on a floor (not between floors or on the death screen).
+	struct PendingTrap { int64_t item; Uint32 fireAt; bool warned3; };
+	std::vector<PendingTrap> g_pendingTraps;
+
+	const char* trapName(int64_t item);
+
+	// Returns false when the trap can't go off right now and should wait.
+	bool fireTrap(int64_t item)
 	{
 		using namespace ap_ids;
-		if ( item == ITEM_TRAP_MINOTAUR ) { triggerMinotaur(); return; }
+		if ( item == ITEM_TRAP_MINOTAUR ) { triggerMinotaur(); return true; }
 		if ( item == ITEM_TRAP_DARKNESS )
 		{
 			++g_save.darknessQueue;
 			say(COLOR_TRAP, "Darkness Trap! The next floor will be dark.");
-			return;
+			return true;
 		}
 
 		int p = randomActivePlayer();
-		if ( p < 0 ) { return; }
+		if ( p < 0 ) { return false; }
 		Entity* ent = players[p]->entity;
 		Stat* s = stats[p];
+		if ( !ent || !s ) { return false; }
 
 		switch ( item )
 		{
@@ -584,7 +685,7 @@ namespace
 				break;
 			}
 			case ITEM_TRAP_POLYMORPH:
-				spellEffectPolymorph(ent, ent, true, TICKS_PER_SECOND * 30);
+				spellEffectPolymorph(ent, ent, true, TICKS_PER_SECOND * std::max(5, g_slot.polymorph_trap_duration));
 				say(COLOR_TRAP, "Polymorph Trap!");
 				break;
 			case ITEM_TRAP_FUMBLE:
@@ -599,7 +700,7 @@ namespace
 				}
 				break;
 			case ITEM_TRAP_BLIND:
-				ent->setEffect(EFF_BLIND, true, TICKS_PER_SECOND * 15, true);
+				ent->setEffect(EFF_BLIND, true, TICKS_PER_SECOND * std::max(5, g_slot.blindness_trap_duration), true);
 				say(COLOR_TRAP, "Blindness Trap!");
 				break;
 			case ITEM_TRAP_TELEPORT:
@@ -629,6 +730,62 @@ namespace
 				break;
 			}
 			default: break;
+		}
+		return true;
+	}
+
+	const char* trapName(int64_t item)
+	{
+		using namespace ap_ids;
+		switch ( item )
+		{
+			case ITEM_TRAP_MINOTAUR: return "Minotaur Trap";
+			case ITEM_TRAP_AMBUSH: return "Ambush Trap";
+			case ITEM_TRAP_POLYMORPH: return "Polymorph Trap";
+			case ITEM_TRAP_FUMBLE: return "Fumble Trap";
+			case ITEM_TRAP_BLIND: return "Blindness Trap";
+			case ITEM_TRAP_TELEPORT: return "Teleport Trap";
+			case ITEM_TRAP_HUNGER: return "Hunger Trap";
+			case ITEM_TRAP_DARKNESS: return "Darkness Trap";
+			case ITEM_TRAP_CURSE: return "Curse Trap";
+			default: return "Trap";
+		}
+	}
+
+	void applyTrap(int64_t item)
+	{
+		int bit = (int)(item - ap_ids::ITEM_TRAP_MINOTAUR);
+		bool countdown = bit >= 0 && bit < 31 && (g_slot.trap_countdown_mask & (1 << bit));
+		if ( countdown )
+		{
+			int secs = std::max(1, g_slot.trap_countdown);
+			say(COLOR_TRAP, "%s incoming in %d seconds!", trapName(item), secs);
+			g_pendingTraps.push_back(PendingTrap{ item, ticks + (Uint32)(secs * TICKS_PER_SECOND), secs <= 3 });
+		}
+		else
+		{
+			g_pendingTraps.push_back(PendingTrap{ item, 0, true });
+		}
+	}
+
+	void updatePendingTraps()
+	{
+		if ( g_pendingTraps.empty() || g_deathScreen || g_restartPending || loadnextlevel ) { return; }
+		for ( size_t i = 0; i < g_pendingTraps.size(); )
+		{
+			PendingTrap& t = g_pendingTraps[i];
+			if ( t.fireAt != 0 && ticks < t.fireAt )
+			{
+				if ( !t.warned3 && t.fireAt - ticks <= (Uint32)(3 * TICKS_PER_SECOND) )
+				{
+					t.warned3 = true;
+					say(COLOR_TRAP, "%s in 3...", trapName(t.item));
+				}
+				++i;
+				continue;
+			}
+			if ( fireTrap(t.item) ) { g_pendingTraps.erase(g_pendingTraps.begin() + i); }
+			else { ++i; }
 		}
 	}
 
@@ -830,6 +987,98 @@ namespace
 		printlog("[Archipelago] Floor restart: removed %d of %d enemies already killed here.", removed, g_floorKills);
 	}
 
+	// Death Items: Keep Everything. Items you picked up and chests you emptied on this floor stay
+	// gone when it restarts (you're still carrying them), so a restart can't be used to farm items.
+	std::set<Uint32> g_floorItemUids, g_floorChestUids;
+	int g_floorItemsTaken = 0, g_floorChestsLooted = 0;
+
+	bool isPlainGroundItem(Entity* e)
+	{
+		return e && e->behavior == &actItem && e->skill[10] != AP_ITEM_TYPE;
+	}
+
+	list_t* chestList(Entity* e)
+	{
+		if ( !e || e->behavior != &actChest || !e->children.first ) { return nullptr; }
+		return (list_t*)e->children.first->element;
+	}
+
+	bool chestHasPlainItems(list_t* inv)
+	{
+		if ( !inv ) { return false; }
+		for ( node_t* n = inv->first; n; n = n->next )
+		{
+			Item* it = (Item*)n->element;
+			if ( it && !isApItem(it) ) { return true; }
+		}
+		return false;
+	}
+
+	void rememberFloorLoot()
+	{
+		g_floorItemUids.clear();
+		g_floorChestUids.clear();
+		if ( !map.entities ) { return; }
+		for ( node_t* node = map.entities->first; node; node = node->next )
+		{
+			Entity* e = (Entity*)node->element;
+			if ( isPlainGroundItem(e) ) { g_floorItemUids.insert(e->getUID()); }
+			else if ( chestHasPlainItems(chestList(e)) ) { g_floorChestUids.insert(e->getUID()); }
+		}
+	}
+
+	// Called when a life is lost: how much of this floor's loot is gone since it started.
+	void countTakenLoot()
+	{
+		std::set<Uint32> itemsLeft, chestsFull;
+		if ( map.entities )
+		{
+			for ( node_t* node = map.entities->first; node; node = node->next )
+			{
+				Entity* e = (Entity*)node->element;
+				if ( isPlainGroundItem(e) ) { itemsLeft.insert(e->getUID()); }
+				else if ( chestHasPlainItems(chestList(e)) ) { chestsFull.insert(e->getUID()); }
+			}
+		}
+		for ( Uint32 uid : g_floorItemUids ) { if ( !itemsLeft.count(uid) ) { ++g_floorItemsTaken; } }
+		for ( Uint32 uid : g_floorChestUids ) { if ( !chestsFull.count(uid) ) { ++g_floorChestsLooted; } }
+		g_floorItemUids.clear();
+		g_floorChestUids.clear();
+	}
+
+	void removeTakenLoot()
+	{
+		if ( !map.entities ) { return; }
+		std::vector<Entity*> items, chests;
+		for ( node_t* node = map.entities->first; node; node = node->next )
+		{
+			Entity* e = (Entity*)node->element;
+			if ( isPlainGroundItem(e) ) { items.push_back(e); }
+			else if ( chestHasPlainItems(chestList(e)) ) { chests.push_back(e); }
+		}
+		int removedItems = 0, emptiedChests = 0;
+		for ( Entity* e : items )
+		{
+			if ( removedItems >= g_floorItemsTaken ) { break; }
+			list_RemoveNode(e->mynode);
+			++removedItems;
+		}
+		for ( Entity* e : chests )
+		{
+			if ( emptiedChests >= g_floorChestsLooted ) { break; }
+			list_t* inv = chestList(e);
+			for ( node_t* n = inv->first; n; )
+			{
+				node_t* next = n->next;
+				Item* it = (Item*)n->element;
+				if ( it && !isApItem(it) ) { list_RemoveNode(n); }
+				n = next;
+			}
+			++emptiedChests;
+		}
+		printlog("[Archipelago] Floor restart: removed %d items and emptied %d chests you already took.", removedItems, emptiedChests);
+	}
+
 	void sendKillChecks()
 	{
 		if ( g_slot.enemy_sanity != 1 ) { return; }
@@ -879,6 +1128,7 @@ namespace
 				if ( !floor && !shop ) { continue; }
 				if ( itemIsEquipped(item, p) ) { continue; }
 
+				if ( floor ) { ++g_floorApFound; }
 				int index = floor ? nextUnchecked(ap_ids::PICKUP_OFFSET, g_slot.archipelago_pickups)
 					: nextUnchecked(ap_ids::SHOP_OFFSET, g_slot.shop_checks);
 				if ( index > 0 )
@@ -932,6 +1182,7 @@ namespace
 		}
 		int toPlace = std::min(g_slot.pickups_per_floor,
 			uncheckedCount(ap_ids::PICKUP_OFFSET, g_slot.archipelago_pickups) - apItemsLyingAround());
+		if ( g_floorIsRestart ) { toPlace = std::min(toPlace, g_restartApBudget - g_attemptApMade); }
 		for ( int i = 0; i < toPlace; ++i )
 		{
 			int x, y;
@@ -954,10 +1205,15 @@ namespace
 			entity->skill[13] = 1;
 			entity->skill[14] = AP_FLOOR_APPEARANCE;
 			entity->skill[15] = 1;
+			noteApItemMade();
 		}
 		if ( toPlace > 0 )
 		{
 			say(COLOR_AP, "%d Archipelago item%s on this floor.", toPlace, toPlace == 1 ? " lies" : "s lie");
+		}
+		else if ( g_floorIsRestart && g_floorApTotal > 0 && g_restartApBudget <= 0 )
+		{
+			say(COLOR_AP, "You already found every Archipelago item on this floor.");
 		}
 
 	}
@@ -1001,8 +1257,25 @@ namespace
 			ui->selectedItem = nullptr;
 			ui->selectedItemFromChest = 0;
 		}
+		// Spells are always kept, including ones learned on this floor.
+		std::vector<ItemSnapshot> spells;
+		for ( node_t* node = s->inventory.first; node; node = node->next )
+		{
+			Item* item = (Item*)node->element;
+			if ( item && item->type == SPELL_ITEM )
+			{
+				spells.push_back(ItemSnapshot{ item->type, item->status, item->beatitude, item->count,
+					item->appearance, item->identified, item->uid, item->x, item->y, -1 });
+			}
+		}
 		list_FreeAll(&s->inventory);
+		std::vector<ItemSnapshot> toMake;
 		for ( const ItemSnapshot& snap : g_floorStartInventory[p] )
+		{
+			if ( snap.type != SPELL_ITEM ) { toMake.push_back(snap); }
+		}
+		toMake.insert(toMake.end(), spells.begin(), spells.end());
+		for ( const ItemSnapshot& snap : toMake )
 		{
 			Item* item = newItem(snap.type, snap.status, snap.beatitude, snap.count, snap.appearance,
 				snap.identified, &s->inventory);
@@ -1040,12 +1313,16 @@ namespace
 		Stat* s = stats[player];
 		if ( !s ) { return; }
 
-		// Back to the inventory from the start of the floor.
-		restoreInventory(player);
+		// Back to the inventory from the start of the floor (unless Death Items keeps everything).
+		if ( g_slot.death_items == 0 )
+		{
+			restoreInventory(player);
+		}
 
 		// Death penalty. Never costs a level.
-		if ( g_slot.death_penalty >= 1 ) { s->GOLD -= s->GOLD / 4; }
-		if ( g_slot.death_penalty >= 2 ) { s->EXP /= 2; }
+		// 0 just a life, 1 gold, 2 gold and XP, 3 XP.
+		if ( g_slot.death_penalty == 1 || g_slot.death_penalty == 2 ) { s->GOLD -= s->GOLD / 4; }
+		if ( g_slot.death_penalty == 2 || g_slot.death_penalty == 3 ) { s->EXP /= 2; }
 
 		for ( int c = 0; c < NUMEFFECTS; ++c )
 		{
@@ -1057,6 +1334,9 @@ namespace
 		s->HUNGER = std::max(s->HUNGER, 800);
 
 		// Reload this floor: a new layout, or the same one again.
+		g_restartApBudget = std::max(0, g_floorApTotal - g_floorApFound);
+		g_attemptApMade = 0;
+		g_floorReady = false;
 		g_restartPending = true;
 		skipLevelsOnLoad = -1;
 		forceMapSeed = (g_slot.floor_restart == 1 && mapseed > 0) ? mapseed : ((local_rng.rand() & 0x7FFFFFFF) | 1);
@@ -1207,22 +1487,75 @@ namespace
 		say(COLOR_AP, "Resuming from your checkpoint on floor %d.", c.floor);
 	}
 
+	bool inventoryHas(int player, std::initializer_list<ItemType> types)
+	{
+		if ( !stats[player] ) { return false; }
+		for ( node_t* n = stats[player]->inventory.first; n; n = n->next )
+		{
+			Item* it = (Item*)n->element;
+			if ( !it ) { continue; }
+			for ( ItemType t : types ) { if ( it->type == t ) { return true; } }
+		}
+		return false;
+	}
+
+	// A floor with a secret-area entrance: make sure it can be reached even when floors are
+	// shuffled, by giving a pickaxe (to dig) and a levitation potion (to float) if they're missing.
+	void giveSecretAreaTools()
+	{
+		int exitType = g_secretExitThisFloor;
+		g_secretExitThisFloor = 0;
+		if ( exitType == 0 || secretlevel ) { return; }
+		for ( int p : activePlayers() )
+		{
+			bool gave = false;
+			if ( !inventoryHas(p, { TOOL_PICKAXE }) )
+			{
+				giveItem(p, TOOL_PICKAXE, SERVICABLE, 0, true);
+				gave = true;
+			}
+			if ( !inventoryHas(p, { POTION_LEVITATION, RING_LEVITATION, STEEL_BOOTS_LEVITATION, SPELLBOOK_LEVITATION }) )
+			{
+				giveItem(p, POTION_LEVITATION, EXCELLENT, 0, true);
+				gave = true;
+			}
+			if ( gave )
+			{
+				messagePlayerColor(p, MESSAGE_HINT, COLOR_AP,
+					"This floor hides a secret area. You were given what you need to reach it.");
+			}
+		}
+	}
+
 	void onNewFloor()
 	{
 		bool restarted = g_restartPending;
 		endDeathScreen();
+		if ( g_floorReady ) { g_attemptApMade = 0; } // no chest started the count this time
+		g_floorIsRestart = restarted;
+		if ( !restarted )
+		{
+			g_floorApTotal = g_attemptApMade; // chests already made theirs during generation
+			g_floorApFound = 0;
+		}
 		if ( restarted ) { removeKilledEnemies(); }
 		else { g_floorKills = 0; }
+		if ( restarted && g_slot.death_items == 1 ) { removeTakenLoot(); }
+		else if ( !restarted ) { g_floorItemsTaken = 0; g_floorChestsLooted = 0; }
+		rememberFloorLoot();
 		g_markedEnemies.clear();
 		g_markedThisFloor = 0;
+		g_stairsWarnedAt = 0;
 		sendFloorChecks();
 		sendSpecialAreaCheck();
 		spawnFloorPickups();
+		giveSecretAreaTools();
 		if ( g_slot.enemy_sanity == 2 && uncheckedCount(ap_ids::KILL_OFFSET, g_slot.kill_checks) > 0 )
 		{
 			say(COLOR_AP, "Enemies glowing green are Archipelago checks.");
 		}
 		g_restartPending = false;
+		g_floorReady = true;
 		snapshotInventories();
 		if ( g_slot.checkpoint_interval > 0 && !secretlevel && currentlevel > 0
 			&& currentlevel % g_slot.checkpoint_interval == 0 && currentlevel != g_checkpoint.floor )
@@ -1240,7 +1573,7 @@ namespace
 		if ( !g_deathLinkIn.exchange(false) ) { return; }
 		AP_DeathLinkClear();
 		int p = clientnum;
-		if ( !inGame() || stats[p]->HP <= 0 ) { return; }
+		if ( !inGame() || !stats[p] || stats[p]->HP <= 0 || g_deathScreen || g_restartPending ) { return; }
 		say(COLOR_TRAP, "Death Link! Someone else died...");
 		g_dyingFromDeathLink = true;
 		stats[p]->HP = 0;
@@ -1257,10 +1590,122 @@ namespace
 				|| msg->type == AP_MessageType::Countdown) )
 			{
 				messagePlayerColor(clientnum, MESSAGE_MISC, COLOR_AP, "%s", msg->text.c_str());
+				addLog(msg->text, makeColorRGB(200, 200, 255));
 			}
 			AP_ClearLatestMessage();
 			++shown;
 		}
+	}
+
+	// ----------------------------------------------------------- what's left on this floor
+	struct FloorCounts { int ground = 0, chests = 0, shop = 0, marked = 0; int total() const { return ground + chests + shop + marked; } };
+
+	bool listHasApItem(list_t* list)
+	{
+		if ( !list ) { return false; }
+		for ( node_t* n = list->first; n; n = n->next )
+		{
+			Item* it = (Item*)n->element;
+			if ( it && it->type == AP_ITEM_TYPE && (it->appearance == AP_FLOOR_APPEARANCE || it->appearance == AP_SHOP_APPEARANCE) )
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	FloorCounts countFloor()
+	{
+		FloorCounts c;
+		if ( !map.entities ) { return c; }
+		for ( node_t* node = map.entities->first; node; node = node->next )
+		{
+			Entity* e = (Entity*)node->element;
+			if ( !e ) { continue; }
+			if ( e->behavior == &actItem && e->skill[10] == AP_ITEM_TYPE
+				&& ((Uint32)e->skill[14] == AP_FLOOR_APPEARANCE || (Uint32)e->skill[14] == AP_SHOP_APPEARANCE) )
+			{
+				++c.ground;
+			}
+			else if ( e->behavior == &actChest && e->children.first && listHasApItem((list_t*)e->children.first->element) )
+			{
+				++c.chests;
+			}
+			else if ( e->behavior == &actMonster )
+			{
+				Stat* st = e->getStats();
+				if ( st && st->type == SHOPKEEPER && st->HP > 0 && listHasApItem(&st->inventory) ) { ++c.shop; }
+			}
+		}
+		for ( Uint32 uid : g_markedEnemies )
+		{
+			Entity* e = uidToEntity(uid);
+			if ( e && e->getStats() && e->getStats()->HP > 0 ) { ++c.marked; }
+		}
+		return c;
+	}
+
+	std::string floorCountsText(const FloorCounts& c)
+	{
+		if ( c.total() == 0 ) { return "Nothing left on this floor"; }
+		std::string t = "Left on this floor:";
+		char buf[64];
+		if ( c.ground ) { snprintf(buf, sizeof(buf), " %d on the ground", c.ground); t += buf; }
+		if ( c.chests ) { snprintf(buf, sizeof(buf), "%s %d in chests", c.ground ? "," : "", c.chests); t += buf; }
+		if ( c.shop ) { snprintf(buf, sizeof(buf), "%s %d in the shop", (c.ground || c.chests) ? "," : "", c.shop); t += buf; }
+		if ( c.marked ) { snprintf(buf, sizeof(buf), "%s %d green enem%s", (c.ground || c.chests || c.shop) ? "," : "", c.marked, c.marked == 1 ? "y" : "ies"); t += buf; }
+		return t;
+	}
+
+	FloorCounts g_floorCounts;
+	int g_logPanel = 0; // 0 hidden, 1 items only (F1), 2 everything (F2), 3 death counter (F3)
+
+	// The tracker window (BaronyAPTracker.exe) reads this file.
+	void writeTrackerFile()
+	{
+		// Built in memory and written only when something changed, so the disk is left alone.
+		static std::string lastWritten;
+		std::ostringstream out;
+		out << "connected=" << (AP_GetConnectionStatus() == AP_ConnectionStatus::Authenticated ? 1 : 0) << "\n";
+		out << "slot=" << g_slotName << "\n";
+		out << "ingame=" << (inGame() ? 1 : 0) << "\n";
+		out << "floor=" << currentlevel << "\n";
+		out << "ground=" << g_floorCounts.ground << "\nchests=" << g_floorCounts.chests << "\nshop=" << g_floorCounts.shop
+			<< "\nmarked=" << g_floorCounts.marked << "\n";
+		out << "lives=" << g_save.livesLeft << "\nkeys=" << countReceived(ap_ids::ITEM_STAIR_KEY) << "\n";
+		out << "pickups_left=" << uncheckedCount(ap_ids::PICKUP_OFFSET, g_slot.archipelago_pickups) << "\n";
+		out << "deaths_total=" << totalDeaths() << "\n";
+		for ( auto& d : g_save.deaths ) { out << "death=" << d.first << "\t" << d.second << "\n"; }
+		size_t start = g_log.size() > 40 ? g_log.size() - 40 : 0;
+		for ( size_t i = start; i < g_log.size(); ++i )
+		{
+			out << (g_log[i].item ? "item=" : "log=") << g_log[i].text << "\n";
+		}
+		std::string text = out.str();
+		if ( text == lastWritten ) { return; }
+		std::ofstream file("archipelago/tracker.txt", std::ios::trunc | std::ios::binary);
+		if ( !file ) { return; }
+		file << text;
+		lastWritten = text;
+	}
+
+	void launchTracker()
+	{
+#ifdef WINDOWS
+		static bool launched = false;
+		if ( launched ) { return; }
+		launched = true;
+		if ( !std::filesystem::exists("BaronyAPTracker.exe") ) { return; }
+		STARTUPINFOA si{};
+		si.cb = sizeof(si);
+		PROCESS_INFORMATION pi{};
+		char cmd[] = "BaronyAPTracker.exe";
+		if ( CreateProcessA(nullptr, cmd, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi) )
+		{
+			CloseHandle(pi.hThread);
+			CloseHandle(pi.hProcess);
+		}
+#endif
 	}
 
 	// ----------------------------------------------------------- console commands
@@ -1336,6 +1781,11 @@ void tick()
 	}
 
 	showServerMessages();
+	if ( keystatus[SDLK_F1] ) { keystatus[SDLK_F1] = 0; g_logPanel = g_logPanel == 1 ? 0 : 1; }
+	if ( keystatus[SDLK_F2] ) { keystatus[SDLK_F2] = 0; g_logPanel = g_logPanel == 2 ? 0 : 2; }
+	if ( keystatus[SDLK_F3] ) { keystatus[SDLK_F3] = 0; g_logPanel = g_logPanel == 3 ? 0 : 3; }
+	pullDeathSources();
+	if ( ticks % TICKS_PER_SECOND == 0 ) { writeTrackerFile(); }
 	if ( !inGame() )
 	{
 		// A Death Link that arrives in the menus or between runs is dropped, so it can't
@@ -1355,6 +1805,7 @@ void tick()
 		g_resumePending = g_slot.checkpoint_interval > 0 && g_checkpoint.valid && currentlevel < g_checkpoint.floor;
 	}
 	applyNewItems();
+	updatePendingTraps();
 	syncPermanents();
 	if ( g_resumePending && !loadnextlevel && players[clientnum]->entity && stats[clientnum]->HP > 0 )
 	{
@@ -1381,6 +1832,7 @@ void tick()
 	{
 		sendLevelChecks();
 		scanInventories();
+		g_floorCounts = countFloor();
 	}
 }
 
@@ -1510,24 +1962,15 @@ void onMonsterInit(Entity* my, Stat* myStats)
 		++g_markedThisFloor;
 	}
 
-	// A boss keeps the damage from before a lost life.
-	if ( isBoss && g_slot.boss_death == 1 && g_savedBossFloor == currentlevel )
-	{
-		auto it = g_savedBossHP.find(myStats->type);
-		if ( it != g_savedBossHP.end() )
-		{
-			myStats->HP = std::min(myStats->MAXHP, std::max<Sint32>(1, it->second));
-		}
-	}
-
-	// Enemy Level Scaling: bring monsters up to (or toward) the strongest player's level.
-	if ( g_slot.enemy_level_scaling != 0 && !isBoss && myStats->type != MINOTAUR && myStats->type != SHOPKEEPER
+	// Enemy / Boss Level Scaling: bring monsters up to (or toward) the strongest player's level.
+	int scaling = isBoss ? g_slot.boss_level_scaling : g_slot.enemy_level_scaling;
+	if ( scaling != 0 && myStats->type != MINOTAUR && myStats->type != SHOPKEEPER
 		&& my->monsterAllySummonRank == 0 && !my->monsterAllyGetPlayerLeader() && myStats->leader_uid == 0 )
 	{
 		int playerLevel = 1;
 		for ( int p : activePlayers() ) { playerLevel = std::max<int>(playerLevel, stats[p]->LVL); }
 		int monsterLevel = std::max<int>(1, myStats->LVL);
-		if ( playerLevel > monsterLevel || g_slot.enemy_level_scaling == 2 )
+		if ( playerLevel > monsterLevel || scaling == 2 )
 		{
 			// Each level of difference changes health and damage by about 8%.
 			double factor = std::max(0.5, std::min(3.0, 1.0 + 0.08 * (playerLevel - monsterLevel)));
@@ -1539,6 +1982,17 @@ void onMonsterInit(Entity* my, Stat* myStats)
 			myStats->LVL = std::max(1, playerLevel);
 		}
 	}
+
+	// A boss keeps the damage from before a lost life.
+	if ( isBoss && g_slot.boss_death == 1 && g_savedBossFloor == currentlevel )
+	{
+		auto it = g_savedBossHP.find(myStats->type);
+		if ( it != g_savedBossHP.end() )
+		{
+			myStats->HP = std::min(myStats->MAXHP, std::max<Sint32>(1, it->second));
+		}
+	}
+
 
 	// Difficulty scaling: weaken monsters that normally live deeper than the current floor.
 	if ( (g_slot.floor_shuffle != 0 || g_slot.enemy_randomizer != 0) && g_slot.difficulty_scaling && g_slot.difficulty == 0
@@ -1664,7 +2118,10 @@ bool tryConsumeLife(int player)
 	if ( !fromDeathLink )
 	{
 		AP_DeathLinkSend("lost a life in the dungeon");
+		recordDeath(g_slotName);
 	}
+
+	if ( g_slot.death_items == 1 ) { countTakenLoot(); }
 
 	// Freeze the player and show the death screen; restartFloor() runs on confirm.
 	s->HP = 1;
@@ -1696,12 +2153,23 @@ void onPlayerDied(int player)
 	if ( !fromDeathLink )
 	{
 		AP_DeathLinkSend("died in the dungeon");
+		recordDeath(g_slotName);
 	}
 }
 
 bool canDescend(int player)
 {
-	if ( !g_ready || !g_slot.stair_keys || multiplayer == CLIENT ) { return true; }
+	if ( !g_ready || multiplayer == CLIENT ) { return true; }
+	// Warn once before leaving a floor with Archipelago things still on it; using the stairs again leaves.
+	FloorCounts c = countFloor();
+	if ( c.total() > 0 && (g_stairsWarnedAt == 0 || ticks - g_stairsWarnedAt > TICKS_PER_SECOND * 15) )
+	{
+		g_stairsWarnedAt = ticks;
+		messagePlayerColor(player, MESSAGE_HINT, COLOR_TRAP, "Wait! %s. Use the stairs again to leave anyway.",
+			floorCountsText(c).c_str());
+		return false;
+	}
+	if ( !g_slot.stair_keys ) { return true; }
 	int nextFloor = currentlevel + 1;
 	int section = (nextFloor - 1) / ap_ids::FLOORS_PER_SECTION + 1;
 	int needed = section - 1;
@@ -1826,19 +2294,31 @@ namespace
 void onChestCreated(Entity* chest)
 {
 	if ( !chest || chest->behavior != &actChest || !chest->children.first || !apItemAvailable() ) { return; }
+	if ( g_floorReady ) { g_attemptApMade = 0; g_floorReady = false; } // first chest of a new floor
+	bool restart = g_restartPending;
+	if ( restart && g_attemptApMade >= g_restartApBudget ) { return; }
 	if ( local_rng.rand() % 100 >= 25 ) { return; } // 1 in 4 chests
 	list_t* inventory = (list_t*)chest->children.first->element;
 	if ( inventory )
 	{
 		newItem(AP_ITEM_TYPE, EXCELLENT, 0, 1, AP_FLOOR_APPEARANCE, true, inventory);
+		++g_attemptApMade;
+		if ( !restart ) { ++g_floorApTotal; }
 	}
 }
 
 void onBreakableDestroyed(Entity* breakable)
 {
 	if ( !breakable || !breakable->isColliderBreakableContainer() || !apItemAvailable() ) { return; }
+	if ( g_floorIsRestart && g_attemptApMade >= g_restartApBudget ) { return; }
 	if ( local_rng.rand() % 100 >= 8 ) { return; } // 1 in 12 crates, pots and barrels
 	dropItemMonster(newItem(AP_ITEM_TYPE, EXCELLENT, 0, 1, AP_FLOOR_APPEARANCE, true, nullptr), breakable, nullptr);
+	noteApItemMade();
+}
+
+void noteSecretExit(int secretLevelExit)
+{
+	g_secretExitThisFloor = secretLevelExit;
 }
 
 int randomizeMonster(int monsterType)
@@ -1996,6 +2476,56 @@ void drawHud()
 	drawImage("*images/ui/Archipelago/AP_Logo.png", 8, 6, 24, 24,
 		connected ? 0xFFFFFFFF : makeColor(255, 255, 255, 110));
 	drawText(label, BIG_FONT, color, 38, 10);
+	if ( g_ready && inGame() )
+	{
+		Uint32 c2 = g_floorCounts.total() > 0 ? makeColorRGB(255, 200, 90) : makeColorRGB(170, 170, 170);
+		drawText(floorCountsText(g_floorCounts).c_str(), HUD_FONT, c2, 38, 32);
+		drawText("F1: item log   F2: full log   F3: deaths", HUD_FONT, makeColorRGB(140, 140, 140), 38, 50);
+	}
+	if ( g_logPanel == 3 )
+	{
+		// Death counter: total, then everyone who has died, most deaths first.
+		std::vector<std::pair<std::string, int>> rows(g_save.deaths.begin(), g_save.deaths.end());
+		std::stable_sort(rows.begin(), rows.end(), [](auto& a, auto& b) { return a.second > b.second; });
+		const int x = 12, y = 74, w = 360, lineH = 22;
+		int h = 70 + lineH * (int)std::max<size_t>(1, rows.size());
+		drawImage("images/system/white.png", x, y, w, h, makeColor(10, 8, 6, 200));
+		drawText("Deaths (F3 to close)", BIG_FONT, makeColorRGB(255, 200, 90), x + 8, y + 6);
+		char buf[64];
+		drawImage("*images/ui/Archipelago/AP_Skull.png", x + 10, y + 32, 24, 24);
+		snprintf(buf, sizeof(buf), "Total  %d", totalDeaths());
+		drawText(buf, BIG_FONT, makeColorRGB(255, 255, 255), x + 42, y + 34);
+		int ly = y + 64;
+		if ( rows.empty() ) { drawText("Nobody has died yet.", HUD_FONT, makeColorRGB(170, 170, 170), x + 12, ly); }
+		for ( auto& r : rows )
+		{
+			drawImage("*images/ui/Archipelago/AP_Skull.png", x + 14, ly, 16, 16);
+			Uint32 col = r.first == g_slotName ? makeColorRGB(255, 200, 90) : makeColorRGB(225, 220, 210);
+			drawText(r.first.c_str(), HUD_FONT, col, x + 38, ly);
+			snprintf(buf, sizeof(buf), "%d", r.second);
+			drawText(buf, HUD_FONT, col, x + w - 14, ly, 2);
+			ly += lineH;
+		}
+	}
+	else if ( g_logPanel != 0 )
+	{
+		std::vector<const LogLine*> lines;
+		for ( auto it = g_log.rbegin(); it != g_log.rend() && lines.size() < 16; ++it )
+		{
+			if ( g_logPanel == 2 || it->item ) { lines.push_back(&*it); }
+		}
+		const int x = 12, y = 74, w = 520, lineH = 18;
+		int h = 30 + lineH * (int)std::max<size_t>(1, lines.size());
+		drawImage("images/system/white.png", x, y, w, h, makeColor(10, 8, 6, 200));
+		drawText(g_logPanel == 1 ? "Archipelago items (F1 to close)" : "Archipelago log (F2 to close)",
+			BIG_FONT, makeColorRGB(255, 200, 90), x + 8, y + 6);
+		int ly = y + 28;
+		if ( lines.empty() ) { drawText("Nothing yet.", HUD_FONT, makeColorRGB(170, 170, 170), x + 8, ly); }
+		for ( auto rit = lines.rbegin(); rit != lines.rend(); ++rit, ly += lineH )
+		{
+			drawText((*rit)->text.c_str(), HUD_FONT, (*rit)->color, x + 8, ly);
+		}
+	}
 
 	// Top right: lives.
 	if ( g_ready && inGame() && (g_slot.lives > 0 || g_save.livesLeft > 0) )
@@ -2005,6 +2535,15 @@ void drawHud()
 		const int right = Frame::virtualScreenX - 12;
 		int w = drawText(buf, BIG_FONT, makeColorRGB(255, 255, 255), right, 10, 2);
 		drawImage("*images/ui/Archipelago/AP_Life.png", right - w - 32, 6, 26, 24);
+	}
+	if ( g_ready && inGame() )
+	{
+		char buf[16];
+		snprintf(buf, sizeof(buf), "x %d", totalDeaths());
+		const int right = Frame::virtualScreenX - 12;
+		const int top = (g_slot.lives > 0 || g_save.livesLeft > 0) ? 38 : 10;
+		int w = drawText(buf, BIG_FONT, makeColorRGB(255, 255, 255), right, top, 2);
+		drawImage("*images/ui/Archipelago/AP_Skull.png", right - w - 32, top - 3, 24, 24);
 	}
 
 	if ( g_deathScreen && inGame() )
