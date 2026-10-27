@@ -1,4 +1,4 @@
-From 21786305638d8d2b4815f342e21403944c7f77b2 Mon Sep 17 00:00:00 2001
+From 1b675342d729553896dfbff9e511811430d15c47 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -12,9 +12,9 @@ Subject: [PATCH] Archipelago client hooks
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 3043 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 3098 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |  100 +
- src/archipelago_ids.hpp           |   95 +
+ src/archipelago_ids.hpp           |  118 ++
  src/engine/audio/sound_game.cpp   |    2 +
  src/files.cpp                     |    6 +
  src/game.cpp                      |    6 +
@@ -27,7 +27,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   10 +
  src/ui/MainMenu.cpp               |    5 +-
- 23 files changed, 3795 insertions(+), 4 deletions(-)
+ 23 files changed, 3873 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -648,10 +648,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..91d6155
+index 0000000..cdc0030
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,3043 @@
+@@ -0,0 +1,3098 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -735,7 +735,9 @@ index 0000000..91d6155
 +		int special_area_checks = 0;
 +		int stair_keys = 0;           // old seeds only
 +		int floor_keys = 0;           // a key on every floor opens its stairs
-+		int key_compass_time = 30;    // Minotaur floors: seconds before he arrives that the key compass turns on
++		int key_compass_time = 30;
++		int skill_checks = 0;         // 0 off, 1 any class, 2.. a class (Barony class index + 2)
++		int skill_check_max_rank = 3; // 1 Basic .. 5 Legendary    // Minotaur floors: seconds before he arrives that the key compass turns on
 +		int floor_shuffle = 0;        // 0 off, 1 sections, 2 full
 +		int floor_shuffle_seed = 0;
 +		int difficulty_scaling = 1;
@@ -872,6 +874,7 @@ index 0000000..91d6155
 +	bool g_savedGodmode = false;
 +	bool g_confirmWasDown = true;               // edge detection: needs a fresh press
 +	void endDeathScreen();
++	void warnSkillClass();
 +	void launchTracker();
 +	Uint32 g_stairsWarnedAt = 0;
 +	void readCheckpoint();
@@ -1143,6 +1146,8 @@ index 0000000..91d6155
 +		registerSlotInt("stair_keys", &SlotOptions::stair_keys);
 +		registerSlotInt("floor_keys", &SlotOptions::floor_keys);
 +		registerSlotInt("key_compass_time", &SlotOptions::key_compass_time);
++		registerSlotInt("skill_checks", &SlotOptions::skill_checks);
++		registerSlotInt("skill_check_max_rank", &SlotOptions::skill_check_max_rank);
 +		registerSlotInt("floor_shuffle", &SlotOptions::floor_shuffle);
 +		registerSlotInt("floor_shuffle_seed", &SlotOptions::floor_shuffle_seed);
 +		registerSlotInt("difficulty_scaling", &SlotOptions::difficulty_scaling);
@@ -1531,6 +1536,7 @@ index 0000000..91d6155
 +	void initRun()
 +	{
 +		endDeathScreen();
++		warnSkillClass();
 +		g_save.runKey = uniqueGameKey;
 +		g_save.livesLeft = g_slot.lives;
 +		g_savedBossHP.clear();
@@ -1631,6 +1637,54 @@ index 0000000..91d6155
 +			{
 +				sendLocation(ap_ids::BASE_ID + ap_ids::SPECIAL_OFFSET + area.index);
 +			}
++		}
++	}
++
++	// Skill checks: which skills count, from what value, for the class chosen in the YAML.
++	// Returns the starting value (0 for a universal skill), or -1 if the skill isn't a check.
++	int skillStart(int skill)
++	{
++		int sc = g_slot.skill_checks;
++		if ( sc <= 0 || skill < 0 || skill >= ap_ids::NUM_SKILLS ) { return -1; }
++		int start = -1;
++		if ( sc >= 2 && sc - 2 < ap_ids::NUM_SKILL_CLASSES ) { start = ap_ids::CLASS_SKILL_START[sc - 2][skill]; }
++		if ( start < 0 && ap_ids::SKILL_UNIVERSAL[skill] ) { start = 0; }
++		return start;
++	}
++
++	void sendSkillChecks()
++	{
++		if ( g_slot.skill_checks <= 0 || !stats[clientnum] ) { return; }
++		for ( int skill = 0; skill < ap_ids::NUM_SKILLS; ++skill )
++		{
++			int start = skillStart(skill);
++			if ( start < 0 ) { continue; }
++			int have = stats[clientnum]->getProficiency(skill);
++			for ( int rank = 1; rank <= std::min(5, g_slot.skill_check_max_rank); ++rank )
++			{
++				int value = ap_ids::SKILL_RANK_VALUES[rank];
++				if ( value <= start || have < value ) { continue; }
++				int64_t loc = ap_ids::BASE_ID + ap_ids::SKILL_OFFSET + skill * 5 + rank;
++				if ( !isChecked(loc) )
++				{
++					sendLocation(loc);
++					say(COLOR_AP, "Skill check: %s %s!", ap_ids::SKILL_RANK_NAMES[rank], ap_ids::SKILL_NAMES[skill]);
++				}
++			}
++		}
++	}
++
++	void warnSkillClass()
++	{
++		int sc = g_slot.skill_checks;
++		if ( sc < 2 || !stats[clientnum] ) { return; }
++		int chosen = sc - 2;
++		if ( client_classes[clientnum] != chosen && chosen < ap_ids::NUM_SKILL_CLASSES )
++		{
++			static const char* const NAMES[] = { "Barbarian", "Warrior", "Healer", "Rogue", "Wanderer", "Cleric",
++				"Merchant", "Wizard", "Arcanist", "Joker", "Sexton", "Ninja", "Monk" };
++			say(COLOR_TRAP, "Skill Checks were made for a %s. Other classes can still raise those skills, but some checks may be much harder.",
++				NAMES[chosen]);
 +		}
 +	}
 +
@@ -2058,7 +2112,7 @@ index 0000000..91d6155
 +		for ( int i = 0; i < toPlace; ++i )
 +		{
 +			int x, y;
-+			if ( !findFloorSpot(x, y) ) { break; }
++			if ( !findReachableSpot(x, y) && !findFloorSpot(x, y) ) { break; } // somewhere you can walk to
 +			Entity* entity = newEntity(-1, 1, map.entities, nullptr); // item entity, like dropItemMonster
 +			entity->flags[INVISIBLE] = true;
 +			entity->flags[UPDATENEEDED] = true;
@@ -2827,6 +2881,7 @@ index 0000000..91d6155
 +	if ( ++g_tickCounter % 10 == 0 )
 +	{
 +		sendLevelChecks();
++		sendSkillChecks();
 +		scanInventories();
 +		g_floorCounts = countFloor();
 +		g_loot = countLoot();
@@ -3803,10 +3858,10 @@ index 0000000..9c090ce
 +}
 diff --git a/src/archipelago_ids.hpp b/src/archipelago_ids.hpp
 new file mode 100644
-index 0000000..f0830e8
+index 0000000..fae3868
 --- /dev/null
 +++ b/src/archipelago_ids.hpp
-@@ -0,0 +1,95 @@
+@@ -0,0 +1,118 @@
 +// GENERATED by tools/gen_cpp_ids.py from apworld/barony/data.py. Do not edit by hand.
 +#pragma once
 +#include <cstdint>
@@ -3821,6 +3876,7 @@ index 0000000..f0830e8
 +constexpr int64_t SHOP_OFFSET = 600;
 +constexpr int64_t BOSS_OFFSET = 700;
 +constexpr int64_t SPECIAL_OFFSET = 800;
++constexpr int64_t SKILL_OFFSET = 900;
 +constexpr int MAX_FLOOR = 35;
 +constexpr int FLOORS_PER_SECTION = 5;
 +
@@ -3900,6 +3956,28 @@ index 0000000..f0830e8
 +    { 8, "Visit the Mystic Library", "mysticlibrary", 17 },
 +    { 9, "Visit the Cockatrice Lair", "caveslair", 29 },
 +    { 10, "Visit Bram's Castle", "bramscastle", 34 },
++};
++constexpr int NUM_SKILLS = 16;
++constexpr int NUM_SKILL_CLASSES = 13;
++static const char* const SKILL_NAMES[NUM_SKILLS] = { "Tinkering", "Stealth", "Trading", "Lore", "Thaumaturgy", "Leadership", "Mysticism", "Sorcery", "Ranged", "Sword", "Mace", "Axe", "Polearm", "Shield", "Unarmed", "Alchemy" };
++static const char* const SKILL_RANK_NAMES[6] = { "", "Basic", "Skilled", "Expert", "Master", "Legendary" };
++static const int SKILL_RANK_VALUES[6] = { 0, 20, 40, 60, 80, 100 };
++static const bool SKILL_UNIVERSAL[NUM_SKILLS] = { false, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false };
++// Main skills only (start >= 20), as data.skill_checks_for uses them.
++static const int CLASS_SKILL_START[NUM_SKILL_CLASSES][NUM_SKILLS] = {
++    { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 25, 50, -1, 25, 20, -1 }, // Barbarian
++    { -1, -1, -1, -1, -1, 40, -1, -1, 25, 25, -1, -1, 50, 25, -1, -1 }, // Warrior
++    { -1, -1, -1, -1, 50, -1, 25, -1, -1, -1, -1, -1, 25, -1, -1, 30 }, // Healer
++    { 40, 50, -1, 25, -1, -1, -1, -1, 25, 25, -1, -1, -1, -1, -1, 20 }, // Rogue
++    { -1, 25, 25, -1, -1, -1, -1, -1, 25, -1, -1, -1, 25, -1, -1, 30 }, // Wanderer
++    { -1, -1, -1, -1, 40, 20, -1, -1, -1, -1, 25, -1, -1, -1, -1, 20 }, // Cleric
++    { -1, -1, 50, 50, -1, 20, -1, -1, -1, -1, -1, 25, -1, -1, -1, -1 }, // Merchant
++    { -1, -1, -1, -1, -1, -1, -1, 50, -1, -1, -1, -1, 25, -1, -1, -1 }, // Wizard
++    { 25, 25, -1, -1, -1, -1, -1, 30, 25, -1, -1, -1, -1, -1, -1, -1 }, // Arcanist
++    { 25, -1, 25, -1, -1, 20, 25, -1, 20, -1, -1, -1, -1, -1, -1, -1 }, // Joker
++    { -1, 40, -1, -1, -1, -1, 40, -1, 20, -1, -1, -1, -1, -1, -1, 20 }, // Sexton
++    { -1, 60, -1, -1, -1, -1, -1, -1, 40, 60, -1, -1, -1, -1, -1, -1 }, // Ninja
++    { -1, -1, -1, -1, 25, -1, -1, -1, -1, -1, -1, -1, -1, 40, 50, 20 }, // Monk
 +};
 +} // namespace ap_ids
 diff --git a/src/engine/audio/sound_game.cpp b/src/engine/audio/sound_game.cpp

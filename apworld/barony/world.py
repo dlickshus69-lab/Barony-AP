@@ -168,6 +168,13 @@ class BaronyWorld(World):
                 if area.depth < self.goal_floor:
                     planned.append((area.name, self._biome_floor_needed(area.depth)))
 
+        sc = o.skill_checks.value
+        if sc != o.skill_checks.option_off:
+            class_name = None if sc == o.skill_checks.option_any_class else data.CLASSES[sc - 2]
+            for skill, rank in data.skill_checks_for(class_name, o.skill_check_max_rank.value):
+                planned.append((data.skill_location(skill, rank),
+                                self._floor_needed(min(data.SKILL_RANK_FLOOR[rank], self.goal_floor))))
+
         return planned
 
     # ------------------------------------------------------------------ regions
@@ -280,6 +287,8 @@ class BaronyWorld(World):
             "stair_keys": 0,
             "floor_keys": int(bool(o.floor_keys)),
             "key_compass_time": o.key_compass_time.value,
+            "skill_checks": o.skill_checks.value,
+            "skill_check_max_rank": o.skill_check_max_rank.value,
             "floor_shuffle": o.floor_shuffle.value,
             "floor_shuffle_seed": self.floor_shuffle_seed,
             "difficulty_scaling": int(bool(o.difficulty_scaling)),

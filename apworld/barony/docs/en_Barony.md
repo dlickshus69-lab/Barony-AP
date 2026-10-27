@@ -13,6 +13,8 @@ Barony is a roguelike, so instead of fixed chests, checks come from things you d
 - Archipelago items sold by shopkeepers
 - Defeating a Minotaur and bosses before your goal
 - Visiting secret areas (optional)
+- Raising your skills to Basic, Skilled, Expert, Master and Legendary (optional, for the class you
+  pick in your options, plus Lore, Trading and Stealth for any class)
 
 Everything you receive is kept across runs. Permanent items (stat boosts, Max HP Up, Starting
 Gold Bonus) are applied to every new character you start.

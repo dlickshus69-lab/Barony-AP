@@ -140,6 +140,59 @@ PICKUP_OFFSET = 400       # + i (1..100)
 SHOP_OFFSET = 600         # + j (1..20)
 BOSS_OFFSET = 700         # + BossInfo.index
 SPECIAL_OFFSET = 800      # + SpecialArea.index
+SKILL_OFFSET = 900        # + skill * 5 + rank (rank 1..5)
+
+# ---------------------------------------------------------------------------------------
+# Skills (Barony 5): index = PRO_ constant, name as the game shows it
+# ---------------------------------------------------------------------------------------
+SKILLS = ["Tinkering", "Stealth", "Trading", "Lore", "Thaumaturgy", "Leadership", "Mysticism", "Sorcery",
+          "Ranged", "Sword", "Mace", "Axe", "Polearm", "Shield", "Unarmed", "Alchemy"]
+SKILL_RANKS = [(1, "Basic", 20), (2, "Skilled", 40), (3, "Expert", 60), (4, "Master", 80), (5, "Legendary", 100)]
+# Floor a rank is reasonable to expect by (for logic).
+SKILL_RANK_FLOOR = {1: 1, 2: 4, 3: 10, 4: 16, 5: 22}
+# Skills every class can raise from nothing: identifying items, buying and selling, sneaking.
+UNIVERSAL_SKILLS = [3, 2, 1]
+# The 13 base classes (Barony's PlayerClasses order) and the skills they start with, with starting values.
+CLASSES = ["Barbarian", "Warrior", "Healer", "Rogue", "Wanderer", "Cleric", "Merchant", "Wizard", "Arcanist",
+           "Joker", "Sexton", "Ninja", "Monk"]
+CLASS_SKILLS: dict[str, dict[int, int]] = {
+    "Barbarian": {13: 25, 11: 50, 10: 25, 14: 20, 15: 10},
+    "Warrior": {5: 40, 8: 25, 9: 25, 12: 50, 13: 25, 14: 10},
+    "Healer": {4: 50, 6: 25, 12: 25, 15: 30, 3: 10, 13: 10},
+    "Rogue": {3: 25, 1: 50, 0: 40, 8: 25, 9: 25, 15: 20},
+    "Wanderer": {1: 25, 12: 25, 8: 25, 2: 25, 14: 10, 15: 30},
+    "Cleric": {10: 25, 4: 40, 5: 20, 15: 20, 13: 10},
+    "Merchant": {11: 25, 5: 20, 3: 50, 2: 50, 15: 10, 0: 10},
+    "Wizard": {12: 25, 7: 50, 4: 15, 15: 10, 3: 10},
+    "Arcanist": {7: 30, 1: 25, 0: 25, 8: 25},
+    "Joker": {0: 25, 2: 25, 5: 20, 6: 25, 7: 10, 15: 10, 8: 20, 1: 10},
+    "Sexton": {10: 10, 13: 10, 1: 40, 6: 40, 8: 20, 15: 20},
+    "Ninja": {1: 60, 9: 60, 8: 40},
+    "Monk": {13: 40, 5: 10, 4: 25, 14: 50, 15: 20},
+}
+
+
+def skill_location(skill: int, rank: int) -> str:
+    return f"Skill: {SKILL_RANKS[rank - 1][1]} {SKILLS[skill]}"
+
+
+def skill_checks_for(class_name: str | None, max_rank: int) -> list[tuple[int, int]]:
+    """(skill, rank) pairs for a class (None = any class: the universal skills only)."""
+    if class_name is None:
+        start = {s: 0 for s in UNIVERSAL_SKILLS}
+    else:
+        # A skill the class barely starts with (under 20, like a Wizard's 15 Thaumaturgy) may need
+        # spells or tools the run never gives you, so only its main skills count.
+        start = {s: v for s, v in CLASS_SKILLS[class_name].items() if v >= 20}
+        for s in UNIVERSAL_SKILLS:
+            start.setdefault(s, 0)
+    out = []
+    for skill in sorted(start):
+        for rank, _, value in SKILL_RANKS:
+            if rank <= max_rank and value > start[skill]:
+                out.append((skill, rank))
+    return out
+
 
 MAX_LEVEL_CHECK = 30
 MAX_KILL_CHECKS = 50
@@ -188,6 +241,9 @@ for _b in BOSSES:
     LOCATION_NAME_TO_ID[_b.location_name] = BASE_ID + BOSS_OFFSET + _b.index
 for _s in SPECIAL_AREAS:
     LOCATION_NAME_TO_ID[_s.name] = BASE_ID + SPECIAL_OFFSET + _s.index
+for _sk in range(len(SKILLS)):
+    for _r, _, _ in SKILL_RANKS:
+        LOCATION_NAME_TO_ID[skill_location(_sk, _r)] = BASE_ID + SKILL_OFFSET + _sk * 5 + _r
 
 
 # ---------------------------------------------------------------------------------------

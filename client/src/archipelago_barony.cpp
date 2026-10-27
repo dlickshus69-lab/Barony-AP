@@ -81,7 +81,9 @@ namespace
 		int special_area_checks = 0;
 		int stair_keys = 0;           // old seeds only
 		int floor_keys = 0;           // a key on every floor opens its stairs
-		int key_compass_time = 30;    // Minotaur floors: seconds before he arrives that the key compass turns on
+		int key_compass_time = 30;
+		int skill_checks = 0;         // 0 off, 1 any class, 2.. a class (Barony class index + 2)
+		int skill_check_max_rank = 3; // 1 Basic .. 5 Legendary    // Minotaur floors: seconds before he arrives that the key compass turns on
 		int floor_shuffle = 0;        // 0 off, 1 sections, 2 full
 		int floor_shuffle_seed = 0;
 		int difficulty_scaling = 1;
@@ -218,6 +220,7 @@ namespace
 	bool g_savedGodmode = false;
 	bool g_confirmWasDown = true;               // edge detection: needs a fresh press
 	void endDeathScreen();
+	void warnSkillClass();
 	void launchTracker();
 	Uint32 g_stairsWarnedAt = 0;
 	void readCheckpoint();
@@ -489,6 +492,8 @@ namespace
 		registerSlotInt("stair_keys", &SlotOptions::stair_keys);
 		registerSlotInt("floor_keys", &SlotOptions::floor_keys);
 		registerSlotInt("key_compass_time", &SlotOptions::key_compass_time);
+		registerSlotInt("skill_checks", &SlotOptions::skill_checks);
+		registerSlotInt("skill_check_max_rank", &SlotOptions::skill_check_max_rank);
 		registerSlotInt("floor_shuffle", &SlotOptions::floor_shuffle);
 		registerSlotInt("floor_shuffle_seed", &SlotOptions::floor_shuffle_seed);
 		registerSlotInt("difficulty_scaling", &SlotOptions::difficulty_scaling);
@@ -877,6 +882,7 @@ namespace
 	void initRun()
 	{
 		endDeathScreen();
+		warnSkillClass();
 		g_save.runKey = uniqueGameKey;
 		g_save.livesLeft = g_slot.lives;
 		g_savedBossHP.clear();
@@ -977,6 +983,54 @@ namespace
 			{
 				sendLocation(ap_ids::BASE_ID + ap_ids::SPECIAL_OFFSET + area.index);
 			}
+		}
+	}
+
+	// Skill checks: which skills count, from what value, for the class chosen in the YAML.
+	// Returns the starting value (0 for a universal skill), or -1 if the skill isn't a check.
+	int skillStart(int skill)
+	{
+		int sc = g_slot.skill_checks;
+		if ( sc <= 0 || skill < 0 || skill >= ap_ids::NUM_SKILLS ) { return -1; }
+		int start = -1;
+		if ( sc >= 2 && sc - 2 < ap_ids::NUM_SKILL_CLASSES ) { start = ap_ids::CLASS_SKILL_START[sc - 2][skill]; }
+		if ( start < 0 && ap_ids::SKILL_UNIVERSAL[skill] ) { start = 0; }
+		return start;
+	}
+
+	void sendSkillChecks()
+	{
+		if ( g_slot.skill_checks <= 0 || !stats[clientnum] ) { return; }
+		for ( int skill = 0; skill < ap_ids::NUM_SKILLS; ++skill )
+		{
+			int start = skillStart(skill);
+			if ( start < 0 ) { continue; }
+			int have = stats[clientnum]->getProficiency(skill);
+			for ( int rank = 1; rank <= std::min(5, g_slot.skill_check_max_rank); ++rank )
+			{
+				int value = ap_ids::SKILL_RANK_VALUES[rank];
+				if ( value <= start || have < value ) { continue; }
+				int64_t loc = ap_ids::BASE_ID + ap_ids::SKILL_OFFSET + skill * 5 + rank;
+				if ( !isChecked(loc) )
+				{
+					sendLocation(loc);
+					say(COLOR_AP, "Skill check: %s %s!", ap_ids::SKILL_RANK_NAMES[rank], ap_ids::SKILL_NAMES[skill]);
+				}
+			}
+		}
+	}
+
+	void warnSkillClass()
+	{
+		int sc = g_slot.skill_checks;
+		if ( sc < 2 || !stats[clientnum] ) { return; }
+		int chosen = sc - 2;
+		if ( client_classes[clientnum] != chosen && chosen < ap_ids::NUM_SKILL_CLASSES )
+		{
+			static const char* const NAMES[] = { "Barbarian", "Warrior", "Healer", "Rogue", "Wanderer", "Cleric",
+				"Merchant", "Wizard", "Arcanist", "Joker", "Sexton", "Ninja", "Monk" };
+			say(COLOR_TRAP, "Skill Checks were made for a %s. Other classes can still raise those skills, but some checks may be much harder.",
+				NAMES[chosen]);
 		}
 	}
 
@@ -1404,7 +1458,7 @@ namespace
 		for ( int i = 0; i < toPlace; ++i )
 		{
 			int x, y;
-			if ( !findFloorSpot(x, y) ) { break; }
+			if ( !findReachableSpot(x, y) && !findFloorSpot(x, y) ) { break; } // somewhere you can walk to
 			Entity* entity = newEntity(-1, 1, map.entities, nullptr); // item entity, like dropItemMonster
 			entity->flags[INVISIBLE] = true;
 			entity->flags[UPDATENEEDED] = true;
@@ -2173,6 +2227,7 @@ void tick()
 	if ( ++g_tickCounter % 10 == 0 )
 	{
 		sendLevelChecks();
+		sendSkillChecks();
 		scanInventories();
 		g_floorCounts = countFloor();
 		g_loot = countLoot();

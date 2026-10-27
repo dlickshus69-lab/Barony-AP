@@ -12,6 +12,7 @@ constexpr int64_t PICKUP_OFFSET = 400;
 constexpr int64_t SHOP_OFFSET = 600;
 constexpr int64_t BOSS_OFFSET = 700;
 constexpr int64_t SPECIAL_OFFSET = 800;
+constexpr int64_t SKILL_OFFSET = 900;
 constexpr int MAX_FLOOR = 35;
 constexpr int FLOORS_PER_SECTION = 5;
 
@@ -91,5 +92,27 @@ static const AreaEntry SPECIAL_AREAS[] = {
     { 8, "Visit the Mystic Library", "mysticlibrary", 17 },
     { 9, "Visit the Cockatrice Lair", "caveslair", 29 },
     { 10, "Visit Bram's Castle", "bramscastle", 34 },
+};
+constexpr int NUM_SKILLS = 16;
+constexpr int NUM_SKILL_CLASSES = 13;
+static const char* const SKILL_NAMES[NUM_SKILLS] = { "Tinkering", "Stealth", "Trading", "Lore", "Thaumaturgy", "Leadership", "Mysticism", "Sorcery", "Ranged", "Sword", "Mace", "Axe", "Polearm", "Shield", "Unarmed", "Alchemy" };
+static const char* const SKILL_RANK_NAMES[6] = { "", "Basic", "Skilled", "Expert", "Master", "Legendary" };
+static const int SKILL_RANK_VALUES[6] = { 0, 20, 40, 60, 80, 100 };
+static const bool SKILL_UNIVERSAL[NUM_SKILLS] = { false, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false };
+// Main skills only (start >= 20), as data.skill_checks_for uses them.
+static const int CLASS_SKILL_START[NUM_SKILL_CLASSES][NUM_SKILLS] = {
+    { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 25, 50, -1, 25, 20, -1 }, // Barbarian
+    { -1, -1, -1, -1, -1, 40, -1, -1, 25, 25, -1, -1, 50, 25, -1, -1 }, // Warrior
+    { -1, -1, -1, -1, 50, -1, 25, -1, -1, -1, -1, -1, 25, -1, -1, 30 }, // Healer
+    { 40, 50, -1, 25, -1, -1, -1, -1, 25, 25, -1, -1, -1, -1, -1, 20 }, // Rogue
+    { -1, 25, 25, -1, -1, -1, -1, -1, 25, -1, -1, -1, 25, -1, -1, 30 }, // Wanderer
+    { -1, -1, -1, -1, 40, 20, -1, -1, -1, -1, 25, -1, -1, -1, -1, 20 }, // Cleric
+    { -1, -1, 50, 50, -1, 20, -1, -1, -1, -1, -1, 25, -1, -1, -1, -1 }, // Merchant
+    { -1, -1, -1, -1, -1, -1, -1, 50, -1, -1, -1, -1, 25, -1, -1, -1 }, // Wizard
+    { 25, 25, -1, -1, -1, -1, -1, 30, 25, -1, -1, -1, -1, -1, -1, -1 }, // Arcanist
+    { 25, -1, 25, -1, -1, 20, 25, -1, 20, -1, -1, -1, -1, -1, -1, -1 }, // Joker
+    { -1, 40, -1, -1, -1, -1, 40, -1, 20, -1, -1, -1, -1, -1, -1, 20 }, // Sexton
+    { -1, 60, -1, -1, -1, -1, -1, -1, 40, 60, -1, -1, -1, -1, -1, -1 }, // Ninja
+    { -1, -1, -1, -1, 25, -1, -1, -1, -1, -1, -1, -1, -1, 40, 50, 20 }, // Monk
 };
 } // namespace ap_ids

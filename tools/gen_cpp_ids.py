@@ -33,6 +33,7 @@ lines = [
     f"constexpr int64_t SHOP_OFFSET = {data.SHOP_OFFSET};",
     f"constexpr int64_t BOSS_OFFSET = {data.BOSS_OFFSET};",
     f"constexpr int64_t SPECIAL_OFFSET = {data.SPECIAL_OFFSET};",
+    f"constexpr int64_t SKILL_OFFSET = {data.SKILL_OFFSET};",
     f"constexpr int MAX_FLOOR = {data.MAX_FLOOR};",
     f"constexpr int FLOORS_PER_SECTION = {data.FLOORS_PER_SECTION};",
     "",
@@ -56,6 +57,19 @@ for b in data.BOSSES:
 lines += ["};", "static const AreaEntry SPECIAL_AREAS[] = {"]
 for a in data.SPECIAL_AREAS:
     lines.append(f'    {{ {a.index}, "{a.name}", "{a.map_match}", {a.depth} }},')
+lines += ["};"]
+# Skill checks: starting value of each skill per base class (-1 = not one of its main skills).
+lines.append(f"constexpr int NUM_SKILLS = {len(data.SKILLS)};")
+lines.append(f"constexpr int NUM_SKILL_CLASSES = {len(data.CLASSES)};")
+lines.append("static const char* const SKILL_NAMES[NUM_SKILLS] = { " + ", ".join(f'"{n}"' for n in data.SKILLS) + " };")
+lines.append("static const char* const SKILL_RANK_NAMES[6] = { \"\", " + ", ".join(f'"{n}"' for _, n, _ in data.SKILL_RANKS) + " };")
+lines.append("static const int SKILL_RANK_VALUES[6] = { 0, " + ", ".join(str(v) for _, _, v in data.SKILL_RANKS) + " };")
+lines.append("static const bool SKILL_UNIVERSAL[NUM_SKILLS] = { " + ", ".join("true" if i in data.UNIVERSAL_SKILLS else "false" for i in range(len(data.SKILLS))) + " };")
+lines.append("// Main skills only (start >= 20), as data.skill_checks_for uses them.")
+lines.append("static const int CLASS_SKILL_START[NUM_SKILL_CLASSES][NUM_SKILLS] = {")
+for c in data.CLASSES:
+    row = [str(v) if v >= 20 else "-1" for v in (data.CLASS_SKILLS[c].get(i, -1) for i in range(len(data.SKILLS)))]
+    lines.append(f"    {{ {', '.join(row)} }}, // {c}")
 lines += ["};", "} // namespace ap_ids", ""]
 
 OUT.parent.mkdir(parents=True, exist_ok=True)

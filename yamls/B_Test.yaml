@@ -20,6 +20,10 @@ Barony:
   boss_checks: true
   special_area_checks: false
 
+  # Skills
+  skill_checks: off
+  skill_check_max_rank: expert
+
   # Dungeon
   floor_keys: true
   key_compass_time: 30

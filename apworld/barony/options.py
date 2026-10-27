@@ -471,6 +471,50 @@ class DeathLinkMode(Choice):
     default = option_restart_floor
 
 
+# ---------------------------------------------------------------- skills
+class SkillChecks(Choice):
+    """
+    Raising your skills to Basic (20), Skilled (40), Expert (60), Master (80) and Legendary (100) sends
+    checks. Barony classes start with different skills, so pick the class you'll play: its checks are
+    its main skills (the ones it starts with at 20 or more), plus Lore, Trading and Stealth (every class
+    can raise those). Ranks you already start at or above aren't checks.
+    Any Class: only Lore, Trading and Stealth, so it works whichever class you pick in game.
+    Playing a different class than the one chosen still counts any skill you raise, but some checks
+    may be much harder to get; the game warns you when your run starts.
+    """
+    display_name = "Skill Checks"
+    option_off = 0
+    option_any_class = 1
+    option_barbarian = 2
+    option_warrior = 3
+    option_healer = 4
+    option_rogue = 5
+    option_wanderer = 6
+    option_cleric = 7
+    option_merchant = 8
+    option_wizard = 9
+    option_arcanist = 10
+    option_joker = 11
+    option_sexton = 12
+    option_ninja = 13
+    option_monk = 14
+    default = option_off
+
+
+class SkillCheckMaxRank(Choice):
+    """
+    The highest skill rank that's a check. Higher ranks take a long time: Master and Legendary usually
+    need most of a run spent using that skill.
+    """
+    display_name = "Skill Check Max Rank"
+    option_basic = 1
+    option_skilled = 2
+    option_expert = 3
+    option_master = 4
+    option_legendary = 5
+    default = option_expert
+
+
 # ---------------------------------------------------------------- traps & players
 class TrapChance(Range):
     """
@@ -669,6 +713,8 @@ class BaronyOptions(PerGameCommonOptions):
     boss_checks: BossChecks
     special_area_checks: SpecialAreaChecks
     floor_keys: FloorKeys
+    skill_checks: SkillChecks
+    skill_check_max_rank: SkillCheckMaxRank
     key_compass_time: KeyCompassTime
     floor_shuffle: FloorShuffle
     layout_seed: LayoutSeed
@@ -717,6 +763,7 @@ option_groups = [
         EnemySanityPerFloor, BestiaryChecks,
         ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),
+    OptionGroup("Skills", [SkillChecks, SkillCheckMaxRank]),
     OptionGroup("Dungeon", [FloorKeys, KeyCompassTime, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemyPool, EnemySeed, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, MinotaurTime, DifficultyScaling, Difficulty]),
     OptionGroup("Lives & Checkpoints", [Lives, ExtraLivesInPool, CheckpointInterval]),
     OptionGroup("Death Link", [BaronyDeathLink, DeathLinkMode, DeathPenalty, DeathItems, FloorRestart, BossDeath]),

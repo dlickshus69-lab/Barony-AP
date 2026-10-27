@@ -79,3 +79,24 @@ class TestTrapWeights(BaronyTestBase):
     def test_only_weighted_traps(self) -> None:
         traps = {item.name for item in self.multiworld.itempool if item.classification == ItemClassification.trap}
         self.assertEqual(traps, {"Blindness Trap"})
+
+
+class TestSkillChecksWarrior(BaronyTestBase):
+    options = {"skill_checks": "warrior", "skill_check_max_rank": "expert"}
+
+    def test_warrior_skills(self) -> None:
+        names = {loc.name for loc in self.multiworld.get_locations(self.player)}
+        self.assertIn("Skill: Expert Polearm", names)       # starts at 50
+        self.assertNotIn("Skill: Skilled Polearm", names)   # already past it
+        self.assertIn("Skill: Basic Lore", names)           # every class
+        self.assertNotIn("Skill: Basic Sorcery", names)     # not a warrior skill
+        self.assertNotIn("Skill: Master Sword", names)      # above the max rank
+        self.assertEqual(self.world.fill_slot_data()["skill_checks"], 3)
+
+
+class TestSkillChecksAnyClass(BaronyTestBase):
+    options = {"skill_checks": "any_class", "skill_check_max_rank": "legendary"}
+
+    def test_universal_only(self) -> None:
+        skills = [loc.name for loc in self.multiworld.get_locations(self.player) if loc.name.startswith("Skill: ")]
+        self.assertEqual(len(skills), 15)  # Lore, Trading, Stealth x 5 ranks
