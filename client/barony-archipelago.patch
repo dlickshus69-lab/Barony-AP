@@ -1,4 +1,4 @@
-From a8965bc0203a18ffd62fc42c30d4db7e9e1884c5 Mon Sep 17 00:00:00 2001
+From 6e2aef04a4b1040d75352bd2034ae7886a48ab82 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -650,7 +650,7 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..2254804
+index 0000000..7358ec9
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
 @@ -0,0 +1,3333 @@
@@ -744,7 +744,7 @@ index 0000000..2254804
 +		int lock_class = 0;
 +		int floor_size = 0;           // 0 normal, 1 bigger, 2 much bigger
 +		int music_mods = 0;           // 0 off, 1 mixed with the original, 2 mods only
-+		int extra_monsters = 0;       // 0 off, 1 a little more, 2 more           // new characters always get the Skill Checks class    // Minotaur floors: seconds before he arrives that the key compass turns on
++		int extra_monsters = 0;       // how many more monsters per floor (0 to 20)           // new characters always get the Skill Checks class    // Minotaur floors: seconds before he arrives that the key compass turns on
 +		int floor_shuffle = 0;        // 0 off, 1 sections, 2 full
 +		int floor_shuffle_seed = 0;
 +		int difficulty_scaling = 1;
@@ -2524,9 +2524,9 @@ index 0000000..2254804
 +		{
 +			if ( isMarkableEnemy((Entity*)node->element) ) { ++existing; }
 +		}
-+		// A Little More: half as many again (3 to 6 extra). More: about double (5 to 10 extra). The cap
-+		// keeps busy floors from bogging down.
-+		int extra = g_slot.extra_monsters == 1 ? std::clamp(existing / 2, 3, 6) : std::clamp(existing, 5, 10);
++		// Extra Monsters: this many more on the floor (0 to 20).
++		(void)existing;
++		int extra = std::clamp(g_slot.extra_monsters, 0, 20);
 +		int made = 0;
 +		for ( int i = 0; i < extra; ++i )
 +		{

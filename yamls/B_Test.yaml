@@ -44,7 +44,7 @@ Barony:
 
   # Extras
   floor_size: normal
-  extra_monsters: off
+  extra_monsters: 0
   music_mods: mixed
 
   # Lives & Checkpoints
