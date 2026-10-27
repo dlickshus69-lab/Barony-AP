@@ -4,7 +4,9 @@ Barony Archipelago
    (Steam: right-click Barony > Manage > Browse local files), replacing barony.exe.
    Steam > Properties > Installed Files > Verify puts the original game back any time.
 
-2. Open archipelago.cfg in Notepad and fill in:
+2. First time only: rename archipelago-example.cfg to archipelago.cfg.
+   (Updates never touch archipelago.cfg, so your settings stay when you update.)
+   Open archipelago.cfg in Notepad and fill in:
      server=   the address from your room page, like archipelago.gg:38281
      slot=     your name from your YAML
      password= only if the room has one

@@ -105,7 +105,7 @@ jobs:
           New-Item -ItemType Directory -Force $out | Out-Null
           Copy-Item build/Release/barony.exe $out
           Copy-Item build/Release/*.dll $out
-          Copy-Item client/archipelago.cfg $out
+          Copy-Item client/archipelago-example.cfg $out
           Copy-Item client/HOW-TO-PLAY.txt $out
           Copy-Item client/game-files/* $out -Recurse -Force
           Compress-Archive -Path "$out/*" -DestinationPath BaronyAP-windows.zip -Force
