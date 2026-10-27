@@ -1,18 +1,18 @@
-From 308f9258c746f4124160c36c5dc981ef43bf24b9 Mon Sep 17 00:00:00 2001
+From 1837186ad5960dc6a90ef187588226cf2d5a12d5 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
 
 ---
  CMakeLists.txt                    |   32 +
- src/BaronyAPTracker.cpp           |  682 +++++
+ src/BaronyAPTracker.cpp           | 1070 ++++++++
  src/CMakeLists.txt                |    1 +
  src/actchest.cpp                  |    7 +
  src/actgeneral.cpp                |    2 +
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 3870 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 3993 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |  120 +
  src/archipelago_ids.hpp           |  134 +
  src/charclass.cpp                 |    4 +
@@ -29,7 +29,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   10 +
  src/ui/MainMenu.cpp               |    5 +-
- 25 files changed, 5050 insertions(+), 4 deletions(-)
+ 25 files changed, 5561 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -80,10 +80,10 @@ index 4e9ed8f..c2b0e9a 100644
      # Only for MinGW...
 diff --git a/src/BaronyAPTracker.cpp b/src/BaronyAPTracker.cpp
 new file mode 100644
-index 0000000..f1c8ac0
+index 0000000..400a5bf
 --- /dev/null
 +++ b/src/BaronyAPTracker.cpp
-@@ -0,0 +1,682 @@
+@@ -0,0 +1,1070 @@
 +// Barony Archipelago tracker window.
 +//
 +// Barony (the Archipelago build) starts this with the game, and writes
@@ -101,7 +101,9 @@ index 0000000..f1c8ac0
 +#include <algorithm>
 +#include <fstream>
 +#include <map>
++#include <cmath>
 +#include <cstring>
++#include <cwctype>
 +#include <string>
 +#include <vector>
 +
@@ -126,6 +128,7 @@ index 0000000..f1c8ac0
 +	HWND g_main = nullptr, g_editServer = nullptr, g_editPort = nullptr, g_editName = nullptr, g_btnConnect = nullptr;
 +	bool g_formShown = false;
 +	int g_formTop = -1;
++	int g_sideX = 0;            // where the right-hand column starts (the map is left of it)
 +	std::wstring g_formNote;     // "enter a port", etc.
 +	HBRUSH g_editBrush = nullptr;
 +	const int ID_CONNECT = 101;
@@ -342,12 +345,12 @@ index 0000000..f1c8ac0
 +	{
 +		if ( top == g_formTop ) { return; }
 +		g_formTop = top;
-+		int x = 150, w = width - x - 20;
-+		SetWindowPos(g_editServer, nullptr, x, top, w, 34, SWP_NOZORDER);
-+		SetWindowPos(g_editPort, nullptr, x, top + 44, 140, 34, SWP_NOZORDER);
-+		SetWindowPos(g_editName, nullptr, x, top + 88, w, 34, SWP_NOZORDER);
-+		SetWindowPos(g_btnConnect, nullptr, x, top + 136, 210, 42, SWP_NOZORDER);
-+		SetWindowPos(g_btnPlain, nullptr, 20, top + 196, width - 40, 42, SWP_NOZORDER);
++		int x = 150, w = width - x - 20, ox = g_sideX;
++		SetWindowPos(g_editServer, nullptr, ox + x, top, w, 34, SWP_NOZORDER);
++		SetWindowPos(g_editPort, nullptr, ox + x, top + 44, 140, 34, SWP_NOZORDER);
++		SetWindowPos(g_editName, nullptr, ox + x, top + 88, w, 34, SWP_NOZORDER);
++		SetWindowPos(g_btnConnect, nullptr, ox + x, top + 136, 210, 42, SWP_NOZORDER);
++		SetWindowPos(g_btnPlain, nullptr, ox + 20, top + 196, width - 40, 42, SWP_NOZORDER);
 +	}
 +
 +	void drawPanel(HDC dc, int x, int y, int w, int h)
@@ -390,15 +393,338 @@ index 0000000..f1c8ac0
 +		DeleteObject(b);
 +	}
 +
-+	void paint(HWND hwnd)
++
++	// ---------------------------------------------------------------- the floor map
++	// The game writes archipelago/trackermap.txt: only what Barony's own map knows (the layout
++	// you've seen, items where you've seen them), plus Archipelago items and green enemies.
++	const COLORREF SECRET = RGB(190, 140, 255);
++	struct MapItem { double x, y; std::string path, name; bool gold = false; };
++	struct MapPile { int tx, ty; std::vector<MapItem> items; };
++	struct MapPoint { double x, y; std::string kind; };
++	struct MapState
 +	{
-+		PAINTSTRUCT ps;
-+		HDC wdc = BeginPaint(hwnd, &ps);
-+		RECT rc;
-+		GetClientRect(hwnd, &rc);
-+		HDC dc = CreateCompatibleDC(wdc);
-+		HBITMAP bmp = CreateCompatibleBitmap(wdc, rc.right, rc.bottom);
-+		HGDIOBJ oldBmp = SelectObject(dc, bmp);
++		bool ingame = false;
++		int w = 0, h = 0;
++		std::string floorId, name;
++		std::vector<std::string> rows;
++		bool hasPlayer = false;
++		double px = 0, py = 0, pyaw = 0;
++		std::vector<MapPoint> ap, foes, chests, stairs, secrets;
++		bool hasKey = false;
++		double kx = 0, ky = 0;
++		bool locked = false;
++		std::vector<MapPile> piles;
++	};
++	MapState g_map;
++	int g_mapX = 0, g_mapY = 0, g_mapCell = 0;
++	int g_hoverX = -1, g_hoverY = -1, g_mouseX = 0, g_mouseY = 0;
++	std::map<std::string, Gdiplus::Image*> g_icons;
++
++	std::vector<std::string> splitTabs(const std::string& v)
++	{
++		std::vector<std::string> out;
++		size_t start = 0;
++		while ( true )
++		{
++			size_t tab = v.find('\t', start);
++			out.push_back(v.substr(start, tab == std::string::npos ? std::string::npos : tab - start));
++			if ( tab == std::string::npos ) { break; }
++			start = tab + 1;
++		}
++		return out;
++	}
++
++	void readMap()
++	{
++		MapState m;
++		std::ifstream in(exeDir() + "\\archipelago\\trackermap.txt");
++		std::string line;
++		std::map<long long, size_t> pileIndex;
++		while ( in && std::getline(in, line) )
++		{
++			if ( !line.empty() && line.back() == '\r' ) { line.pop_back(); }
++			size_t eq = line.find('=');
++			if ( eq == std::string::npos ) { continue; }
++			std::string k = line.substr(0, eq), v = line.substr(eq + 1);
++			auto f = splitTabs(v);
++			auto d = [&](size_t i) { return i < f.size() ? atof(f[i].c_str()) : 0.0; };
++			if ( k == "ingame" ) { m.ingame = v == "1"; }
++			else if ( k == "size" ) { sscanf(v.c_str(), "%d %d", &m.w, &m.h); }
++			else if ( k == "floorid" ) { m.floorId = v; }
++			else if ( k == "name" ) { m.name = v; }
++			else if ( k == "row" ) { m.rows.push_back(v); }
++			else if ( k == "player" ) { m.hasPlayer = true; m.px = d(0); m.py = d(1); m.pyaw = d(2); }
++			else if ( k == "ap" ) { m.ap.push_back({ d(0), d(1), f.size() > 2 ? f[2] : "" }); }
++			else if ( k == "foe" ) { m.foes.push_back({ d(0), d(1), "" }); }
++			else if ( k == "chest" ) { m.chests.push_back({ d(0), d(1), "" }); }
++			else if ( k == "stairs" ) { m.stairs.push_back({ d(0), d(1), "" }); }
++			else if ( k == "secret" ) { m.secrets.push_back({ d(0), d(1), "" }); }
++			else if ( k == "key" ) { m.hasKey = true; m.kx = d(0); m.ky = d(1); }
++			else if ( k == "locked" ) { m.locked = v == "1"; }
++			else if ( k == "item" || k == "gold" )
++			{
++				MapItem it;
++				it.x = d(0); it.y = d(1);
++				if ( k == "gold" ) { it.gold = true; it.name = (f.size() > 2 ? f[2] : std::string("Some")) + " gold"; }
++				else { it.path = f.size() > 2 ? f[2] : ""; it.name = f.size() > 3 ? f[3] : "an item"; }
++				int tx = (int)it.x, ty = (int)it.y;
++				long long key = (long long)ty * 100000 + tx;
++				auto found = pileIndex.find(key);
++				if ( found == pileIndex.end() )
++				{
++					pileIndex[key] = m.piles.size();
++					m.piles.push_back(MapPile{ tx, ty, { it } });
++				}
++				else { m.piles[found->second].items.push_back(it); }
++			}
++		}
++		if ( (int)m.rows.size() != m.h ) { m.ingame = false; }
++		g_map = m;
++	}
++
++	const MapPile* pileAt(int tx, int ty)
++	{
++		if ( tx < 0 || ty < 0 ) { return nullptr; }
++		for ( auto& p : g_map.piles ) { if ( p.tx == tx && p.ty == ty ) { return &p; } }
++		return nullptr;
++	}
++
++	Gdiplus::Image* itemIcon(const std::string& gamePath)
++	{
++		std::string rel = gamePath;
++		while ( !rel.empty() && (rel[0] == '*' || rel[0] == '#') ) { rel.erase(0, 1); }
++		if ( rel.empty() ) { return nullptr; }
++		auto it = g_icons.find(rel);
++		if ( it != g_icons.end() ) { return it->second; }
++		std::string win = rel;
++		std::replace(win.begin(), win.end(), '/', '\\');
++		Gdiplus::Image* img = loadImage(win);
++		g_icons[rel] = img; // nullptr too, so a missing file isn't retried every second
++		return img;
++	}
++
++	void drawIcon(Gdiplus::Graphics& g, const MapItem& it, float cx, float cy, float size)
++	{
++		Gdiplus::SolidBrush back(Gdiplus::Color(215, 22, 18, 14));
++		Gdiplus::Pen edge(Gdiplus::Color(255, 0, 0, 0), 1.5f);
++		g.FillRectangle(&back, cx - size / 2, cy - size / 2, size, size);
++		g.DrawRectangle(&edge, cx - size / 2, cy - size / 2, size, size);
++		Gdiplus::Image* img = it.gold ? nullptr : itemIcon(it.path);
++		if ( img )
++		{
++			g.DrawImage(img, cx - size / 2 + 1, cy - size / 2 + 1, size - 2, size - 2);
++		}
++		else if ( it.gold )
++		{
++			Gdiplus::SolidBrush coin(Gdiplus::Color(255, 255, 200, 90));
++			g.FillEllipse(&coin, cx - size / 4, cy - size / 4, size / 2, size / 2);
++			g.DrawEllipse(&edge, cx - size / 4, cy - size / 4, size / 2, size / 2);
++		}
++		else
++		{
++			Gdiplus::SolidBrush dot(Gdiplus::Color(255, 225, 220, 210));
++			g.FillRectangle(&dot, cx - 3, cy - 3, 6.0f, 6.0f);
++		}
++	}
++
++	void paintMap(HDC dc, RECT area)
++	{
++		drawPanel(dc, area.left, area.top, area.right - area.left, area.bottom - area.top);
++		g_mapCell = 0;
++		int top = area.top + 10;
++		if ( !g_map.ingame || g_map.w <= 0 || g_map.h <= 0 )
++		{
++			text(dc, area.left + 16, top, L"Floor map", GOLD, g_bodyFont);
++			text(dc, area.left + 16, top + 34, L"Start a run to see your floor here.", DIM, g_bodyFont);
++			return;
++		}
++		wchar_t buf[256];
++		swprintf(buf, 256, L"Floor %d: %s", num("floor"), widen(g_map.name).c_str());
++		text(dc, area.left + 16, top, buf, GOLD, g_bodyFont);
++		top += 36;
++		int legendH = 30;
++		int availW = area.right - area.left - 24, availH = area.bottom - top - legendH - 12;
++		int cell = std::max(2, std::min(availW / g_map.w, availH / g_map.h));
++		int mw = cell * g_map.w, mh = cell * g_map.h;
++		int mx = area.left + 12 + (availW - mw) / 2, my = top + std::max(0, (availH - mh) / 2);
++		g_mapX = mx; g_mapY = my; g_mapCell = cell;
++
++		// The layout: one pixel per tile, stretched (Barony's own map colors).
++		BITMAPINFO bi{};
++		bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
++		bi.bmiHeader.biWidth = g_map.w;
++		bi.bmiHeader.biHeight = -g_map.h;
++		bi.bmiHeader.biPlanes = 1;
++		bi.bmiHeader.biBitCount = 32;
++		bi.bmiHeader.biCompression = BI_RGB;
++		std::vector<uint32_t> px((size_t)g_map.w * g_map.h);
++		auto rgb = [](int r, int g2, int b) { return (uint32_t)((r << 16) | (g2 << 8) | b); };
++		for ( int y = 0; y < g_map.h; ++y )
++		{
++			const std::string& row = g_map.rows[y];
++			for ( int x = 0; x < g_map.w; ++x )
++			{
++				char c = x < (int)row.size() ? row[x] : '.';
++				uint32_t col = rgb(0, 40, 40);
++				if ( c == 'f' ) { col = rgb(0, 128, 128); }
++				else if ( c == 'w' ) { col = rgb(0, 255, 255); }
++				else if ( c == 'g' ) { col = rgb(64, 64, 64); }
++				else if ( c == 'h' ) { col = rgb(128, 128, 128); }
++				px[(size_t)y * g_map.w + x] = col;
++			}
++		}
++		SetStretchBltMode(dc, COLORONCOLOR);
++		StretchDIBits(dc, mx, my, mw, mh, 0, 0, g_map.w, g_map.h, px.data(), &bi, DIB_RGB_COLORS, SRCCOPY);
++
++		Gdiplus::Graphics g(dc);
++		g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
++		g.SetInterpolationMode(Gdiplus::InterpolationModeNearestNeighbor);
++		g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
++		float icon = (float)std::clamp(cell * 3 / 2, 14, 28);
++		auto sx = [&](double tx) { return (float)(mx + tx * cell); };
++		auto sy = [&](double ty) { return (float)(my + ty * cell); };
++		auto tileCenterX = [&](int tx) { return (float)(mx + tx * cell + cell / 2.0); };
++		auto tileCenterY = [&](int ty) { return (float)(my + ty * cell + cell / 2.0); };
++		Gdiplus::Pen black(Gdiplus::Color(255, 0, 0, 0), 2.0f);
++
++		for ( auto& c : g_map.chests )
++		{
++			Gdiplus::SolidBrush wood(Gdiplus::Color(255, 138, 90, 43));
++			float w = icon * 0.8f, h = icon * 0.6f;
++			g.FillRectangle(&wood, sx(c.x) - w / 2, sy(c.y) - h / 2, w, h);
++			g.DrawRectangle(&black, sx(c.x) - w / 2, sy(c.y) - h / 2, w, h);
++		}
++		for ( auto& st : g_map.stairs )
++		{
++			Gdiplus::Color c = g_map.locked ? Gdiplus::Color(255, 240, 90, 80) : Gdiplus::Color(255, 120, 230, 120);
++			Gdiplus::Pen pen(c, 2.0f);
++			Gdiplus::SolidBrush back(Gdiplus::Color(255, 22, 18, 14));
++			float s2 = icon * 0.9f;
++			g.FillRectangle(&back, sx(st.x) - s2 / 2, sy(st.y) - s2 / 2, s2, s2);
++			g.DrawRectangle(&pen, sx(st.x) - s2 / 2, sy(st.y) - s2 / 2, s2, s2);
++			for ( int i = -1; i <= 1; ++i ) { g.DrawLine(&pen, sx(st.x) - s2 / 3, sy(st.y) + i * s2 / 4, sx(st.x) + s2 / 3, sy(st.y) + i * s2 / 4); }
++		}
++		for ( auto& st : g_map.secrets )
++		{
++			Gdiplus::Pen pen(Gdiplus::Color(255, 190, 140, 255), 2.0f);
++			Gdiplus::SolidBrush back(Gdiplus::Color(255, 40, 20, 60));
++			float s2 = icon * 0.9f;
++			g.FillEllipse(&back, sx(st.x) - s2 / 2, sy(st.y) - s2 / 2, s2, s2);
++			g.DrawEllipse(&pen, sx(st.x) - s2 / 2, sy(st.y) - s2 / 2, s2, s2);
++			g.DrawLine(&pen, sx(st.x), sy(st.y) - s2 / 4, sx(st.x), sy(st.y) + s2 / 4);
++		}
++		for ( auto& p : g_map.piles )
++		{
++			float cx = tileCenterX(p.tx), cy = tileCenterY(p.ty);
++			drawIcon(g, p.items.front(), cx, cy, icon);
++			if ( p.items.size() > 1 )
++			{
++				Gdiplus::SolidBrush badge(Gdiplus::Color(255, 255, 200, 90));
++				Gdiplus::Pen bpen(Gdiplus::Color(255, 0, 0, 0), 1.5f);
++				float bw = 13, bh = 12, bx = cx + icon / 2 - 6, by = cy - icon / 2 - 7;
++				g.FillRectangle(&badge, bx, by, bw, bh);
++				g.DrawRectangle(&bpen, bx, by, bw, bh);
++				Gdiplus::FontFamily ff(L"Consolas");
++				Gdiplus::Font font(&ff, 9.0f, Gdiplus::FontStyleBold, Gdiplus::UnitPixel);
++				Gdiplus::SolidBrush ink(Gdiplus::Color(255, 0, 0, 0));
++				Gdiplus::StringFormat sf;
++				sf.SetAlignment(Gdiplus::StringAlignmentCenter);
++				sf.SetLineAlignment(Gdiplus::StringAlignmentCenter);
++				std::wstring n = std::to_wstring(std::min<size_t>(p.items.size(), 99));
++				g.DrawString(n.c_str(), -1, &font, Gdiplus::RectF(bx, by, bw, bh), &sf, &ink);
++			}
++		}
++		for ( auto& a : g_map.ap )
++		{
++			float r = icon * 0.42f, cx = sx(a.x), cy = sy(a.y);
++			if ( a.kind == "chest" )
++			{
++				Gdiplus::SolidBrush wood(Gdiplus::Color(255, 138, 90, 43));
++				g.FillRectangle(&wood, cx - icon * 0.4f, cy - icon * 0.3f, icon * 0.8f, icon * 0.6f);
++				g.DrawRectangle(&black, cx - icon * 0.4f, cy - icon * 0.3f, icon * 0.8f, icon * 0.6f);
++				cy -= icon * 0.45f;
++				r = icon * 0.25f;
++			}
++			Gdiplus::SolidBrush ring(Gdiplus::Color(255, 22, 18, 14));
++			Gdiplus::SolidBrush green(Gdiplus::Color(255, 120, 230, 120));
++			g.FillEllipse(&ring, cx - r - 2, cy - r - 2, 2 * r + 4, 2 * r + 4);
++			g.DrawEllipse(&black, cx - r - 2, cy - r - 2, 2 * r + 4, 2 * r + 4);
++			g.FillEllipse(&green, cx - r, cy - r, 2 * r, 2 * r);
++			g.FillEllipse(&ring, cx - r * 0.4f, cy - r * 0.4f, r * 0.8f, r * 0.8f);
++		}
++		for ( auto& f : g_map.foes )
++		{
++			float r = icon * 0.4f, cx = sx(f.x), cy = sy(f.y);
++			Gdiplus::PointF pts[4] = { { cx, cy - r }, { cx + r, cy }, { cx, cy + r }, { cx - r, cy } };
++			Gdiplus::SolidBrush body(Gdiplus::Color(255, 47, 138, 47));
++			g.FillPolygon(&body, pts, 4);
++			g.DrawPolygon(&black, pts, 4);
++		}
++		if ( g_map.hasKey )
++		{
++			float cx = sx(g_map.kx), cy = sy(g_map.ky);
++			if ( g_map.hasPlayer )
++			{
++				Gdiplus::Pen dash(Gdiplus::Color(200, 255, 200, 90), 2.0f);
++				dash.SetDashStyle(Gdiplus::DashStyleDash);
++				g.DrawLine(&dash, sx(g_map.px), sy(g_map.py), cx, cy);
++			}
++			Gdiplus::Pen outline(Gdiplus::Color(255, 0, 0, 0), 5.0f), gold(Gdiplus::Color(255, 255, 200, 90), 2.5f);
++			float r = icon * 0.22f;
++			for ( Gdiplus::Pen* pen : { &outline, &gold } )
++			{
++				g.DrawEllipse(pen, cx - r * 2, cy - r, 2 * r, 2 * r);
++				g.DrawLine(pen, cx, cy, cx + r * 2.2f, cy);
++				g.DrawLine(pen, cx + r * 1.6f, cy, cx + r * 1.6f, cy + r);
++				g.DrawLine(pen, cx + r * 2.2f, cy, cx + r * 2.2f, cy + r);
++			}
++		}
++		if ( g_map.hasPlayer )
++		{
++			float cx = sx(g_map.px), cy = sy(g_map.py), r = icon * 0.5f;
++			double a = g_map.pyaw; // 0 = east, +y = south
++			auto pt = [&](double ang, float len) { return Gdiplus::PointF(cx + (float)(cos(a + ang) * len), cy + (float)(sin(a + ang) * len)); };
++			Gdiplus::PointF tri[4] = { pt(0, r), pt(2.5, r * 0.85f), pt(3.14159, r * 0.35f), pt(-2.5, r * 0.85f) };
++			Gdiplus::SolidBrush you(Gdiplus::Color(255, 255, 216, 74));
++			g.FillPolygon(&you, tri, 4);
++			g.DrawPolygon(&black, tri, 4);
++		}
++
++		g.Flush(Gdiplus::FlushIntentionSync);
++		// Legend under the map.
++		int ly = area.bottom - legendH - 4;
++		text(dc, area.left + 16, ly, L"Green: Archipelago   Diamond: green enemy   Hover a pile to see it", DIM, g_bodyFont);
++
++		// Hovering a pile: what's in it.
++		const MapPile* hp = pileAt(g_hoverX, g_hoverY);
++		if ( hp )
++		{
++			int rowH = 26, wBox = 320, hBox = 36 + rowH * (int)std::min<size_t>(hp->items.size(), 12);
++			int bx = std::min(g_mouseX + 16, (int)area.right - wBox - 4), by = std::min(g_mouseY + 12, (int)area.bottom - hBox - 4);
++			Gdiplus::SolidBrush back(Gdiplus::Color(242, 16, 12, 9));
++			Gdiplus::Pen border(Gdiplus::Color(255, 255, 200, 90), 2.0f);
++			g.FillRectangle(&back, bx, by, wBox, hBox);
++			g.DrawRectangle(&border, bx, by, wBox, hBox);
++			g.Flush(Gdiplus::FlushIntentionSync);
++			swprintf(buf, 256, hp->items.size() == 1 ? L"1 item here" : L"%d items here", (int)hp->items.size());
++			text(dc, bx + 10, by + 4, buf, GOLD, g_bodyFont);
++			Gdiplus::Graphics g2(dc);
++			g2.SetInterpolationMode(Gdiplus::InterpolationModeNearestNeighbor);
++			g2.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
++			for ( size_t i = 0; i < hp->items.size() && i < 12; ++i )
++			{
++				int ry = by + 34 + (int)i * rowH;
++				drawIcon(g2, hp->items[i], (float)bx + 20, (float)ry + 10, 20);
++				std::wstring nm = widen(hp->items[i].name);
++				if ( !nm.empty() ) { nm[0] = towupper(nm[0]); }
++				text(dc, bx + 38, ry - 4, nm, TEXT, g_bodyFont);
++			}
++		}
++	}
++
++	// The right-hand column (or the whole window when it's too narrow for the map).
++	void paintSidebar(HDC dc, RECT rc)
++	{
 +		SetBkMode(dc, TRANSPARENT);
 +		fill(dc, rc, BG);
 +
@@ -496,6 +822,16 @@ index 0000000..f1c8ac0
 +				else if ( mino == -2 )
 +				{
 +					text(dc, 14, y, L"The Minotaur is hunting you!", BAD, g_bodyFont);
++					y += 24;
++				}
++				if ( num("secretarea") )
++				{
++					text(dc, 14, y, L"You're in a secret area", SECRET, g_bodyFont);
++					y += 24;
++				}
++				else if ( num("secretexit") )
++				{
++					text(dc, 14, y, g_map.secrets.empty() ? L"Secret area entrance on this floor" : L"Secret area entrance: found", SECRET, g_bodyFont);
 +					y += 24;
 +				}
 +				y += 6;
@@ -608,6 +944,38 @@ index 0000000..f1c8ac0
 +			}
 +		}
 +
++	}
++
++	void paint(HWND hwnd)
++	{
++		PAINTSTRUCT ps;
++		HDC wdc = BeginPaint(hwnd, &ps);
++		RECT rc;
++		GetClientRect(hwnd, &rc);
++		HDC dc = CreateCompatibleDC(wdc);
++		HBITMAP bmp = CreateCompatibleBitmap(wdc, rc.right, rc.bottom);
++		HGDIOBJ oldBmp = SelectObject(dc, bmp);
++		SetBkMode(dc, TRANSPARENT);
++		fill(dc, rc, BG);
++
++		// Wide window: the floor map on the left, everything else in a column on the right.
++		bool withMap = rc.right >= 900;
++		int sideW = withMap ? 450 : rc.right;
++		int sideX = rc.right - sideW;
++		if ( sideX != g_sideX ) { g_sideX = sideX; g_formTop = -1; }
++		{
++			HDC sdc = CreateCompatibleDC(wdc);
++			HBITMAP sbmp = CreateCompatibleBitmap(wdc, sideW, rc.bottom);
++			HGDIOBJ sold = SelectObject(sdc, sbmp);
++			paintSidebar(sdc, RECT{ 0, 0, sideW, rc.bottom });
++			BitBlt(dc, sideX, 0, sideW, rc.bottom, sdc, 0, 0, SRCCOPY);
++			SelectObject(sdc, sold);
++			DeleteObject(sbmp);
++			DeleteDC(sdc);
++		}
++		if ( withMap ) { paintMap(dc, RECT{ 10, 10, sideX - 6, rc.bottom - 10 }); }
++		else { g_mapCell = 0; }
++
 +		BitBlt(wdc, 0, 0, rc.right, rc.bottom, dc, 0, 0, SRCCOPY);
 +		SelectObject(dc, oldBmp);
 +		DeleteObject(bmp);
@@ -621,6 +989,7 @@ index 0000000..f1c8ac0
 +		{
 +			case WM_TIMER:
 +				readState();
++				readMap();
 +				InvalidateRect(hwnd, nullptr, FALSE);
 +				return 0;
 +			case WM_KEYDOWN:
@@ -659,8 +1028,26 @@ index 0000000..f1c8ac0
 +			case WM_LBUTTONDOWN:
 +			{
 +				SetFocus(hwnd);
-+				POINT pt{ (short)LOWORD(lp), (short)HIWORD(lp) };
++				POINT pt{ (short)LOWORD(lp) - g_sideX, (short)HIWORD(lp) };
 +				if ( PtInRect(&g_lootBox, pt) ) { g_lootShort = !g_lootShort; InvalidateRect(hwnd, nullptr, FALSE); }
++				return 0;
++			}
++			case WM_MOUSEMOVE:
++			{
++				int mx = (short)LOWORD(lp), my = (short)HIWORD(lp);
++				int tx = -1, ty = -1;
++				if ( g_mapCell > 0 && mx >= g_mapX && my >= g_mapY )
++				{
++					tx = (mx - g_mapX) / g_mapCell;
++					ty = (my - g_mapY) / g_mapCell;
++					if ( tx >= g_map.w || ty >= g_map.h ) { tx = ty = -1; }
++				}
++				if ( tx != g_hoverX || ty != g_hoverY || mx != g_mouseX || my != g_mouseY )
++				{
++					bool redraw = tx != g_hoverX || ty != g_hoverY || pileAt(tx, ty) != nullptr;
++					g_hoverX = tx; g_hoverY = ty; g_mouseX = mx; g_mouseY = my;
++					if ( redraw ) { InvalidateRect(hwnd, nullptr, FALSE); }
++				}
 +				return 0;
 +			}
 +			case WM_ERASEBKGND:
@@ -717,7 +1104,7 @@ index 0000000..f1c8ac0
 +	RegisterClassW(&wc);
 +
 +	HWND hwnd = CreateWindowExW(0, wc.lpszClassName, L"Barony Archipelago Tracker",
-+		WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, CW_USEDEFAULT, CW_USEDEFAULT, 470, 960, nullptr, nullptr, inst, nullptr);
++		WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, CW_USEDEFAULT, CW_USEDEFAULT, 1300, 900, nullptr, nullptr, inst, nullptr);
 +	g_main = hwnd;
 +	g_editBrush = CreateSolidBrush(PANEL);
 +	auto makeEdit = [&](DWORD extra) {
@@ -737,6 +1124,7 @@ index 0000000..f1c8ac0
 +	ShowWindow(hwnd, show);
 +	SetTimer(hwnd, 1, 1000, nullptr);
 +	readState();
++	readMap();
 +
 +	MSG m;
 +	while ( GetMessageW(&m, nullptr, 0, 0) )
@@ -920,10 +1308,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..52dd29b
+index 0000000..2d4431c
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,3870 @@
+@@ -0,0 +1,3993 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -960,6 +1348,7 @@ index 0000000..52dd29b
 +#include "ui/Frame.hpp"
 +#include "ui/Image.hpp"
 +#include "ui/Text.hpp"
++#include "interface/interface.hpp"
 +
 +#include "Archipelago.h"
 +#include "archipelago_barony.hpp"
@@ -1108,6 +1497,7 @@ index 0000000..52dd29b
 +
 +	bool g_compassGivePending = false; // a new run: hand over the compass once the character is ready
 +	int g_secretExitThisFloor = 0; // set by generateDungeon, used once in onNewFloor
++	bool g_floorHasSecretExit = false; // this floor has a secret-area entrance (for the tracker)
 +	Uint32 g_floorStartTicks = 0;  // when this floor started (the key hint shows for a little while)
 +	int g_minotaurSecs = -1;       // seconds until the Minotaur arrives; -1 none coming, -2 he's here
 +	int g_minotaurElapsed = 0;     // seconds since his timer started
@@ -2991,6 +3381,7 @@ index 0000000..52dd29b
 +	{
 +		int exitType = g_secretExitThisFloor;
 +		g_secretExitThisFloor = 0;
++		g_floorHasSecretExit = exitType != 0 && !secretlevel;
 +		if ( exitType == 0 || secretlevel ) { return; }
 +		for ( int p : activePlayers() )
 +		{
@@ -3305,6 +3696,8 @@ index 0000000..52dd29b
 +		out << "keycompass=" << g_keyCompass << "\n";
 +		out << "enemiesleft=" << g_enemiesLeft << "\n";
 +		out << "keyreq=" << g_slot.floor_key_requirement << "\n";
++		out << "secretexit=" << (g_floorHasSecretExit && !secretlevel ? 1 : 0) << "\n";
++		out << "secretarea=" << (secretlevel ? 1 : 0) << "\n";
 +		{
 +			int per = std::max(1, g_slot.kill_check_interval);
 +			out << "es_mode=" << g_slot.enemy_sanity << "\nes_left=" << uncheckedCount(ap_ids::KILL_OFFSET, g_slot.kill_checks)
@@ -3327,6 +3720,124 @@ index 0000000..52dd29b
 +		std::string text = out.str();
 +		if ( text == lastWritten ) { return; }
 +		std::ofstream file("archipelago/tracker.txt", std::ios::trunc | std::ios::binary);
++		if ( !file ) { return; }
++		file << text;
++		lastWritten = text;
++	}
++
++	// The tracker's floor map: archipelago/trackermap.txt. Only what the game's own map knows:
++	// the layout you've seen (or mapped), items lying where you've seen; Archipelago items and green
++	// enemies everywhere; the Floor Key only while the Compass or the key warning points at it.
++	bool tileSeen(int x, int y)
++	{
++		if ( x < 0 || y < 0 || x >= (int)map.width || y >= (int)map.height || x >= MINIMAP_MAX_DIMENSION || y >= MINIMAP_MAX_DIMENSION ) { return false; }
++		return minimap[y][x] == 1 || minimap[y][x] == 2;
++	}
++
++	std::string cleanField(std::string v)
++	{
++		for ( char& c : v ) { if ( c == '\t' || c == '\n' || c == '\r' ) { c = ' '; } }
++		return v;
++	}
++
++	void writeTrackerMap()
++	{
++		static std::string lastWritten;
++		std::ostringstream out;
++		bool ingameNow = inGame() && map.tiles && map.width > 0 && map.height > 0;
++		out << "ingame=" << (ingameNow ? 1 : 0) << "\n";
++		if ( ingameNow )
++		{
++			int w = std::min<int>(map.width, MINIMAP_MAX_DIMENSION), h = std::min<int>(map.height, MINIMAP_MAX_DIMENSION);
++			out << "size=" << w << " " << h << "\nfloorid=" << g_floorLoads << "\n";
++			out << "name=" << cleanField(map.name) << "\n";
++			for ( int y = 0; y < h; ++y )
++			{
++				std::string row(w, '.');
++				for ( int x = 0; x < w; ++x )
++				{
++					switch ( minimap[y][x] )
++					{
++						case 1: row[x] = 'f'; break; // floor you've seen
++						case 2: row[x] = 'w'; break; // wall you've seen
++						case 3: row[x] = 'g'; break; // mapped floor (Magic Mapping)
++						case 4: row[x] = 'h'; break; // mapped wall
++						default: break;
++					}
++				}
++				out << "row=" << row << "\n";
++			}
++			if ( players[clientnum] && players[clientnum]->entity )
++			{
++				Entity* pl = players[clientnum]->entity;
++				out << "player=" << pl->x / 16.0 << "\t" << pl->y / 16.0 << "\t" << pl->yaw << "\n";
++			}
++			bool keyVisible = g_compassShowing || !g_keyCompass.empty();
++			for ( node_t* node = map.entities ? map.entities->first : nullptr; node; node = node->next )
++			{
++				Entity* e = (Entity*)node->element;
++				if ( !e ) { continue; }
++				double tx = e->x / 16.0, ty = e->y / 16.0;
++				int ix = (int)(e->x / 16), iy = (int)(e->y / 16);
++				if ( e->behavior == &actItem )
++				{
++					if ( e->skill[10] == AP_ITEM_TYPE && (Uint32)e->skill[14] == AP_FLOOR_APPEARANCE )
++					{
++						out << "ap=" << tx << "\t" << ty << "\tground\n";
++						continue;
++					}
++					if ( isFloorKeyEntity(e) )
++					{
++						if ( keyVisible ) { out << "key=" << tx << "\t" << ty << "\n"; }
++						continue;
++					}
++					if ( !tileSeen(ix, iy) ) { continue; }
++					Item* item = newItemFromEntity(e, true);
++					if ( !item ) { continue; }
++					std::string path = getItemSpritePath(clientnum, *item);
++					std::string name = item->getName();
++					free(item);
++					out << "item=" << tx << "\t" << ty << "\t" << cleanField(path) << "\t" << cleanField(name) << "\n";
++				}
++				else if ( e->behavior == &actGoldBag )
++				{
++					if ( tileSeen(ix, iy) ) { out << "gold=" << tx << "\t" << ty << "\t" << e->skill[0] << "\n"; }
++				}
++				else if ( e->behavior == &actChest )
++				{
++					list_t* inv = chestList(e);
++					bool hasAp = false;
++					for ( node_t* n = inv ? inv->first : nullptr; n; n = n->next ) { if ( isApItem((Item*)n->element) ) { hasAp = true; break; } }
++					if ( hasAp ) { out << "ap=" << tx << "\t" << ty << "\tchest\n"; }
++					else if ( tileSeen(ix, iy) ) { out << "chest=" << tx << "\t" << ty << "\n"; }
++				}
++				else if ( e->behavior == &actLadder || e->behavior == &actPortal )
++				{
++					if ( !tileSeen(ix, iy) ) { continue; }
++					bool secret = e->behavior == &actLadder && e->skill[3] != 0;
++					out << (secret ? "secret=" : "stairs=") << tx << "\t" << ty << "\n";
++				}
++				else if ( e->behavior == &actMonster )
++				{
++					Stat* st = e->getStats();
++					if ( st && st->type == SHOPKEEPER )
++					{
++						for ( node_t* n = st->inventory.first; n; n = n->next )
++						{
++							if ( isApItem((Item*)n->element) ) { out << "ap=" << tx << "\t" << ty << "\tshop\n"; break; }
++						}
++					}
++					else if ( isMarkedEnemy(e) && st && st->HP > 0 )
++					{
++						out << "foe=" << tx << "\t" << ty << "\n";
++					}
++				}
++			}
++			out << "locked=" << (g_floorNeedsKey && !g_floorKeyFound && g_slot.floor_key_requirement != 2 ? 1 : 0) << "\n";
++		}
++		std::string text = out.str();
++		if ( text == lastWritten ) { return; }
++		std::ofstream file("archipelago/trackermap.txt", std::ios::trunc | std::ios::binary);
 +		if ( !file ) { return; }
 +		file << text;
 +		lastWritten = text;
@@ -3501,7 +4012,7 @@ index 0000000..52dd29b
 +	if ( keystatus[SDLK_F3] ) { keystatus[SDLK_F3] = 0; g_logPanel = g_logPanel == 3 ? 0 : 3; }
 +	if ( keystatus[SDLK_F4] ) { keystatus[SDLK_F4] = 0; ++g_lootToggles; } // tracker: full or short loot list
 +	pullDeathSources();
-+	if ( ticks % TICKS_PER_SECOND == 0 ) { writeTrackerFile(); }
++	if ( ticks % TICKS_PER_SECOND == 0 ) { writeTrackerFile(); writeTrackerMap(); }
 +	if ( !inGame() )
 +	{
 +		// A Death Link that arrives in the menus or between runs is dropped, so it can't

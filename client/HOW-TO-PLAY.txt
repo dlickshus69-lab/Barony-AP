@@ -11,6 +11,14 @@ Barony Archipelago
    "Play without Archipelago" starts the normal game instead. Closing the window quits.
    (No password box: rooms without a password don't need one.)
 
+The tracker window:
+  Left       a map of the floor, filled in as you explore (like Barony's own map).
+             Archipelago items (green) and green enemies show from the start; other items show
+             once you've seen them, with their own icons. Hover a pile to see what's in it.
+             The Floor Key shows only while the Compass or the key warning points at it.
+  Right      connection, floor, Floor Key, Minotaur, secret area entrance, counts, deaths, item log.
+  Make the window narrow to hide the map.
+
 In game:
   Top left   Archipelago status, and how many Archipelago things are left on this floor
   Top right  lives, and the skull with the total death count

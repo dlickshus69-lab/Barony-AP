@@ -34,6 +34,7 @@
 #include "ui/Frame.hpp"
 #include "ui/Image.hpp"
 #include "ui/Text.hpp"
+#include "interface/interface.hpp"
 
 #include "Archipelago.h"
 #include "archipelago_barony.hpp"
@@ -182,6 +183,7 @@ namespace
 
 	bool g_compassGivePending = false; // a new run: hand over the compass once the character is ready
 	int g_secretExitThisFloor = 0; // set by generateDungeon, used once in onNewFloor
+	bool g_floorHasSecretExit = false; // this floor has a secret-area entrance (for the tracker)
 	Uint32 g_floorStartTicks = 0;  // when this floor started (the key hint shows for a little while)
 	int g_minotaurSecs = -1;       // seconds until the Minotaur arrives; -1 none coming, -2 he's here
 	int g_minotaurElapsed = 0;     // seconds since his timer started
@@ -2065,6 +2067,7 @@ namespace
 	{
 		int exitType = g_secretExitThisFloor;
 		g_secretExitThisFloor = 0;
+		g_floorHasSecretExit = exitType != 0 && !secretlevel;
 		if ( exitType == 0 || secretlevel ) { return; }
 		for ( int p : activePlayers() )
 		{
@@ -2379,6 +2382,8 @@ namespace
 		out << "keycompass=" << g_keyCompass << "\n";
 		out << "enemiesleft=" << g_enemiesLeft << "\n";
 		out << "keyreq=" << g_slot.floor_key_requirement << "\n";
+		out << "secretexit=" << (g_floorHasSecretExit && !secretlevel ? 1 : 0) << "\n";
+		out << "secretarea=" << (secretlevel ? 1 : 0) << "\n";
 		{
 			int per = std::max(1, g_slot.kill_check_interval);
 			out << "es_mode=" << g_slot.enemy_sanity << "\nes_left=" << uncheckedCount(ap_ids::KILL_OFFSET, g_slot.kill_checks)
@@ -2401,6 +2406,124 @@ namespace
 		std::string text = out.str();
 		if ( text == lastWritten ) { return; }
 		std::ofstream file("archipelago/tracker.txt", std::ios::trunc | std::ios::binary);
+		if ( !file ) { return; }
+		file << text;
+		lastWritten = text;
+	}
+
+	// The tracker's floor map: archipelago/trackermap.txt. Only what the game's own map knows:
+	// the layout you've seen (or mapped), items lying where you've seen; Archipelago items and green
+	// enemies everywhere; the Floor Key only while the Compass or the key warning points at it.
+	bool tileSeen(int x, int y)
+	{
+		if ( x < 0 || y < 0 || x >= (int)map.width || y >= (int)map.height || x >= MINIMAP_MAX_DIMENSION || y >= MINIMAP_MAX_DIMENSION ) { return false; }
+		return minimap[y][x] == 1 || minimap[y][x] == 2;
+	}
+
+	std::string cleanField(std::string v)
+	{
+		for ( char& c : v ) { if ( c == '\t' || c == '\n' || c == '\r' ) { c = ' '; } }
+		return v;
+	}
+
+	void writeTrackerMap()
+	{
+		static std::string lastWritten;
+		std::ostringstream out;
+		bool ingameNow = inGame() && map.tiles && map.width > 0 && map.height > 0;
+		out << "ingame=" << (ingameNow ? 1 : 0) << "\n";
+		if ( ingameNow )
+		{
+			int w = std::min<int>(map.width, MINIMAP_MAX_DIMENSION), h = std::min<int>(map.height, MINIMAP_MAX_DIMENSION);
+			out << "size=" << w << " " << h << "\nfloorid=" << g_floorLoads << "\n";
+			out << "name=" << cleanField(map.name) << "\n";
+			for ( int y = 0; y < h; ++y )
+			{
+				std::string row(w, '.');
+				for ( int x = 0; x < w; ++x )
+				{
+					switch ( minimap[y][x] )
+					{
+						case 1: row[x] = 'f'; break; // floor you've seen
+						case 2: row[x] = 'w'; break; // wall you've seen
+						case 3: row[x] = 'g'; break; // mapped floor (Magic Mapping)
+						case 4: row[x] = 'h'; break; // mapped wall
+						default: break;
+					}
+				}
+				out << "row=" << row << "\n";
+			}
+			if ( players[clientnum] && players[clientnum]->entity )
+			{
+				Entity* pl = players[clientnum]->entity;
+				out << "player=" << pl->x / 16.0 << "\t" << pl->y / 16.0 << "\t" << pl->yaw << "\n";
+			}
+			bool keyVisible = g_compassShowing || !g_keyCompass.empty();
+			for ( node_t* node = map.entities ? map.entities->first : nullptr; node; node = node->next )
+			{
+				Entity* e = (Entity*)node->element;
+				if ( !e ) { continue; }
+				double tx = e->x / 16.0, ty = e->y / 16.0;
+				int ix = (int)(e->x / 16), iy = (int)(e->y / 16);
+				if ( e->behavior == &actItem )
+				{
+					if ( e->skill[10] == AP_ITEM_TYPE && (Uint32)e->skill[14] == AP_FLOOR_APPEARANCE )
+					{
+						out << "ap=" << tx << "\t" << ty << "\tground\n";
+						continue;
+					}
+					if ( isFloorKeyEntity(e) )
+					{
+						if ( keyVisible ) { out << "key=" << tx << "\t" << ty << "\n"; }
+						continue;
+					}
+					if ( !tileSeen(ix, iy) ) { continue; }
+					Item* item = newItemFromEntity(e, true);
+					if ( !item ) { continue; }
+					std::string path = getItemSpritePath(clientnum, *item);
+					std::string name = item->getName();
+					free(item);
+					out << "item=" << tx << "\t" << ty << "\t" << cleanField(path) << "\t" << cleanField(name) << "\n";
+				}
+				else if ( e->behavior == &actGoldBag )
+				{
+					if ( tileSeen(ix, iy) ) { out << "gold=" << tx << "\t" << ty << "\t" << e->skill[0] << "\n"; }
+				}
+				else if ( e->behavior == &actChest )
+				{
+					list_t* inv = chestList(e);
+					bool hasAp = false;
+					for ( node_t* n = inv ? inv->first : nullptr; n; n = n->next ) { if ( isApItem((Item*)n->element) ) { hasAp = true; break; } }
+					if ( hasAp ) { out << "ap=" << tx << "\t" << ty << "\tchest\n"; }
+					else if ( tileSeen(ix, iy) ) { out << "chest=" << tx << "\t" << ty << "\n"; }
+				}
+				else if ( e->behavior == &actLadder || e->behavior == &actPortal )
+				{
+					if ( !tileSeen(ix, iy) ) { continue; }
+					bool secret = e->behavior == &actLadder && e->skill[3] != 0;
+					out << (secret ? "secret=" : "stairs=") << tx << "\t" << ty << "\n";
+				}
+				else if ( e->behavior == &actMonster )
+				{
+					Stat* st = e->getStats();
+					if ( st && st->type == SHOPKEEPER )
+					{
+						for ( node_t* n = st->inventory.first; n; n = n->next )
+						{
+							if ( isApItem((Item*)n->element) ) { out << "ap=" << tx << "\t" << ty << "\tshop\n"; break; }
+						}
+					}
+					else if ( isMarkedEnemy(e) && st && st->HP > 0 )
+					{
+						out << "foe=" << tx << "\t" << ty << "\n";
+					}
+				}
+			}
+			out << "locked=" << (g_floorNeedsKey && !g_floorKeyFound && g_slot.floor_key_requirement != 2 ? 1 : 0) << "\n";
+		}
+		std::string text = out.str();
+		if ( text == lastWritten ) { return; }
+		std::ofstream file("archipelago/trackermap.txt", std::ios::trunc | std::ios::binary);
 		if ( !file ) { return; }
 		file << text;
 		lastWritten = text;
@@ -2575,7 +2698,7 @@ void tick()
 	if ( keystatus[SDLK_F3] ) { keystatus[SDLK_F3] = 0; g_logPanel = g_logPanel == 3 ? 0 : 3; }
 	if ( keystatus[SDLK_F4] ) { keystatus[SDLK_F4] = 0; ++g_lootToggles; } // tracker: full or short loot list
 	pullDeathSources();
-	if ( ticks % TICKS_PER_SECOND == 0 ) { writeTrackerFile(); }
+	if ( ticks % TICKS_PER_SECOND == 0 ) { writeTrackerFile(); writeTrackerMap(); }
 	if ( !inGame() )
 	{
 		// A Death Link that arrives in the menus or between runs is dropped, so it can't
