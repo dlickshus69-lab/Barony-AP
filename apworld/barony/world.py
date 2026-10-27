@@ -293,6 +293,7 @@ class BaronyWorld(World):
             "lock_class": int(bool(o.lock_class)),
             "floor_size": o.floor_size.value,
             "music_mods": o.music_mods.value,
+            "extra_monsters": o.extra_monsters.value,
             "floor_shuffle": o.floor_shuffle.value,
             "floor_shuffle_seed": self.floor_shuffle_seed,
             "difficulty_scaling": int(bool(o.difficulty_scaling)),

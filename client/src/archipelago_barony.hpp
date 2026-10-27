@@ -74,7 +74,8 @@ namespace AP
 	// loadMap takes the percent once; scaleFloorEntities() raises the monster/item/decoration count.
 	void requestFloorSize();
 	int takeFloorSizePercent();
-	int scaleFloorEntities(int count);  // this floor's Floor Key (a marked skeleton key)
+	int scaleFloorEntities(int count);
+	int currentFloorScale();           // 100 normal, 120/140 on a bigger generated floor  // this floor's Floor Key (a marked skeleton key)
 	int apItemModel();                 // model index, or -1 if the model didn't load
 	const char* apItemIconPath();
 	const char* apItemName(bool withArticle);

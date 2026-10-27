@@ -181,7 +181,8 @@ class FloorSize(Choice):
     Normal: the usual size.
     Bigger: about 1.4 times the area.
     Much Bigger: about twice the area.
-    The Minotaur's timer doesn't change, so bigger floors make Minotaur floors harder (see Minotaur Time).
+    On a bigger floor the Minotaur's timer and the Floor Key compass stretch to match (1.2 or 1.4 times),
+    so Minotaur floors feel the same as on a normal floor.
     """
     display_name = "Floor Size"
     option_normal = 0
@@ -197,6 +198,7 @@ class KeyCompassTime(Range):
     it on sooner, but never in the first 30 seconds after his timer starts. The normal wait is 150 to
     210 seconds (changed by Minotaur Time and hard mode), so 180 or more means "30 seconds in" on most
     floors.
+    On bigger floors (Floor Size) these seconds stretch with the floor.
     """
     display_name = "Key Compass Time"
     range_start = 30
@@ -326,6 +328,19 @@ class LayoutSeed(Choice):
     option_locked = 0
     option_new_each_run = 1
     default = option_locked
+
+
+class ExtraMonsters(Range):
+    """
+    More monsters on every floor from floor 1, as a percent of the floor's normal amount (50 = half as
+    many again, 100 = twice as many). They're the same kinds the floor would spawn (or random ones with
+    the Enemy Randomizer). Never in the starting area, the town, secret areas or boss arenas. Works
+    with Floor Size, which already adds more monsters for the extra space.
+    """
+    display_name = "Extra Monsters"
+    range_start = 0
+    range_end = 200
+    default = 0
 
 
 class MusicMods(Choice):
@@ -794,6 +809,7 @@ class BaronyOptions(PerGameCommonOptions):
     music_shuffle: MusicShuffle
     music_seed: MusicSeed
     music_mods: MusicMods
+    extra_monsters: ExtraMonsters
     enemy_level_scaling: EnemyLevelScaling
     boss_level_scaling: BossLevelScaling
     minotaur_time: MinotaurTime
@@ -835,7 +851,8 @@ option_groups = [
         ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),
     OptionGroup("Skills", [SkillChecks, SkillCheckMaxRank, LockClass]),
-    OptionGroup("Dungeon", [FloorKeys, KeyCompassTime, FloorSize, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemyRandomizerSecretAreas, EnemyPool, EnemySeed, MusicShuffle, MusicSeed, MusicMods, EnemyLevelScaling, BossLevelScaling, MinotaurTime, DifficultyScaling, Difficulty]),
+    OptionGroup("Dungeon", [FloorKeys, KeyCompassTime, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemyRandomizerSecretAreas, EnemyPool, EnemySeed, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, MinotaurTime, DifficultyScaling, Difficulty]),
+    OptionGroup("Extras", [FloorSize, ExtraMonsters, MusicMods]),
     OptionGroup("Lives & Checkpoints", [Lives, ExtraLivesInPool, CheckpointInterval]),
     OptionGroup("Death Link", [BaronyDeathLink, DeathLinkMode, DeathPenalty, DeathItems, FloorRestart, BossDeath]),
     OptionGroup("Traps", [TrapChance, MinotaurTrapWeight, AmbushTrapWeight, PolymorphTrapWeight, FumbleTrapWeight, BlindnessTrapWeight, TeleportTrapWeight, HungerTrapWeight, DarknessTrapWeight, CurseTrapWeight,

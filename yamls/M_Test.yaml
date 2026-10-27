@@ -28,7 +28,6 @@ Barony:
   # Dungeon
   floor_keys: true
   key_compass_time: 30
-  floor_size: normal
   floor_shuffle: full
   layout_seed: locked
   enemy_randomizer: off
@@ -37,12 +36,16 @@ Barony:
   enemy_seed: locked
   music_shuffle: off
   music_seed: locked
-  music_mods: mixed
   enemy_level_scaling: off
   boss_level_scaling: off
   minotaur_time: 100
   difficulty_scaling: true
   difficulty: normal
+
+  # Extras
+  floor_size: normal
+  extra_monsters: 0
+  music_mods: mixed
 
   # Lives & Checkpoints
   lives: 5

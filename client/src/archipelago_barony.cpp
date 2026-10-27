@@ -87,7 +87,8 @@ namespace
 		int skill_check_max_rank = 3; // 1 Basic .. 5 Legendary
 		int lock_class = 0;
 		int floor_size = 0;           // 0 normal, 1 bigger, 2 much bigger
-		int music_mods = 0;           // 0 off, 1 mixed with the original, 2 mods only           // new characters always get the Skill Checks class    // Minotaur floors: seconds before he arrives that the key compass turns on
+		int music_mods = 0;           // 0 off, 1 mixed with the original, 2 mods only
+		int extra_monsters = 0;       // percent more monsters per floor           // new characters always get the Skill Checks class    // Minotaur floors: seconds before he arrives that the key compass turns on
 		int floor_shuffle = 0;        // 0 off, 1 sections, 2 full
 		int floor_shuffle_seed = 0;
 		int difficulty_scaling = 1;
@@ -502,6 +503,7 @@ namespace
 		registerSlotInt("lock_class", &SlotOptions::lock_class);
 		registerSlotInt("floor_size", &SlotOptions::floor_size);
 		registerSlotInt("music_mods", &SlotOptions::music_mods);
+		registerSlotInt("extra_monsters", &SlotOptions::extra_monsters);
 		registerSlotInt("floor_shuffle", &SlotOptions::floor_shuffle);
 		registerSlotInt("floor_shuffle_seed", &SlotOptions::floor_shuffle_seed);
 		registerSlotInt("difficulty_scaling", &SlotOptions::difficulty_scaling);
@@ -1395,9 +1397,12 @@ namespace
 		g_keyCompass.clear();
 		// Key Compass Time: how many seconds before he arrives it turns on (at least 30), but never in
 		// the first 30 seconds of his timer.
-		int when = std::max(30, g_slot.key_compass_time);
+		// On a bigger floor the seconds stretch with it, so 30 feels like 30 on a normal floor.
+		int scale = currentFloorScale();
+		int when = std::max(30, g_slot.key_compass_time) * scale / 100;
+		int least = 30 * scale / 100;
 		bool on = minotaurSecs == -2 || (minotaurSecs >= 0 && minotaurSecs <= when && g_minotaurElapsed >= 30);
-		if ( minotaurSecs >= 0 && minotaurSecs <= 30 ) { on = true; }
+		if ( minotaurSecs >= 0 && minotaurSecs <= least ) { on = true; }
 		if ( !g_floorNeedsKey || g_floorKeyFound || !on ) { return; }
 		Entity* pl = players[clientnum] ? players[clientnum]->entity : nullptr;
 		if ( !pl || !map.entities ) { return; }
@@ -1853,6 +1858,29 @@ namespace
 		}
 	}
 
+	// Extra Monsters: more enemies on every floor from floor 1 (not the safe places, secret areas or
+	// boss arenas), picked like the floor's own spawns and put somewhere you can walk to.
+	void spawnExtraMonsters()
+	{
+		if ( g_slot.extra_monsters <= 0 || currentlevel < 1 || secretlevel || isSpecialMap() || !map.creatures ) { return; }
+		int existing = 0;
+		for ( node_t* node = map.creatures->first; node; node = node->next )
+		{
+			if ( isMarkableEnemy((Entity*)node->element) ) { ++existing; }
+		}
+		int extra = std::max(1, existing) * g_slot.extra_monsters / 100;
+		int made = 0;
+		for ( int i = 0; i < extra; ++i )
+		{
+			int x, y;
+			if ( !findReachableSpot(x, y) ) { break; }
+			Monster type = static_cast<Monster>(monsterCurve(currentlevel));
+			if ( type == NOTHING || type == SHOPKEEPER ) { continue; }
+			if ( summonMonsterNoSmoke(type, x * 16 + 8, y * 16 + 8) ) { ++made; }
+		}
+		if ( made ) { printlog("[Archipelago] Extra Monsters: %d more on this floor.", made); }
+	}
+
 	void onNewFloor()
 	{
 		bool restarted = g_restartPending;
@@ -1864,6 +1892,7 @@ namespace
 			g_floorApTotal = g_attemptApMade; // chests already made theirs during generation
 			g_floorApFound = 0;
 		}
+		spawnExtraMonsters(); // before the kill removal, so extra monsters you killed stay dead too
 		if ( restarted ) { removeKilledEnemies(); }
 		else { g_floorKills = 0; }
 		if ( restarted && g_slot.death_items == 1 ) { removeTakenLoot(); }
@@ -2641,6 +2670,7 @@ int adjustMinotaurTime(int ticks)
 	if ( !g_ready ) { return ticks; }
 	long long t = ticks;
 	t = t * std::max(25, g_slot.minotaur_time) / 100; // Minotaur Time option (percent)
+	t = t * currentFloorScale() / 100;                 // Floor Size: more ground, more time
 	if ( g_slot.difficulty == 1 ) { t = t * 2 / 3; }
 	return (int)t;
 }
@@ -2721,7 +2751,7 @@ namespace
 }
 
 // Floor Size: bigger generated floors, with more monsters and loot to match.
-namespace { int g_floorSizePending = 100; }
+namespace { int g_floorSizePending = 100; int g_currentFloorScale = 100; }
 
 static int floorSizePercent()
 {
@@ -2738,7 +2768,15 @@ int takeFloorSizePercent()
 {
 	int pct = g_floorSizePending;
 	g_floorSizePending = 100;
+	g_currentFloorScale = pct; // every floor load passes here: hand-made floors get 100
 	return pct;
+}
+
+// How much bigger the current floor is across (100 = normal). The Minotaur's timer and the key
+// compass stretch by this, since there's that much more ground to cover.
+int currentFloorScale()
+{
+	return std::max(100, g_currentFloorScale);
 }
 
 int scaleFloorEntities(int count)

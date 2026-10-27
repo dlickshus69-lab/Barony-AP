@@ -1,4 +1,4 @@
-From 074876c731b5e546799538ce7fb97935cf1dfc73 Mon Sep 17 00:00:00 2001
+From 2c29f9bba9329ffb663717e6ec9320f88619c12e Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -12,8 +12,8 @@ Subject: [PATCH] Archipelago client hooks
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 3293 +++++++++++++++++++++++++++++
- src/archipelago_barony.hpp        |  113 +
+ src/archipelago_barony.cpp        | 3331 +++++++++++++++++++++++++++++
+ src/archipelago_barony.hpp        |  114 +
  src/archipelago_ids.hpp           |  133 ++
  src/charclass.cpp                 |    4 +
  src/engine/audio/music.cpp        |    4 +
@@ -29,7 +29,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   10 +
  src/ui/MainMenu.cpp               |    5 +-
- 25 files changed, 4165 insertions(+), 4 deletions(-)
+ 25 files changed, 4204 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -650,10 +650,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..85150ff
+index 0000000..8c48200
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,3293 @@
+@@ -0,0 +1,3331 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -743,7 +743,8 @@ index 0000000..85150ff
 +		int skill_check_max_rank = 3; // 1 Basic .. 5 Legendary
 +		int lock_class = 0;
 +		int floor_size = 0;           // 0 normal, 1 bigger, 2 much bigger
-+		int music_mods = 0;           // 0 off, 1 mixed with the original, 2 mods only           // new characters always get the Skill Checks class    // Minotaur floors: seconds before he arrives that the key compass turns on
++		int music_mods = 0;           // 0 off, 1 mixed with the original, 2 mods only
++		int extra_monsters = 0;       // percent more monsters per floor           // new characters always get the Skill Checks class    // Minotaur floors: seconds before he arrives that the key compass turns on
 +		int floor_shuffle = 0;        // 0 off, 1 sections, 2 full
 +		int floor_shuffle_seed = 0;
 +		int difficulty_scaling = 1;
@@ -1158,6 +1159,7 @@ index 0000000..85150ff
 +		registerSlotInt("lock_class", &SlotOptions::lock_class);
 +		registerSlotInt("floor_size", &SlotOptions::floor_size);
 +		registerSlotInt("music_mods", &SlotOptions::music_mods);
++		registerSlotInt("extra_monsters", &SlotOptions::extra_monsters);
 +		registerSlotInt("floor_shuffle", &SlotOptions::floor_shuffle);
 +		registerSlotInt("floor_shuffle_seed", &SlotOptions::floor_shuffle_seed);
 +		registerSlotInt("difficulty_scaling", &SlotOptions::difficulty_scaling);
@@ -2051,9 +2053,12 @@ index 0000000..85150ff
 +		g_keyCompass.clear();
 +		// Key Compass Time: how many seconds before he arrives it turns on (at least 30), but never in
 +		// the first 30 seconds of his timer.
-+		int when = std::max(30, g_slot.key_compass_time);
++		// On a bigger floor the seconds stretch with it, so 30 feels like 30 on a normal floor.
++		int scale = currentFloorScale();
++		int when = std::max(30, g_slot.key_compass_time) * scale / 100;
++		int least = 30 * scale / 100;
 +		bool on = minotaurSecs == -2 || (minotaurSecs >= 0 && minotaurSecs <= when && g_minotaurElapsed >= 30);
-+		if ( minotaurSecs >= 0 && minotaurSecs <= 30 ) { on = true; }
++		if ( minotaurSecs >= 0 && minotaurSecs <= least ) { on = true; }
 +		if ( !g_floorNeedsKey || g_floorKeyFound || !on ) { return; }
 +		Entity* pl = players[clientnum] ? players[clientnum]->entity : nullptr;
 +		if ( !pl || !map.entities ) { return; }
@@ -2509,6 +2514,29 @@ index 0000000..85150ff
 +		}
 +	}
 +
++	// Extra Monsters: more enemies on every floor from floor 1 (not the safe places, secret areas or
++	// boss arenas), picked like the floor's own spawns and put somewhere you can walk to.
++	void spawnExtraMonsters()
++	{
++		if ( g_slot.extra_monsters <= 0 || currentlevel < 1 || secretlevel || isSpecialMap() || !map.creatures ) { return; }
++		int existing = 0;
++		for ( node_t* node = map.creatures->first; node; node = node->next )
++		{
++			if ( isMarkableEnemy((Entity*)node->element) ) { ++existing; }
++		}
++		int extra = std::max(1, existing) * g_slot.extra_monsters / 100;
++		int made = 0;
++		for ( int i = 0; i < extra; ++i )
++		{
++			int x, y;
++			if ( !findReachableSpot(x, y) ) { break; }
++			Monster type = static_cast<Monster>(monsterCurve(currentlevel));
++			if ( type == NOTHING || type == SHOPKEEPER ) { continue; }
++			if ( summonMonsterNoSmoke(type, x * 16 + 8, y * 16 + 8) ) { ++made; }
++		}
++		if ( made ) { printlog("[Archipelago] Extra Monsters: %d more on this floor.", made); }
++	}
++
 +	void onNewFloor()
 +	{
 +		bool restarted = g_restartPending;
@@ -2520,6 +2548,7 @@ index 0000000..85150ff
 +			g_floorApTotal = g_attemptApMade; // chests already made theirs during generation
 +			g_floorApFound = 0;
 +		}
++		spawnExtraMonsters(); // before the kill removal, so extra monsters you killed stay dead too
 +		if ( restarted ) { removeKilledEnemies(); }
 +		else { g_floorKills = 0; }
 +		if ( restarted && g_slot.death_items == 1 ) { removeTakenLoot(); }
@@ -3297,6 +3326,7 @@ index 0000000..85150ff
 +	if ( !g_ready ) { return ticks; }
 +	long long t = ticks;
 +	t = t * std::max(25, g_slot.minotaur_time) / 100; // Minotaur Time option (percent)
++	t = t * currentFloorScale() / 100;                 // Floor Size: more ground, more time
 +	if ( g_slot.difficulty == 1 ) { t = t * 2 / 3; }
 +	return (int)t;
 +}
@@ -3377,7 +3407,7 @@ index 0000000..85150ff
 +}
 +
 +// Floor Size: bigger generated floors, with more monsters and loot to match.
-+namespace { int g_floorSizePending = 100; }
++namespace { int g_floorSizePending = 100; int g_currentFloorScale = 100; }
 +
 +static int floorSizePercent()
 +{
@@ -3394,7 +3424,15 @@ index 0000000..85150ff
 +{
 +	int pct = g_floorSizePending;
 +	g_floorSizePending = 100;
++	g_currentFloorScale = pct; // every floor load passes here: hand-made floors get 100
 +	return pct;
++}
++
++// How much bigger the current floor is across (100 = normal). The Minotaur's timer and the key
++// compass stretch by this, since there's that much more ground to cover.
++int currentFloorScale()
++{
++	return std::max(100, g_currentFloorScale);
 +}
 +
 +int scaleFloorEntities(int count)
@@ -3949,10 +3987,10 @@ index 0000000..85150ff
 +} // namespace AP
 diff --git a/src/archipelago_barony.hpp b/src/archipelago_barony.hpp
 new file mode 100644
-index 0000000..1197746
+index 0000000..055f494
 --- /dev/null
 +++ b/src/archipelago_barony.hpp
-@@ -0,0 +1,113 @@
+@@ -0,0 +1,114 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client.
@@ -4029,7 +4067,8 @@ index 0000000..1197746
 +	// loadMap takes the percent once; scaleFloorEntities() raises the monster/item/decoration count.
 +	void requestFloorSize();
 +	int takeFloorSizePercent();
-+	int scaleFloorEntities(int count);  // this floor's Floor Key (a marked skeleton key)
++	int scaleFloorEntities(int count);
++	int currentFloorScale();           // 100 normal, 120/140 on a bigger generated floor  // this floor's Floor Key (a marked skeleton key)
 +	int apItemModel();                 // model index, or -1 if the model didn't load
 +	const char* apItemIconPath();
 +	const char* apItemName(bool withArticle);
