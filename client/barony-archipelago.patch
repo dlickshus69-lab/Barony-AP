@@ -1,4 +1,4 @@
-From 1888357cc2b5fff5bc0c0635f350a65ddb17d3b5 Mon Sep 17 00:00:00 2001
+From 61573fbd3f4d9572e1b27b4d695bb18664de72ff Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -11,7 +11,7 @@ Subject: [PATCH] Archipelago client hooks
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 1952 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 1956 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |   93 ++
  src/archipelago_ids.hpp           |   95 ++
  src/engine/audio/sound_game.cpp   |    2 +
@@ -25,7 +25,7 @@ Subject: [PATCH] Archipelago client hooks
  src/maps.cpp                      |    8 +
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   10 +
- 21 files changed, 2262 insertions(+), 2 deletions(-)
+ 21 files changed, 2266 insertions(+), 2 deletions(-)
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
  create mode 100644 src/archipelago_ids.hpp
@@ -220,10 +220,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..5b747c6
+index 0000000..a756052
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,1952 @@
+@@ -0,0 +1,1956 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -1169,6 +1169,8 @@ index 0000000..5b747c6
 +				g_floorStartInventory[p].push_back(snap);
 +			}
 +			g_hasFloorSnapshot[p] = true;
++			printlog("[Archipelago] Floor start: saved %d items for player %d (floor %d).",
++				(int)g_floorStartInventory[p].size(), p, currentlevel);
 +		}
 +	}
 +
@@ -1178,6 +1180,8 @@ index 0000000..5b747c6
 +	{
 +		if ( !g_hasFloorSnapshot[p] || !stats[p] ) { return; }
 +		Stat* s = stats[p];
++		printlog("[Archipelago] Restoring %d items for player %d (had %d).", (int)g_floorStartInventory[p].size(), p,
++			list_Size(&s->inventory));
 +		for ( int slot = 0; slot < NUM_EQUIP_SLOTS; ++slot ) { s->*EQUIP_SLOTS[slot] = nullptr; }
 +		if ( auto ui = inputs.getUIInteraction(p) )
 +		{

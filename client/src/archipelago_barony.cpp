@@ -943,6 +943,8 @@ namespace
 				g_floorStartInventory[p].push_back(snap);
 			}
 			g_hasFloorSnapshot[p] = true;
+			printlog("[Archipelago] Floor start: saved %d items for player %d (floor %d).",
+				(int)g_floorStartInventory[p].size(), p, currentlevel);
 		}
 	}
 
@@ -952,6 +954,8 @@ namespace
 	{
 		if ( !g_hasFloorSnapshot[p] || !stats[p] ) { return; }
 		Stat* s = stats[p];
+		printlog("[Archipelago] Restoring %d items for player %d (had %d).", (int)g_floorStartInventory[p].size(), p,
+			list_Size(&s->inventory));
 		for ( int slot = 0; slot < NUM_EQUIP_SLOTS; ++slot ) { s->*EQUIP_SLOTS[slot] = nullptr; }
 		if ( auto ui = inputs.getUIInteraction(p) )
 		{
