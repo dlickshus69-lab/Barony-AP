@@ -192,6 +192,68 @@ class FloorSize(OptionSet):
     valid_keys = frozenset({"Normal", "Bigger", "Much Bigger"})
     default = frozenset({"Normal"})
 
+class FloorKeyRequirement(Choice):
+    """
+    What opens the stairs on each floor (with Floor Keys on).
+    Key or Enemies: pick up the Floor Key, or defeat every enemy on the floor.
+    Key Only: only the Floor Key opens them.
+    Enemies Only: no key; defeat every enemy on the floor.
+    """
+    display_name = "Floor Key Requirement"
+    option_key_or_enemies = 0
+    option_key_only = 1
+    option_enemies_only = 2
+    default = option_key_or_enemies
+
+
+class Compass(Choice):
+    """
+    A compass that points at the Floor Key (see Compass Mode).
+    Off: no compass (the backup compass still turns on after 5 minutes on a floor, and on Minotaur
+    floors near the end of his timer).
+    Start With It: every run starts with the compass in your bag.
+    Archipelago Item: the Compass is somewhere in the multiworld; once you have it, it's in your bag
+    on every run.
+    Progressive: two Progressive Compass items in the multiworld; the first shows which way the key is,
+    the second also shows how far.
+    """
+    display_name = "Compass"
+    option_off = 0
+    option_start_with_it = 1
+    option_archipelago_item = 2
+    option_progressive = 3
+    default = option_off
+
+
+class CompassMode(Choice):
+    """
+    How the compass works once you have it.
+    Ping and Recharge: use it from your bag or hotbar; it points at the key for a while (Compass Ping
+    Time), then needs to recharge (Compass Recharge).
+    Always On: it always points at the key while you haven't found it.
+    """
+    display_name = "Compass Mode"
+    option_ping_and_recharge = 0
+    option_always_on = 1
+    default = option_ping_and_recharge
+
+
+class CompassPingTime(Range):
+    """With Ping and Recharge: how many seconds the compass points at the key after you use it."""
+    display_name = "Compass Ping Time"
+    range_start = 5
+    range_end = 60
+    default = 15
+
+
+class CompassRecharge(Range):
+    """With Ping and Recharge: how many seconds the compass needs before you can use it again."""
+    display_name = "Compass Recharge"
+    range_start = 10
+    range_end = 300
+    default = 90
+
+
 class KeyCompassTime(Range):
     """
     On Minotaur floors (with Floor Keys on), how many seconds before the Minotaur arrives the screen starts
@@ -801,6 +863,11 @@ class BaronyOptions(PerGameCommonOptions):
     skill_check_max_rank: SkillCheckMaxRank
     lock_class: LockClass
     key_compass_time: KeyCompassTime
+    floor_key_requirement: FloorKeyRequirement
+    compass: Compass
+    compass_mode: CompassMode
+    compass_ping_time: CompassPingTime
+    compass_recharge: CompassRecharge
     floor_size: FloorSize
     floor_shuffle: FloorShuffle
     layout_seed: LayoutSeed
@@ -853,7 +920,7 @@ option_groups = [
         ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),
     OptionGroup("Skills", [SkillChecks, SkillCheckMaxRank, LockClass]),
-    OptionGroup("Dungeon", [FloorKeys, KeyCompassTime, MinotaurTime, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemySeed, EnemyRandomizerSecretAreas, EnemyPool, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, DifficultyScaling, Difficulty]),
+    OptionGroup("Dungeon", [FloorKeys, FloorKeyRequirement, Compass, CompassMode, CompassPingTime, CompassRecharge, KeyCompassTime, MinotaurTime, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemySeed, EnemyRandomizerSecretAreas, EnemyPool, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, DifficultyScaling, Difficulty]),
     OptionGroup("Extras", [FloorSize, ExtraMonsters, MusicMods]),
     OptionGroup("Lives & Checkpoints", [Lives, ExtraLivesInPool, CheckpointInterval]),
     OptionGroup("Death Link", [BaronyDeathLink, DeathLinkMode, DeathPenalty, DeathItems, FloorRestart, BossDeath]),

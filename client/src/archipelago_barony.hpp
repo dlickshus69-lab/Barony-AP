@@ -68,6 +68,9 @@ namespace AP
 	// The Archipelago item (floor pickups and shop items) and its own logo model and icon.
 	bool isApItem(const Item* item);
 	bool isFloorKey(const Item* item);
+	bool isCompassItem(const Item* item); // the Compass (a marked mirror)
+	// items.cpp, useItem(): using the Compass. Returns true when it handled the item.
+	bool useCompassItem(Item* item, int player);
 	// charclass.cpp, initClass(): Lock Class (the class chosen for Skill Checks).
 	int lockedClass(int player, int currentClass);
 	// maps.cpp / files.cpp: Floor Size. requestFloorSize() before a generated floor's base map loads;

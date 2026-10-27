@@ -283,6 +283,7 @@ ITEMS: dict[str, ItemInfo] = {
     "Permanent Charisma": ItemInfo(16, "useful", "PERM_CHR"),
     "Max HP Up": ItemInfo(17, "useful", "MAX_HP_UP"),
     "Starting Gold Bonus": ItemInfo(18, "useful", "START_GOLD"),
+    "Progressive Compass": ItemInfo(20, "useful", "COMPASS"),  # Compass option: points at the Floor Key
 
     # filler: one-shot, applied once when received
     "XP Boost": ItemInfo(30, "filler", "XP_BOOST"),

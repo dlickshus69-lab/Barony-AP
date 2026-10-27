@@ -82,6 +82,11 @@ namespace
 		int stair_keys = 0;           // old seeds only
 		int floor_keys = 0;           // a key on every floor opens its stairs
 		int key_compass_time = 30;
+		int floor_key_requirement = 0; // 0 key or all enemies, 1 key only, 2 all enemies only
+		int compass = 0;              // 0 off, 1 start with it, 2 AP item, 3 progressive
+		int compass_mode = 0;         // 0 ping and recharge, 1 always on
+		int compass_ping_time = 15;
+		int compass_recharge = 90;
 		int enemy_randomizer_secret = 0; // Enemy Randomizer also in secret areas (never Minetown)
 		int skill_checks = 0;         // 0 off, 1 any class, 2.. a class (Barony class index + 2)
 		int skill_check_max_rank = 3; // 1 Basic .. 5 Legendary
@@ -171,6 +176,7 @@ namespace
 	bool g_floorIsRestart = false; // the current floor is a restart
 	bool g_floorReady = false;     // onNewFloor finished; the next generation starts a new count
 
+	bool g_compassGivePending = false; // a new run: hand over the compass once the character is ready
 	int g_secretExitThisFloor = 0; // set by generateDungeon, used once in onNewFloor
 	Uint32 g_floorStartTicks = 0;  // when this floor started (the key hint shows for a little while)
 	int g_minotaurSecs = -1;       // seconds until the Minotaur arrives; -1 none coming, -2 he's here
@@ -226,6 +232,7 @@ namespace
 	bool g_confirmWasDown = true;               // edge detection: needs a fresh press
 	void endDeathScreen();
 	void warnSkillClass();
+	void giveCompassIfMissing();
 	void launchTracker();
 	Uint32 g_stairsWarnedAt = 0;
 	void readCheckpoint();
@@ -497,6 +504,11 @@ namespace
 		registerSlotInt("stair_keys", &SlotOptions::stair_keys);
 		registerSlotInt("floor_keys", &SlotOptions::floor_keys);
 		registerSlotInt("key_compass_time", &SlotOptions::key_compass_time);
+		registerSlotInt("floor_key_requirement", &SlotOptions::floor_key_requirement);
+		registerSlotInt("compass", &SlotOptions::compass);
+		registerSlotInt("compass_mode", &SlotOptions::compass_mode);
+		registerSlotInt("compass_ping_time", &SlotOptions::compass_ping_time);
+		registerSlotInt("compass_recharge", &SlotOptions::compass_recharge);
 		registerSlotInt("skill_checks", &SlotOptions::skill_checks);
 		registerSlotInt("enemy_randomizer_secret", &SlotOptions::enemy_randomizer_secret);
 		registerSlotInt("skill_check_max_rank", &SlotOptions::skill_check_max_rank);
@@ -596,6 +608,7 @@ namespace
 			case ITEM_PERM_CHR: return "Permanent Charisma";
 			case ITEM_MAX_HP_UP: return "Max HP Up";
 			case ITEM_START_GOLD: return "Starting Gold Bonus";
+			case ITEM_COMPASS: return "Progressive Compass";
 			case ITEM_XP_BOOST: return "XP Boost";
 			case ITEM_GOLD_POUCH: return "Gold Pouch";
 			case ITEM_HEAL_POTION: return "Healing Potion";
@@ -893,6 +906,7 @@ namespace
 	{
 		endDeathScreen();
 		warnSkillClass();
+		g_compassGivePending = true;
 		g_save.runKey = uniqueGameKey;
 		g_save.livesLeft = g_slot.lives;
 		g_savedBossHP.clear();
@@ -937,6 +951,11 @@ namespace
 			if ( isPermanent(g_received[i]) )
 			{
 				say(COLOR_AP, "Received %s.", itemName(g_received[i]));
+			}
+			else if ( g_received[i] == ap_ids::ITEM_COMPASS )
+			{
+				say(COLOR_AP, "Received a Progressive Compass (%d).", (int)std::count(g_received.begin(), g_received.begin() + i + 1, g_received[i]));
+				giveCompassIfMissing();
 			}
 			else if ( g_received[i] != ap_ids::ITEM_STAIR_KEY )
 			{
@@ -1405,20 +1424,72 @@ namespace
 	}
 
 	// Key compass: once the Minotaur is 30 seconds away (or here), point at the key.
-	void updateKeyCompass(int minotaurSecs)
+	// ------------------------------------------------------- Compass (points at the Floor Key)
+	constexpr ItemType COMPASS_TYPE = TOOL_MIRROR;
+	constexpr Uint32 COMPASS_APPEARANCE = 0x434F4D50; // "COMP"
+	Uint32 g_compassPingUntil = 0;     // ping mode: pointing until this tick
+	Uint32 g_compassReadyAt = 0;       // ping mode: can be used again at this tick
+	bool g_compassShowing = false;     // the compass face is on screen
+	bool g_compassShowsDistance = false;
+	int g_compassArrow = 0;            // 0 ahead, then clockwise in 45 degree steps
+	int g_compassTiles = 0;
+
+	// 0 no compass, 1 direction only, 2 direction and distance.
+	int compassLevel()
 	{
-		g_keyCompass.clear();
+		switch ( g_slot.compass )
+		{
+			case 1: return 2;
+			case 2: return countReceived(ap_ids::ITEM_COMPASS) > 0 ? 2 : 0;
+			case 3: return std::min(2, countReceived(ap_ids::ITEM_COMPASS));
+			default: return 0;
+		}
+	}
+
+	bool isCompassItemPrivate(const Item* it)
+	{
+		return it && it->type == COMPASS_TYPE && it->appearance == COMPASS_APPEARANCE;
+	}
+
+	// Puts the compass in your bag if you should have one and don't.
+	void giveCompassIfMissing()
+	{
+		if ( !g_slot.floor_keys || g_slot.floor_key_requirement == 2 || compassLevel() <= 0 || !stats[clientnum] ) { return; }
+		for ( node_t* n = stats[clientnum]->inventory.first; n; n = n->next )
+		{
+			if ( isCompassItemPrivate((Item*)n->element) ) { return; }
+		}
+		Item* item = newItem(COMPASS_TYPE, EXCELLENT, 0, 1, COMPASS_APPEARANCE, true, nullptr);
+		if ( !item ) { return; }
+		Item* stack = itemPickup(clientnum, item);
+		if ( stack && players[clientnum]->isLocalPlayer() ) { free(item); }
+		say(COLOR_AP, "The Compass is in your bag. Use it to find the Floor Key.");
+	}
+
+	// Backup compass: on Minotaur floors near the end of his timer, and after 5 minutes on any floor.
+	bool backupCompassOn(int minotaurSecs)
+	{
 		// Key Compass Time: how many seconds before he arrives it turns on (at least 30), but never in
-		// the first 30 seconds of his timer.
-		// On a bigger floor the seconds stretch with it, so 30 feels like 30 on a normal floor.
+		// the first 30 seconds of his timer. On a bigger floor the seconds stretch with it.
 		int scale = currentFloorScale();
 		int when = std::max(30, g_slot.key_compass_time) * scale / 100;
 		int least = 30 * scale / 100;
 		bool on = minotaurSecs == -2 || (minotaurSecs >= 0 && minotaurSecs <= when && g_minotaurElapsed >= 30);
 		if ( minotaurSecs >= 0 && minotaurSecs <= least ) { on = true; }
-		// Any floor: after 5 minutes without finding it, the compass helps out.
 		if ( ticks - g_floorStartTicks >= (Uint32)(TICKS_PER_SECOND * 300) ) { on = true; }
-		if ( !g_floorNeedsKey || g_floorKeyFound || !on ) { return; }
+		return on;
+	}
+
+	void updateKeyCompass(int minotaurSecs)
+	{
+		g_keyCompass.clear();
+		g_compassShowing = false;
+		if ( !g_floorNeedsKey || g_floorKeyFound || g_slot.floor_key_requirement == 2 ) { return; }
+		bool backup = backupCompassOn(minotaurSecs);
+		int level = compassLevel();
+		bool owned = level > 0;
+		bool fromCompass = owned && (g_slot.compass_mode == 1 || ticks < g_compassPingUntil);
+		if ( !backup && !fromCompass ) { return; }
 		Entity* pl = players[clientnum] ? players[clientnum]->entity : nullptr;
 		if ( !pl || !map.entities ) { return; }
 		for ( node_t* node = map.entities->first; node; node = node->next )
@@ -1427,15 +1498,51 @@ namespace
 			if ( !isFloorKeyEntity(e) ) { continue; }
 			double dx = (e->x - pl->x) / 16.0, dy = (e->y - pl->y) / 16.0; // tiles; +y is south on the map
 			int tiles = (int)std::lround(std::sqrt(dx * dx + dy * dy));
-			if ( tiles <= 1 ) { g_keyCompass = "right here"; return; }
+			// Arrow: relative to the way you're facing (yaw 0 = east, turning right = +yaw).
+			double rel = std::atan2(dy, dx) - pl->yaw;
+			while ( rel <= -PI ) { rel += 2 * PI; }
+			while ( rel > PI ) { rel -= 2 * PI; }
+			g_compassArrow = ((int)std::lround(rel / (PI / 4)) + 8) % 8;
+			g_compassTiles = tiles;
+			g_compassShowing = true;
+			g_compassShowsDistance = backup || level >= 2;
 			static const char* const DIRS[] = { "E", "SE", "S", "SW", "W", "NW", "N", "NE" };
-			double ang = std::atan2(dy, dx); // 0 = east, clockwise because +y is south
-			int octant = ((int)std::lround(ang / (PI / 4)) + 8) % 8;
+			int octant = ((int)std::lround(std::atan2(dy, dx) / (PI / 4)) + 8) % 8;
 			char buf[48];
-			snprintf(buf, sizeof(buf), "%d tiles %s", tiles, DIRS[octant]);
+			if ( tiles <= 1 ) { snprintf(buf, sizeof(buf), "right here"); }
+			else if ( g_compassShowsDistance ) { snprintf(buf, sizeof(buf), "%d tiles %s", tiles, DIRS[octant]); }
+			else { snprintf(buf, sizeof(buf), "%s", DIRS[octant]); }
 			g_keyCompass = buf;
 			return;
 		}
+	}
+
+	// Using the compass from your bag or hotbar.
+	bool useCompassPrivate(Item* item, int player)
+	{
+		if ( !isCompassItemPrivate(item) ) { return false; }
+		if ( player != clientnum ) { return true; }
+		if ( !g_floorNeedsKey || g_floorKeyFound || g_slot.floor_key_requirement == 2 )
+		{
+			messagePlayerColor(player, MESSAGE_HINT, COLOR_AP, "The compass needle spins: nothing to find on this floor.");
+			return true;
+		}
+		if ( g_slot.compass_mode == 1 )
+		{
+			messagePlayerColor(player, MESSAGE_HINT, COLOR_AP, "Your compass always points at the Floor Key.");
+			return true;
+		}
+		if ( ticks < g_compassReadyAt )
+		{
+			int secs = (int)((g_compassReadyAt - ticks) / TICKS_PER_SECOND) + 1;
+			messagePlayerColor(player, MESSAGE_HINT, COLOR_TRAP, "The compass is still recharging (%d:%02d).", secs / 60, secs % 60);
+			return true;
+		}
+		g_compassPingUntil = ticks + (Uint32)(std::max(5, g_slot.compass_ping_time) * TICKS_PER_SECOND);
+		g_compassReadyAt = g_compassPingUntil + (Uint32)(std::max(10, g_slot.compass_recharge) * TICKS_PER_SECOND);
+		playSound(91, 48);
+		messagePlayerColor(player, MESSAGE_HINT, COLOR_AP, "The compass needle swings toward the Floor Key.");
+		return true;
 	}
 
 	int g_enemiesLeft = -1; // hostile monsters still alive on this floor (-1 = not counted)
@@ -1475,7 +1582,7 @@ namespace
 	void updateFloorKey()
 	{
 		if ( !g_floorNeedsKey || g_floorKeyFound ) { g_enemiesLeft = -1; return; }
-		if ( ticks - g_floorStartTicks > (Uint32)(TICKS_PER_SECOND * 5) ) // monsters are set up by now
+		if ( g_slot.floor_key_requirement != 1 && ticks - g_floorStartTicks > (Uint32)(TICKS_PER_SECOND * 5) ) // monsters are set up by now
 		{
 			g_enemiesLeft = countHostileEnemies();
 			if ( g_enemiesLeft == 0 )
@@ -1513,7 +1620,7 @@ namespace
 				if ( isFloorKeyEntity((Entity*)node->element) ) { return; }
 			}
 		}
-		spawnFloorKey(); // gone from the floor without being found
+		if ( g_slot.floor_key_requirement != 2 ) { spawnFloorKey(); } // gone from the floor without being found
 	}
 
 	void spawnFloorPickups()
@@ -1974,9 +2081,18 @@ namespace
 		g_floorNeedsKey = floorUsesKey();
 		if ( g_floorNeedsKey && !g_floorKeyFound )
 		{
-			spawnFloorKey();
-			if ( !g_floorKeyFound ) { say(COLOR_AP, "Find this floor's Floor Key to open the stairs down."); }
+			if ( g_slot.floor_key_requirement == 2 )
+			{
+				say(COLOR_AP, "Defeat every enemy on this floor to open the stairs down.");
+			}
+			else
+			{
+				spawnFloorKey();
+				if ( !g_floorKeyFound ) { say(COLOR_AP, "Find this floor's Floor Key to open the stairs down."); }
+			}
 		}
+		g_compassPingUntil = 0; // a new floor: the compass is ready
+		g_compassReadyAt = 0;
 		pickMarkedEnemies();
 		if ( g_markedThisFloor > 0 )
 		{
@@ -2332,6 +2448,7 @@ void tick()
 		g_floorCounts = countFloor();
 		g_loot = countLoot();
 		updateMinotaurStatus();
+		if ( g_compassGivePending && players[clientnum] && players[clientnum]->entity ) { g_compassGivePending = false; giveCompassIfMissing(); }
 		updateFloorKey();
 		updateKeyCompass(g_minotaurSecs);
 	}
@@ -2697,7 +2814,10 @@ bool canDescend(int player)
 	if ( !g_ready || multiplayer == CLIENT ) { return true; }
 	if ( g_floorNeedsKey && !g_floorKeyFound )
 	{
-		messagePlayerColor(player, MESSAGE_HINT, COLOR_AP, "The stairs are locked. Find this floor's Floor Key first.");
+		messagePlayerColor(player, MESSAGE_HINT, COLOR_AP, g_slot.floor_key_requirement == 2
+			? "The stairs are locked. Defeat every enemy on this floor first."
+			: g_slot.floor_key_requirement == 1 ? "The stairs are locked. Find this floor's Floor Key first."
+			: "The stairs are locked. Find this floor's Floor Key, or defeat every enemy here.");
 		return false;
 	}
 	// Warn once before leaving a floor with Archipelago things still on it; using the stairs again leaves.
@@ -2900,6 +3020,9 @@ int lockedClass(int player, int currentClass)
 	}
 	return chosen;
 }
+
+bool isCompassItem(const Item* item) { return isCompassItemPrivate(item); }
+bool useCompassItem(Item* item, int player) { return useCompassPrivate(item, player); }
 
 bool isFloorKey(const Item* item)
 {
@@ -3312,13 +3435,29 @@ void drawHud()
 		}
 		if ( g_floorNeedsKey && !g_floorKeyFound )
 		{
-			std::string keyLine = g_keyCompass.empty() ? std::string("Find the Floor Key") : "Floor Key: " + g_keyCompass;
-			if ( g_enemiesLeft > 0 )
+			std::string keyLine;
+			if ( g_slot.floor_key_requirement == 2 )
 			{
-				keyLine += "  (or defeat all " + std::to_string(g_enemiesLeft) + " enemies)";
+				keyLine = g_enemiesLeft > 0 ? "Defeat all " + std::to_string(g_enemiesLeft) + " enemies to open the stairs"
+					: std::string("Defeat every enemy to open the stairs");
 			}
-			drawText(keyLine.c_str(), g_keyCompass.empty() ? HUD_FONT : BIG_FONT, makeColorRGB(255, 200, 90), 38, row);
-			row += g_keyCompass.empty() ? 18 : 22;
+			else
+			{
+				keyLine = "Find the Floor Key";
+				if ( g_slot.floor_key_requirement == 0 && g_enemiesLeft > 0 )
+				{
+					keyLine += "  (or defeat all " + std::to_string(g_enemiesLeft) + " enemies)";
+				}
+				if ( compassLevel() > 0 && g_slot.compass_mode == 0 && ticks >= g_compassPingUntil && ticks < g_compassReadyAt )
+				{
+					int secs = (int)((g_compassReadyAt - ticks) / TICKS_PER_SECOND) + 1;
+					char cb[32];
+					snprintf(cb, sizeof(cb), "  [compass %d:%02d]", secs / 60, secs % 60);
+					keyLine += cb;
+				}
+			}
+			drawText(keyLine.c_str(), HUD_FONT, makeColorRGB(255, 200, 90), 38, row);
+			row += 18;
 		}
 		// Key hint: only for the first moments of a floor, so the corner stays clean.
 		if ( g_logPanel == 0 && ticks - g_floorStartTicks < (Uint32)(TICKS_PER_SECOND * 12) )
@@ -3390,6 +3529,22 @@ void drawHud()
 		const int top = HUD_RIGHT_TOP + ((g_slot.lives > 0 || g_save.livesLeft > 0) ? 28 : 0);
 		int w = drawText(buf, BIG_FONT, makeColorRGB(255, 255, 255), right, top, 2);
 		drawImage("*images/ui/Archipelago/AP_Skull.png", right - w - 32, top - 3, 24, 24);
+	}
+
+	// Compass face under the XP bar, arrow pointing the way to the Floor Key from where you face.
+	if ( g_ready && inGame() && g_compassShowing && !g_deathScreen )
+	{
+		const int size = 72;
+		const int x = Frame::virtualScreenX / 2 - size / 2, y = 56;
+		drawImage("*images/ui/Archipelago/AP_CompassFace.png", x, y, size, size);
+		char arrow[64];
+		snprintf(arrow, sizeof(arrow), "*images/ui/Archipelago/AP_CompassArrow%d.png", g_compassArrow);
+		drawImage(arrow, x, y, size, size);
+		char label[48];
+		if ( g_compassTiles <= 1 ) { snprintf(label, sizeof(label), "Floor Key: right here"); }
+		else if ( g_compassShowsDistance ) { snprintf(label, sizeof(label), "Floor Key: %d tiles", g_compassTiles); }
+		else { snprintf(label, sizeof(label), "Floor Key"); }
+		drawText(label, BIG_FONT, makeColorRGB(255, 200, 90), Frame::virtualScreenX / 2, y + size + 4, 1);
 	}
 
 	if ( g_deathScreen && inGame() )

@@ -41,6 +41,14 @@ On a Minotaur floor, once the Minotaur is 30 seconds away (or already there), th
 tracker point you at the key: "Floor Key: 18 tiles NE" (directions as on the map, north up).
 Key Compass Time turns it on sooner if you want more help (never in the first 30 seconds).
 
+Floor Key Requirement picks what opens the stairs: the key or defeating every enemy (default), the
+key only, or every enemy only.
+
+The Compass (optional) points at the Floor Key from the way you're facing, under the XP bar. You can
+start with it, find it as an Archipelago item, or find two Progressive Compasses (the first shows the
+way, the second also how far). With Ping and Recharge you use it from your bag or hotbar; it points
+for Compass Ping Time seconds and then recharges. With Always On it always points.
+
 ## How does the Minotaur Trap work?
 
 It starts the normal Minotaur timer on your current floor, with the usual warning. If a Minotaur

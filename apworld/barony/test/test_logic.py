@@ -107,3 +107,23 @@ class TestFloorSizeMix(BaronyTestBase):
 
     def test_mask(self) -> None:
         self.assertEqual(self.world.fill_slot_data()["floor_size_mask"], 1 | 4)
+
+
+class TestProgressiveCompass(BaronyTestBase):
+    options = {"compass": "progressive", "compass_mode": "always_on", "floor_key_requirement": "key_only"}
+
+    def test_two_compasses(self) -> None:
+        count = sum(1 for item in self.multiworld.itempool if item.name == "Progressive Compass")
+        self.assertEqual(count, 2)
+        slot = self.world.fill_slot_data()
+        self.assertEqual(slot["compass"], 3)
+        self.assertEqual(slot["compass_mode"], 1)
+        self.assertEqual(slot["floor_key_requirement"], 1)
+
+
+class TestCompassItem(BaronyTestBase):
+    options = {"compass": "archipelago_item"}
+
+    def test_one_compass(self) -> None:
+        count = sum(1 for item in self.multiworld.itempool if item.name == "Progressive Compass")
+        self.assertEqual(count, 1)

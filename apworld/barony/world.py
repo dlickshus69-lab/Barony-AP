@@ -249,6 +249,10 @@ class BaronyWorld(World):
         total = len(self.multiworld.get_unfilled_locations(self.player))
 
         required: list[str] = []
+        if self.options.floor_keys and self.options.compass.value == self.options.compass.option_archipelago_item:
+            required += ["Progressive Compass"]
+        elif self.options.floor_keys and self.options.compass.value == self.options.compass.option_progressive:
+            required += ["Progressive Compass"] * 2
 
         useful: list[str] = ["Extra Life"] * self.options.extra_lives_in_pool.value
         useful += data.PERMANENT_STAT_ITEMS
@@ -287,6 +291,11 @@ class BaronyWorld(World):
             "stair_keys": 0,
             "floor_keys": int(bool(o.floor_keys)),
             "key_compass_time": o.key_compass_time.value,
+            "floor_key_requirement": o.floor_key_requirement.value,
+            "compass": o.compass.value,
+            "compass_mode": o.compass_mode.value,
+            "compass_ping_time": o.compass_ping_time.value,
+            "compass_recharge": o.compass_recharge.value,
             "skill_checks": o.skill_checks.value,
             "enemy_randomizer_secret": int(bool(o.enemy_randomizer_secret_areas)),
             "skill_check_max_rank": o.skill_check_max_rank.value,

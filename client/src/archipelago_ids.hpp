@@ -27,6 +27,7 @@ constexpr int64_t ITEM_PERM_PER = 4270015; // Permanent Perception
 constexpr int64_t ITEM_PERM_CHR = 4270016; // Permanent Charisma
 constexpr int64_t ITEM_MAX_HP_UP = 4270017; // Max HP Up
 constexpr int64_t ITEM_START_GOLD = 4270018; // Starting Gold Bonus
+constexpr int64_t ITEM_COMPASS = 4270020; // Progressive Compass
 constexpr int64_t ITEM_XP_BOOST = 4270030; // XP Boost
 constexpr int64_t ITEM_GOLD_POUCH = 4270031; // Gold Pouch
 constexpr int64_t ITEM_HEAL_POTION = 4270032; // Healing Potion
