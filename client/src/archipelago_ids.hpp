@@ -13,6 +13,8 @@ constexpr int64_t SHOP_OFFSET = 600;
 constexpr int64_t BOSS_OFFSET = 700;
 constexpr int64_t SPECIAL_OFFSET = 800;
 constexpr int64_t SKILL_OFFSET = 900;
+constexpr int64_t SPELLBOOK_OFFSET = 1100;
+constexpr int64_t SPELL_ITEM_OFFSET = 100;
 constexpr int MAX_FLOOR = 35;
 constexpr int FLOORS_PER_SECTION = 5;
 
@@ -42,6 +44,114 @@ constexpr int64_t ITEM_TRAP_TELEPORT = 4270055; // Teleport Trap
 constexpr int64_t ITEM_TRAP_HUNGER = 4270056; // Hunger Trap
 constexpr int64_t ITEM_TRAP_DARKNESS = 4270057; // Darkness Trap
 constexpr int64_t ITEM_TRAP_CURSE = 4270058; // Curse Trap
+constexpr int64_t ITEM_SPELL_FORCEBOLT = 4270101; // Forcebolt Spell
+constexpr int64_t ITEM_SPELL_MAGIC_MISSILE = 4270102; // Magic Missile Spell
+constexpr int64_t ITEM_SPELL_COLD = 4270103; // Cold Spell
+constexpr int64_t ITEM_SPELL_FIREBALL = 4270104; // Fireball Spell
+constexpr int64_t ITEM_SPELL_LIGHTNING = 4270105; // Lightning Spell
+constexpr int64_t ITEM_SPELL_REMOVE_CURSE = 4270106; // Remove Curse Spell
+constexpr int64_t ITEM_SPELL_LIGHT = 4270107; // Light Spell
+constexpr int64_t ITEM_SPELL_IDENTIFY = 4270108; // Identify Spell
+constexpr int64_t ITEM_SPELL_MAGIC_MAPPING = 4270109; // Magic Mapping Spell
+constexpr int64_t ITEM_SPELL_SLEEP = 4270110; // Sleep Spell
+constexpr int64_t ITEM_SPELL_CONFUSE = 4270111; // Confuse Spell
+constexpr int64_t ITEM_SPELL_SLOW = 4270112; // Slow Spell
+constexpr int64_t ITEM_SPELL_OPENING = 4270113; // Opening Spell
+constexpr int64_t ITEM_SPELL_LOCKING = 4270114; // Locking Spell
+constexpr int64_t ITEM_SPELL_LEVITATION = 4270115; // Levitation Spell
+constexpr int64_t ITEM_SPELL_INVISIBILITY = 4270116; // Invisibility Spell
+constexpr int64_t ITEM_SPELL_TELEPORTATION = 4270117; // Teleportation Spell
+constexpr int64_t ITEM_SPELL_HEALING = 4270118; // Healing Spell
+constexpr int64_t ITEM_SPELL_EXTRA_HEALING = 4270119; // Extra Healing Spell
+constexpr int64_t ITEM_SPELL_CURE_AILMENT = 4270120; // Cure Ailment Spell
+constexpr int64_t ITEM_SPELL_DIG = 4270121; // Dig Spell
+constexpr int64_t ITEM_SPELL_BLOODLETTING = 4270124; // Bloodletting Spell
+constexpr int64_t ITEM_SPELL_REFLECT_MAGIC = 4270126; // Reflect Magic Spell
+constexpr int64_t ITEM_SPELL_SPRAY_ACID = 4270127; // Spray Acid Spell
+constexpr int64_t ITEM_SPELL_REVERT_FORM = 4270132; // Revert Form Spell
+constexpr int64_t ITEM_SPELL_SPRAY_WEB = 4270137; // Spray Web Spell
+constexpr int64_t ITEM_SPELL_POISON = 4270138; // Poison Spell
+constexpr int64_t ITEM_SPELL_SPEED = 4270139; // Speed Spell
+constexpr int64_t ITEM_SPELL_FEAR = 4270140; // Fear Spell
+constexpr int64_t ITEM_SPELL_DETECT_FOOD = 4270142; // Detect Food Spell
+constexpr int64_t ITEM_SPELL_ELEMENTAL_FOCUS = 4270144; // Elemental Focus Spell
+constexpr int64_t ITEM_SPELL_ARCANE_MARK = 4270145; // Arcane Mark Spell
+constexpr int64_t ITEM_SPELL_TELEPORT_OTHER = 4270146; // Teleport Other Spell
+constexpr int64_t ITEM_SPELL_TROLL_S_BLOOD = 4270148; // Troll's Blood Spell
+constexpr int64_t ITEM_SPELL_SALVAGE = 4270149; // Salvage Spell
+constexpr int64_t ITEM_SPELL_FLUTTER = 4270150; // Flutter Spell
+constexpr int64_t ITEM_SPELL_DASH = 4270151; // Dash Spell
+constexpr int64_t ITEM_SPELL_POLYMORPH = 4270152; // Polymorph Spell
+constexpr int64_t ITEM_SPELL_CONJURE_SKELETON = 4270122; // Conjure Skeleton Spell
+constexpr int64_t ITEM_SPELL_STONE_BLOOD = 4270123; // Stone Blood Spell
+constexpr int64_t ITEM_SPELL_DOMINATE = 4270125; // Dominate Spell
+constexpr int64_t ITEM_SPELL_STEAL_WEAPON = 4270128; // Steal Weapon Spell
+constexpr int64_t ITEM_SPELL_DRAIN_SOUL = 4270129; // Drain Soul Spell
+constexpr int64_t ITEM_SPELL_VAMPIRIC_AURA = 4270130; // Vampiric Aura Spell
+constexpr int64_t ITEM_SPELL_CHARM_MONSTER = 4270131; // Charm Monster Spell
+constexpr int64_t ITEM_SPELL_RAT_FORM = 4270133; // Rat Form Spell
+constexpr int64_t ITEM_SPELL_ARTHROPOD_FORM = 4270134; // Arthropod Form Spell
+constexpr int64_t ITEM_SPELL_TROLL_FORM = 4270135; // Troll Form Spell
+constexpr int64_t ITEM_SPELL_IMP_FORM = 4270136; // Imp Form Spell
+constexpr int64_t ITEM_SPELL_POWER_STRIKE = 4270141; // Power Strike Spell
+constexpr int64_t ITEM_SPELL_WEAKNESS = 4270143; // Weakness Spell
+constexpr int64_t ITEM_SPELL_INNER_DEMON = 4270147; // Inner Demon Spell
+
+struct SpellEntry { int spell; const char* name; int depth; bool dlc; };
+static const SpellEntry SPELLS[] = {
+    { 1, "Forcebolt", 1, false },
+    { 2, "Magic Missile", 9, false },
+    { 3, "Cold", 6, false },
+    { 4, "Fireball", 11, false },
+    { 5, "Lightning", 11, false },
+    { 6, "Remove Curse", 9, false },
+    { 7, "Light", 0, false },
+    { 8, "Identify", 6, false },
+    { 9, "Magic Mapping", 9, false },
+    { 10, "Sleep", 6, false },
+    { 11, "Confuse", 4, false },
+    { 12, "Slow", 2, false },
+    { 13, "Opening", 4, false },
+    { 14, "Locking", 0, false },
+    { 15, "Levitation", 11, false },
+    { 16, "Invisibility", 15, false },
+    { 17, "Teleportation", 6, false },
+    { 18, "Healing", 6, false },
+    { 19, "Extra Healing", 11, false },
+    { 20, "Cure Ailment", 11, false },
+    { 21, "Dig", 9, false },
+    { 24, "Bloodletting", 22, false },
+    { 26, "Reflect Magic", 25, false },
+    { 27, "Spray Acid", 18, false },
+    { 32, "Revert Form", 15, false },
+    { 37, "Spray Web", 9, false },
+    { 38, "Poison", 6, false },
+    { 39, "Speed", 18, false },
+    { 40, "Fear", 25, false },
+    { 42, "Detect Food", 6, false },
+    { 44, "Elemental Focus", 30, false },
+    { 45, "Arcane Mark", 25, false },
+    { 46, "Teleport Other", 28, false },
+    { 48, "Troll's Blood", 4, false },
+    { 49, "Salvage", 28, false },
+    { 50, "Flutter", 8, false },
+    { 51, "Dash", 8, false },
+    { 52, "Polymorph", 18, false },
+    { 22, "Conjure Skeleton", 0, true },
+    { 23, "Stone Blood", 0, true },
+    { 25, "Dominate", 0, true },
+    { 28, "Steal Weapon", 0, true },
+    { 29, "Drain Soul", 0, true },
+    { 30, "Vampiric Aura", 0, true },
+    { 31, "Charm Monster", 0, true },
+    { 33, "Rat Form", 0, true },
+    { 34, "Arthropod Form", 0, true },
+    { 35, "Troll Form", 0, true },
+    { 36, "Imp Form", 0, true },
+    { 41, "Power Strike", 0, true },
+    { 43, "Weakness", 0, true },
+    { 47, "Inner Demon", 0, true },
+};
 
 struct MonsterEntry { int index; const char* name; int monster; int depth; bool early; };
 struct BossEntry { int index; const char* name; int monster; int floor; };

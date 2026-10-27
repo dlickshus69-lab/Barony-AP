@@ -28,6 +28,8 @@ when updating to a newer Barony. Hooks in files the level editor also builds are
 | `src/actmonster.cpp` death | `AP::onMonsterDeath()` | Kills, bestiary, boss checks, goal |
 | `src/actplayer.cpp` | `AP::tryConsumeLife()`, `AP::onPlayerDied()` | Lives (restart the floor) and Death Link out |
 | `src/charclass.cpp` `initClass()` | `AP::lockedClass()` | Lock Class |
+| `src/item_usage_funcs.cpp` `item_Spellbook()` | `AP::spellbookRead()` | Spell Sanity and Spellbook Checks |
+| `src/magic/castSpell.cpp` `castSpell()` | `AP::spellUpgradeBonus()` | Spell Upgrades |
 | `src/items.cpp` | `AP::isApItem()`, `AP::isFloorKey()`, `AP::isCompassItem()`, `AP::useCompassItem()` | Names, models and use of the AP item, Floor Key and Compass |
 | `src/interface/playerinventory.cpp` | same | Their inventory icons |
 | `src/monster_minotaur.cpp` | `AP::adjustMinotaurTime()` | Minotaur Time |

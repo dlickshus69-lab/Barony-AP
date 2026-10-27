@@ -49,10 +49,14 @@ Barony:
   difficulty_scaling: true
   difficulty: normal
 
-  # Class & Skills
+  # Class, Skills & Spells
   skill_checks: off
   skill_check_max_rank: expert
   lock_class: true
+  spell_sanity: false
+  spell_upgrades: 0
+  spell_sanity_dlc_spells: false
+  spellbook_checks: false
 
   # Lives & Checkpoints
   lives: 5

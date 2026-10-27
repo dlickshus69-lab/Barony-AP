@@ -92,6 +92,10 @@ namespace
 		int skill_checks = 0;         // 0 off, 1 any class, 2.. a class (Barony class index + 2)
 		int skill_check_max_rank = 3; // 1 Basic .. 5 Legendary
 		int lock_class = 0;
+		int spell_sanity = 0;         // spells are Archipelago items
+		int spell_upgrades = 0;       // extra copies make a spell stronger
+		int spellbook_checks = 0;     // reading each kind of spellbook is a check
+		int spell_dlc = 0;            // DLC class spells are in the pool too
 		int floor_size_mask = 1;      // Floor Size: bit 1 Normal, 2 Bigger, 4 Much Bigger
 		int boss_rush_mask = 7;       // Boss Rush: 1 Herx, 2 Devil, 4 Twin Liches
 		int boss_rush_floors = 10;    // Boss Rush: dungeon floors before the rush
@@ -252,6 +256,7 @@ namespace
 	void giveCompassIfMissing();
 	void launchTracker();
 	void placeRushTownExit();
+	void syncSpells();
 	int bossRushGoalMask();
 	Uint32 g_stairsWarnedAt = 0;
 	void readCheckpoint();
@@ -562,6 +567,10 @@ namespace
 		registerSlotInt("enemy_randomizer_secret", &SlotOptions::enemy_randomizer_secret);
 		registerSlotInt("skill_check_max_rank", &SlotOptions::skill_check_max_rank);
 		registerSlotInt("lock_class", &SlotOptions::lock_class);
+		registerSlotInt("spell_sanity", &SlotOptions::spell_sanity);
+		registerSlotInt("spell_upgrades", &SlotOptions::spell_upgrades);
+		registerSlotInt("spellbook_checks", &SlotOptions::spellbook_checks);
+		registerSlotInt("spell_dlc", &SlotOptions::spell_dlc);
 		registerSlotInt("floor_size_mask", &SlotOptions::floor_size_mask);
 		registerSlotInt("music_mods", &SlotOptions::music_mods);
 		registerSlotInt("randomize_loot", &SlotOptions::randomize_loot);
@@ -998,6 +1007,17 @@ namespace
 			{
 				say(COLOR_AP, "Received %s.", itemName(g_received[i]));
 			}
+			else if ( g_received[i] > ap_ids::BASE_ID + ap_ids::SPELL_ITEM_OFFSET
+				&& g_received[i] < ap_ids::BASE_ID + ap_ids::SPELL_ITEM_OFFSET + 1000 )
+			{
+				int id = (int)(g_received[i] - ap_ids::BASE_ID - ap_ids::SPELL_ITEM_OFFSET);
+				int copies = (int)std::count(g_received.begin(), g_received.begin() + i + 1, g_received[i]);
+				const char* name = "a spell";
+				for ( auto& sp : ap_ids::SPELLS ) { if ( sp.spell == id ) { name = sp.name; } }
+				if ( copies <= 1 ) { say(COLOR_AP, "Received the %s spell.", name); }
+				else { say(COLOR_AP, "Received %s: it's now +%d.", name, copies - 1); }
+				syncSpells();
+			}
 			else if ( g_received[i] == ap_ids::ITEM_COMPASS )
 			{
 				say(COLOR_AP, "Received a Progressive Compass (%d).", (int)std::count(g_received.begin(), g_received.begin() + i + 1, g_received[i]));
@@ -1031,6 +1051,51 @@ namespace
 			}
 		}
 		if ( dirty ) { writeSave(); }
+	}
+
+	// ----------------------------------------------------------- Spell Sanity
+	const ap_ids::SpellEntry* sanitySpell(int spellID)
+	{
+		for ( auto& sp : ap_ids::SPELLS )
+		{
+			if ( sp.spell == spellID ) { return (!sp.dlc || g_slot.spell_dlc) ? &sp : nullptr; }
+		}
+		return nullptr;
+	}
+
+	int spellCopies(int spellID) { return countReceived(ap_ids::BASE_ID + ap_ids::SPELL_ITEM_OFFSET + spellID); }
+
+	bool knowsSpell(int player, int spellID)
+	{
+		if ( !players[player] ) { return false; }
+		for ( node_t* n = players[player]->magic.spellList.first; n; n = n->next )
+		{
+			spell_t* sp = (spell_t*)n->element;
+			if ( sp && sp->ID == spellID ) { return true; }
+		}
+		return false;
+	}
+
+	bool ownsAnyDlc() { return enabledDLCPack1 || enabledDLCPack2 || enabledDLCPack3; }
+
+	// Every spell received is known by the current character (taught again to each new one).
+	void syncSpells()
+	{
+		if ( !g_slot.spell_sanity || !inGame() ) { return; }
+		static bool warnedDlc = false;
+		for ( auto& sp : ap_ids::SPELLS )
+		{
+			if ( (sp.dlc && !g_slot.spell_dlc) || spellCopies(sp.spell) <= 0 ) { continue; }
+			if ( sp.dlc && !ownsAnyDlc() )
+			{
+				if ( !warnedDlc ) { warnedDlc = true; say(COLOR_AP, "DLC spells you receive need a Barony DLC to be learned."); }
+				continue;
+			}
+			for ( int p : activePlayers() )
+			{
+				if ( !knowsSpell(p, sp.spell) ) { addSpell(sp.spell, p, true); }
+			}
+		}
 	}
 
 	// ----------------------------------------------------------- checks
@@ -2921,6 +2986,7 @@ void tick()
 	applyNewItems();
 	updatePendingTraps();
 	syncPermanents();
+	if ( ticks % TICKS_PER_SECOND == 0 ) { syncSpells(); }
 	if ( g_resumePending && !loadnextlevel && players[clientnum]->entity && stats[clientnum]->HP > 0 )
 	{
 		g_resumePending = false;
@@ -4150,6 +4216,38 @@ bool bossRushSkipVictory()
 	if ( !bossRushMoreAfterThis() ) { return false; }
 	say(COLOR_AP, "Boss Rush: on to the next one!");
 	return true;
+}
+
+bool spellbookRead(Item* item, int player)
+{
+	// Returns true when the spellbook mustn't teach its spell (Spell Sanity: not received yet).
+	if ( !g_ready || !item || itemCategory(item) != SPELLBOOK || multiplayer == CLIENT ) { return false; }
+	int id = getSpellIDFromSpellbook(item->type);
+	const ap_ids::SpellEntry* sp = sanitySpell(id);
+	if ( !sp ) { return false; }
+	if ( g_slot.spellbook_checks && !sp->dlc )
+	{
+		int64_t loc = ap_ids::BASE_ID + ap_ids::SPELLBOOK_OFFSET + id;
+		if ( !isChecked(loc) )
+		{
+			sendLocation(loc);
+			say(COLOR_AP, "Read the %s spellbook: that's a check!", sp->name);
+		}
+	}
+	if ( g_slot.spell_sanity && spellCopies(id) <= 0 && !knowsSpell(player, id) )
+	{
+		messagePlayerColor(player, MESSAGE_HINT, COLOR_AP,
+			"You can't make sense of it yet. The %s spell has to come from the multiworld.", sp->name);
+		return true;
+	}
+	return false;
+}
+
+int spellUpgradeBonus(int spellID)
+{
+	// Spell Upgrades: each extra copy of a spell is +10% power, like a blessed +1 spellbook.
+	if ( !g_ready || !g_slot.spell_sanity || !sanitySpell(spellID) ) { return 0; }
+	return 10 * std::max(0, spellCopies(spellID) - 1);
 }
 
 bool launcherGate()

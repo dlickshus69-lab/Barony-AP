@@ -182,6 +182,11 @@ class BaronyWorld(World):
                 planned.append((data.skill_location(skill, rank),
                                 self._floor_needed(min(data.SKILL_RANK_FLOOR[rank], self.goal_floor))))
 
+        if o.spellbook_checks:
+            for spell in data.SPELLS:
+                if not spell.dlc and spell.depth <= self.goal_floor:
+                    planned.append((data.spellbook_location(spell), self._floor_needed(max(1, spell.depth))))
+
         return planned
 
     # ------------------------------------------------------------------ regions
@@ -261,16 +266,30 @@ class BaronyWorld(World):
         elif self.options.floor_keys and self.options.compass.value == self.options.compass.option_progressive:
             required += ["Progressive Compass"] * 2
 
+        # Spell Sanity: the first copy of every spell comes before other useful items when space is short.
+        spells_first: list[str] = []
+        spell_upgrades: list[str] = []
+        if self.options.spell_sanity:
+            for spell in data.SPELLS:
+                if spell.dlc and not self.options.spell_sanity_dlc_spells:
+                    continue
+                spells_first.append(data.spell_item_name(spell))
+                spell_upgrades += [data.spell_item_name(spell)] * self.options.spell_upgrades.value
+
         useful: list[str] = ["Extra Life"] * self.options.extra_lives_in_pool.value
         useful += data.PERMANENT_STAT_ITEMS
         useful += ["Max HP Up"] * 2
         useful += ["Starting Gold Bonus"]
 
         room = total - len(required)
+        lives = [n for n in useful if n == "Extra Life"]
+        others = [n for n in useful if n != "Extra Life"]
+        self.random.shuffle(others)
+        # Trimmed from the end when there isn't room: extra lives and first spell copies are kept longest.
+        useful = lives + spells_first + others + spell_upgrades
         if len(useful) > room:
-            self.random.shuffle(useful)
-            # Keep extra lives first if we have to trim
-            useful.sort(key=lambda n: n != "Extra Life")
+            if len(lives) + len(spells_first) > room:
+                logger.warning(f"Barony ({self.player_name}): not enough locations for every spell; some are left out.")
             useful = useful[:max(0, room)]
 
         pool = [self.create_item(n) for n in required + useful]
@@ -313,6 +332,10 @@ class BaronyWorld(World):
             "enemy_randomizer_secret": int(bool(o.enemy_randomizer_secret_areas)),
             "skill_check_max_rank": o.skill_check_max_rank.value,
             "lock_class": int(bool(o.lock_class)),
+            "spell_sanity": int(bool(o.spell_sanity)),
+            "spell_upgrades": o.spell_upgrades.value,
+            "spellbook_checks": int(bool(o.spellbook_checks)),
+            "spell_dlc": int(bool(o.spell_sanity_dlc_spells)),
             "floor_size_mask": sum(bit for name, bit in (("Normal", 1), ("Bigger", 2), ("Much Bigger", 4))
                                    if name in o.floor_size.value),
             "randomize_loot": o.randomize_loot.value,

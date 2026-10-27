@@ -114,6 +114,8 @@ namespace AP
 	const char* bossRushNextMap();  // Boss Rush: the map to load in place of this floor, or nullptr
 	bool bossRushSkipVictory();
 	bool bossRushHideMidPortal();   // Boss Rush: the last boss's arena only has the victory portal     // Boss Rush: true = this victory portal goes on to the next boss
+	bool spellbookRead(Item* item, int player); // Spell Sanity / Spellbook Checks; true = don't teach
+	int spellUpgradeBonus(int spellID);         // Spell Upgrades: extra spell power in percent
 	bool launcherGate();        // start of main(): the launcher window first; false = quit
 	bool holidayThemeAllowed(); // Barony's Halloween/Christmas themes, off unless archipelago.cfg says holiday_theme=1
 

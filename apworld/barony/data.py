@@ -144,6 +144,7 @@ SHOP_OFFSET = 600         # + j (1..20)
 BOSS_OFFSET = 700         # + BossInfo.index
 SPECIAL_OFFSET = 800      # + SpecialArea.index
 SKILL_OFFSET = 900        # + skill * 5 + rank (rank 1..5)
+SPELLBOOK_OFFSET = 1100   # + Barony spell id: reading that spellbook (Spellbook Checks)
 
 # ---------------------------------------------------------------------------------------
 # Skills (Barony 5): index = PRO_ constant, name as the game shows it
@@ -241,6 +242,51 @@ def shop_location(j: int) -> str:
     return f"Shop Item {j}"
 
 
+# ---------------------------------------------------------------------------------------
+# Spells (Spell Sanity). Ids are Barony's own spell ids; depth is the spellbook's item level
+# (the floor it starts turning up on). The DLC ones are class spells whose books never drop.
+# ---------------------------------------------------------------------------------------
+class SpellInfo(NamedTuple):
+    spell_id: int
+    name: str
+    depth: int
+    dlc: bool = False
+
+
+SPELLS = [
+    SpellInfo(1, "Forcebolt", 1), SpellInfo(2, "Magic Missile", 9), SpellInfo(3, "Cold", 6),
+    SpellInfo(4, "Fireball", 11), SpellInfo(5, "Lightning", 11), SpellInfo(6, "Remove Curse", 9),
+    SpellInfo(7, "Light", 0), SpellInfo(8, "Identify", 6), SpellInfo(9, "Magic Mapping", 9),
+    SpellInfo(10, "Sleep", 6), SpellInfo(11, "Confuse", 4), SpellInfo(12, "Slow", 2),
+    SpellInfo(13, "Opening", 4), SpellInfo(14, "Locking", 0), SpellInfo(15, "Levitation", 11),
+    SpellInfo(16, "Invisibility", 15), SpellInfo(17, "Teleportation", 6), SpellInfo(18, "Healing", 6),
+    SpellInfo(19, "Extra Healing", 11), SpellInfo(20, "Cure Ailment", 11), SpellInfo(21, "Dig", 9),
+    SpellInfo(24, "Bloodletting", 22), SpellInfo(26, "Reflect Magic", 25), SpellInfo(27, "Spray Acid", 18),
+    SpellInfo(32, "Revert Form", 15), SpellInfo(37, "Spray Web", 9), SpellInfo(38, "Poison", 6),
+    SpellInfo(39, "Speed", 18), SpellInfo(40, "Fear", 25), SpellInfo(42, "Detect Food", 6),
+    SpellInfo(44, "Elemental Focus", 30), SpellInfo(45, "Arcane Mark", 25), SpellInfo(46, "Teleport Other", 28),
+    SpellInfo(48, "Troll's Blood", 4), SpellInfo(49, "Salvage", 28), SpellInfo(50, "Flutter", 8),
+    SpellInfo(51, "Dash", 8), SpellInfo(52, "Polymorph", 18),
+    # DLC class spells
+    SpellInfo(22, "Conjure Skeleton", 0, True), SpellInfo(23, "Stone Blood", 0, True),
+    SpellInfo(25, "Dominate", 0, True), SpellInfo(28, "Steal Weapon", 0, True),
+    SpellInfo(29, "Drain Soul", 0, True), SpellInfo(30, "Vampiric Aura", 0, True),
+    SpellInfo(31, "Charm Monster", 0, True), SpellInfo(33, "Rat Form", 0, True),
+    SpellInfo(34, "Arthropod Form", 0, True), SpellInfo(35, "Troll Form", 0, True),
+    SpellInfo(36, "Imp Form", 0, True), SpellInfo(41, "Power Strike", 0, True),
+    SpellInfo(43, "Weakness", 0, True), SpellInfo(47, "Inner Demon", 0, True),
+]
+SPELL_ITEM_OFFSET = 100   # item code = 100 + spell id
+
+
+def spell_item_name(spell: SpellInfo) -> str:
+    return f"{spell.name} Spell"
+
+
+def spellbook_location(spell: SpellInfo) -> str:
+    return f"Read the {spell.name} Spellbook"
+
+
 LOCATION_NAME_TO_ID: dict[str, int] = {}
 for _f in range(1, MAX_FLOOR + 1):
     LOCATION_NAME_TO_ID[floor_location(_f)] = BASE_ID + FLOOR_OFFSET + _f
@@ -261,6 +307,9 @@ for _s in SPECIAL_AREAS:
 for _sk in range(len(SKILLS)):
     for _r, _, _ in SKILL_RANKS:
         LOCATION_NAME_TO_ID[skill_location(_sk, _r)] = BASE_ID + SKILL_OFFSET + _sk * 5 + _r
+for _sp in SPELLS:
+    if not _sp.dlc:
+        LOCATION_NAME_TO_ID[spellbook_location(_sp)] = BASE_ID + SPELLBOOK_OFFSET + _sp.spell_id
 
 
 # ---------------------------------------------------------------------------------------
@@ -306,6 +355,10 @@ ITEMS: dict[str, ItemInfo] = {
     "Darkness Trap": ItemInfo(57, "trap", "TRAP_DARKNESS"),
     "Curse Trap": ItemInfo(58, "trap", "TRAP_CURSE"),
 }
+
+for _sp in SPELLS:
+    ITEMS[spell_item_name(_sp)] = ItemInfo(SPELL_ITEM_OFFSET + _sp.spell_id, "useful",
+                                           "SPELL_" + "".join(c if c.isalnum() else "_" for c in _sp.name.upper()))
 
 ITEM_NAME_TO_ID = {name: BASE_ID + info.code for name, info in ITEMS.items()}
 

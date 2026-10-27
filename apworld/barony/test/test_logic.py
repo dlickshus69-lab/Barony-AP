@@ -168,3 +168,25 @@ class TestBossRushRandomOrder(BaronyTestBase):
         sd = self.world.fill_slot_data()
         self.assertEqual(sd["boss_rush_order"], 2)
         self.assertGreater(sd["boss_rush_seed"], 0)
+
+
+class TestSpellSanity(BaronyTestBase):
+    options = {"spell_sanity": True, "spell_upgrades": 2, "spellbook_checks": True, "spell_sanity_dlc_spells": True,
+               "goal": "devil"}
+
+    def test_spells(self) -> None:
+        names = [item.name for item in self.multiworld.itempool]
+        self.assertIn("Fireball Spell", names)
+        self.assertIn("Conjure Skeleton Spell", names)
+        locs = {loc.name for loc in self.multiworld.get_locations(self.player)}
+        self.assertIn("Read the Fireball Spellbook", locs)
+        self.assertNotIn("Read the Elemental Focus Spellbook", locs)  # depth 30, past the Devil
+        sd = self.world.fill_slot_data()
+        self.assertEqual((sd["spell_sanity"], sd["spell_upgrades"], sd["spellbook_checks"], sd["spell_dlc"]), (1, 2, 1, 1))
+
+
+class TestSpellSanityFewLocations(BaronyTestBase):
+    """Very few locations: spells are trimmed instead of failing."""
+    options = {"spell_sanity": True, "spell_upgrades": 2, "floor_check_interval": 10, "level_checks": 0,
+               "enemy_sanity": "off", "bestiary_checks": "off", "archipelago_pickups": 0, "shop_checks": 0,
+               "boss_checks": False}

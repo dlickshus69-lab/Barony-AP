@@ -19,6 +19,12 @@ Barony is a roguelike, so instead of fixed chests, checks come from things you d
 Everything you receive is kept across runs. Permanent items (stat boosts, Max HP Up, Starting
 Gold Bonus) are applied to every new character you start.
 
+Spell Sanity (optional) makes spells Archipelago items: a spellbook only teaches you its spell once
+you've received it, and every new character starts knowing the spells you have (your class's own
+starting spells are always yours). Spell Upgrades adds extra copies that make a spell stronger, DLC
+Spells adds the DLC classes' spells (taught if you own a DLC), and Spellbook Checks makes reading each
+kind of spellbook a check.
+
 Randomize Loot (optional) rerolls the ordinary loot in chests, shops and on the floor: Same Kind keeps
 each item's kind (a potion becomes a different potion), Anything lets it become any item.
 

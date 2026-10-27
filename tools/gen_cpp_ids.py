@@ -34,6 +34,8 @@ lines = [
     f"constexpr int64_t BOSS_OFFSET = {data.BOSS_OFFSET};",
     f"constexpr int64_t SPECIAL_OFFSET = {data.SPECIAL_OFFSET};",
     f"constexpr int64_t SKILL_OFFSET = {data.SKILL_OFFSET};",
+    f"constexpr int64_t SPELLBOOK_OFFSET = {data.SPELLBOOK_OFFSET};",
+    f"constexpr int64_t SPELL_ITEM_OFFSET = {data.SPELL_ITEM_OFFSET};",
     f"constexpr int MAX_FLOOR = {data.MAX_FLOOR};",
     f"constexpr int FLOORS_PER_SECTION = {data.FLOORS_PER_SECTION};",
     "",
@@ -41,6 +43,12 @@ lines = [
 ]
 for name, info in data.ITEMS.items():
     lines.append(f"constexpr int64_t ITEM_{info.cpp_name} = {data.BASE_ID + info.code}; // {name}")
+
+lines += ["", "struct SpellEntry { int spell; const char* name; int depth; bool dlc; };",
+          "static const SpellEntry SPELLS[] = {"]
+for sp in data.SPELLS:
+    lines.append(f'    {{ {sp.spell_id}, "{sp.name}", {sp.depth}, {"true" if sp.dlc else "false"} }},')
+lines += ["};"]
 
 lines += ["", "struct MonsterEntry { int index; const char* name; int monster; int depth; bool early; };",
           "struct BossEntry { int index; const char* name; int monster; int floor; };",

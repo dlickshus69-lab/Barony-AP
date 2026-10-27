@@ -1,20 +1,20 @@
-From a2644d6d3572bfeb6dd85dda56f2e2db2c0765d5 Mon Sep 17 00:00:00 2001
+From 55784fe2cac1f7b132e5cd3e11703b2305ecd614 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
 
 ---
  CMakeLists.txt                    |   32 +
- src/BaronyAPTracker.cpp           | 1364 ++++++++++
+ src/BaronyAPTracker.cpp           | 1364 +++++++++
  src/CMakeLists.txt                |    1 +
  src/actchest.cpp                  |    7 +
  src/actgeneral.cpp                |    2 +
  src/actladder.cpp                 |   25 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 4243 +++++++++++++++++++++++++++++
- src/archipelago_barony.hpp        |  123 +
- src/archipelago_ids.hpp           |  134 +
+ src/archipelago_barony.cpp        | 4341 +++++++++++++++++++++++++++++
+ src/archipelago_barony.hpp        |  125 +
+ src/archipelago_ids.hpp           |  244 ++
  src/charclass.cpp                 |    4 +
  src/engine/audio/music.cpp        |    4 +
  src/engine/audio/sound_game.cpp   |    2 +
@@ -23,13 +23,15 @@ Subject: [PATCH] Archipelago client hooks
  src/init.cpp                      |    6 +
  src/init_game.cpp                 |    6 +
  src/interface/playerinventory.cpp |   13 +
+ src/item_usage_funcs.cpp          |    6 +
  src/items.cpp                     |   43 +
  src/light.cpp                     |    3 +
+ src/magic/castSpell.cpp           |    2 +
  src/maps.cpp                      |   34 +
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   10 +
  src/ui/MainMenu.cpp               |    5 +-
- 25 files changed, 6135 insertions(+), 4 deletions(-)
+ 27 files changed, 6353 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -1639,10 +1641,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..d1f31a4
+index 0000000..4b09f83
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,4243 @@
+@@ -0,0 +1,4341 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -1737,6 +1739,10 @@ index 0000000..d1f31a4
 +		int skill_checks = 0;         // 0 off, 1 any class, 2.. a class (Barony class index + 2)
 +		int skill_check_max_rank = 3; // 1 Basic .. 5 Legendary
 +		int lock_class = 0;
++		int spell_sanity = 0;         // spells are Archipelago items
++		int spell_upgrades = 0;       // extra copies make a spell stronger
++		int spellbook_checks = 0;     // reading each kind of spellbook is a check
++		int spell_dlc = 0;            // DLC class spells are in the pool too
 +		int floor_size_mask = 1;      // Floor Size: bit 1 Normal, 2 Bigger, 4 Much Bigger
 +		int boss_rush_mask = 7;       // Boss Rush: 1 Herx, 2 Devil, 4 Twin Liches
 +		int boss_rush_floors = 10;    // Boss Rush: dungeon floors before the rush
@@ -1897,6 +1903,7 @@ index 0000000..d1f31a4
 +	void giveCompassIfMissing();
 +	void launchTracker();
 +	void placeRushTownExit();
++	void syncSpells();
 +	int bossRushGoalMask();
 +	Uint32 g_stairsWarnedAt = 0;
 +	void readCheckpoint();
@@ -2207,6 +2214,10 @@ index 0000000..d1f31a4
 +		registerSlotInt("enemy_randomizer_secret", &SlotOptions::enemy_randomizer_secret);
 +		registerSlotInt("skill_check_max_rank", &SlotOptions::skill_check_max_rank);
 +		registerSlotInt("lock_class", &SlotOptions::lock_class);
++		registerSlotInt("spell_sanity", &SlotOptions::spell_sanity);
++		registerSlotInt("spell_upgrades", &SlotOptions::spell_upgrades);
++		registerSlotInt("spellbook_checks", &SlotOptions::spellbook_checks);
++		registerSlotInt("spell_dlc", &SlotOptions::spell_dlc);
 +		registerSlotInt("floor_size_mask", &SlotOptions::floor_size_mask);
 +		registerSlotInt("music_mods", &SlotOptions::music_mods);
 +		registerSlotInt("randomize_loot", &SlotOptions::randomize_loot);
@@ -2643,6 +2654,17 @@ index 0000000..d1f31a4
 +			{
 +				say(COLOR_AP, "Received %s.", itemName(g_received[i]));
 +			}
++			else if ( g_received[i] > ap_ids::BASE_ID + ap_ids::SPELL_ITEM_OFFSET
++				&& g_received[i] < ap_ids::BASE_ID + ap_ids::SPELL_ITEM_OFFSET + 1000 )
++			{
++				int id = (int)(g_received[i] - ap_ids::BASE_ID - ap_ids::SPELL_ITEM_OFFSET);
++				int copies = (int)std::count(g_received.begin(), g_received.begin() + i + 1, g_received[i]);
++				const char* name = "a spell";
++				for ( auto& sp : ap_ids::SPELLS ) { if ( sp.spell == id ) { name = sp.name; } }
++				if ( copies <= 1 ) { say(COLOR_AP, "Received the %s spell.", name); }
++				else { say(COLOR_AP, "Received %s: it's now +%d.", name, copies - 1); }
++				syncSpells();
++			}
 +			else if ( g_received[i] == ap_ids::ITEM_COMPASS )
 +			{
 +				say(COLOR_AP, "Received a Progressive Compass (%d).", (int)std::count(g_received.begin(), g_received.begin() + i + 1, g_received[i]));
@@ -2676,6 +2698,51 @@ index 0000000..d1f31a4
 +			}
 +		}
 +		if ( dirty ) { writeSave(); }
++	}
++
++	// ----------------------------------------------------------- Spell Sanity
++	const ap_ids::SpellEntry* sanitySpell(int spellID)
++	{
++		for ( auto& sp : ap_ids::SPELLS )
++		{
++			if ( sp.spell == spellID ) { return (!sp.dlc || g_slot.spell_dlc) ? &sp : nullptr; }
++		}
++		return nullptr;
++	}
++
++	int spellCopies(int spellID) { return countReceived(ap_ids::BASE_ID + ap_ids::SPELL_ITEM_OFFSET + spellID); }
++
++	bool knowsSpell(int player, int spellID)
++	{
++		if ( !players[player] ) { return false; }
++		for ( node_t* n = players[player]->magic.spellList.first; n; n = n->next )
++		{
++			spell_t* sp = (spell_t*)n->element;
++			if ( sp && sp->ID == spellID ) { return true; }
++		}
++		return false;
++	}
++
++	bool ownsAnyDlc() { return enabledDLCPack1 || enabledDLCPack2 || enabledDLCPack3; }
++
++	// Every spell received is known by the current character (taught again to each new one).
++	void syncSpells()
++	{
++		if ( !g_slot.spell_sanity || !inGame() ) { return; }
++		static bool warnedDlc = false;
++		for ( auto& sp : ap_ids::SPELLS )
++		{
++			if ( (sp.dlc && !g_slot.spell_dlc) || spellCopies(sp.spell) <= 0 ) { continue; }
++			if ( sp.dlc && !ownsAnyDlc() )
++			{
++				if ( !warnedDlc ) { warnedDlc = true; say(COLOR_AP, "DLC spells you receive need a Barony DLC to be learned."); }
++				continue;
++			}
++			for ( int p : activePlayers() )
++			{
++				if ( !knowsSpell(p, sp.spell) ) { addSpell(sp.spell, p, true); }
++			}
++		}
 +	}
 +
 +	// ----------------------------------------------------------- checks
@@ -4566,6 +4633,7 @@ index 0000000..d1f31a4
 +	applyNewItems();
 +	updatePendingTraps();
 +	syncPermanents();
++	if ( ticks % TICKS_PER_SECOND == 0 ) { syncSpells(); }
 +	if ( g_resumePending && !loadnextlevel && players[clientnum]->entity && stats[clientnum]->HP > 0 )
 +	{
 +		g_resumePending = false;
@@ -5797,6 +5865,38 @@ index 0000000..d1f31a4
 +	return true;
 +}
 +
++bool spellbookRead(Item* item, int player)
++{
++	// Returns true when the spellbook mustn't teach its spell (Spell Sanity: not received yet).
++	if ( !g_ready || !item || itemCategory(item) != SPELLBOOK || multiplayer == CLIENT ) { return false; }
++	int id = getSpellIDFromSpellbook(item->type);
++	const ap_ids::SpellEntry* sp = sanitySpell(id);
++	if ( !sp ) { return false; }
++	if ( g_slot.spellbook_checks && !sp->dlc )
++	{
++		int64_t loc = ap_ids::BASE_ID + ap_ids::SPELLBOOK_OFFSET + id;
++		if ( !isChecked(loc) )
++		{
++			sendLocation(loc);
++			say(COLOR_AP, "Read the %s spellbook: that's a check!", sp->name);
++		}
++	}
++	if ( g_slot.spell_sanity && spellCopies(id) <= 0 && !knowsSpell(player, id) )
++	{
++		messagePlayerColor(player, MESSAGE_HINT, COLOR_AP,
++			"You can't make sense of it yet. The %s spell has to come from the multiworld.", sp->name);
++		return true;
++	}
++	return false;
++}
++
++int spellUpgradeBonus(int spellID)
++{
++	// Spell Upgrades: each extra copy of a spell is +10% power, like a blessed +1 spellbook.
++	if ( !g_ready || !g_slot.spell_sanity || !sanitySpell(spellID) ) { return 0; }
++	return 10 * std::max(0, spellCopies(spellID) - 1);
++}
++
 +bool launcherGate()
 +{
 +#ifdef WINDOWS
@@ -5888,10 +5988,10 @@ index 0000000..d1f31a4
 +} // namespace AP
 diff --git a/src/archipelago_barony.hpp b/src/archipelago_barony.hpp
 new file mode 100644
-index 0000000..185908d
+index 0000000..0208f84
 --- /dev/null
 +++ b/src/archipelago_barony.hpp
-@@ -0,0 +1,123 @@
+@@ -0,0 +1,125 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client.
@@ -6008,6 +6108,8 @@ index 0000000..185908d
 +	const char* bossRushNextMap();  // Boss Rush: the map to load in place of this floor, or nullptr
 +	bool bossRushSkipVictory();
 +	bool bossRushHideMidPortal();   // Boss Rush: the last boss's arena only has the victory portal     // Boss Rush: true = this victory portal goes on to the next boss
++	bool spellbookRead(Item* item, int player); // Spell Sanity / Spellbook Checks; true = don't teach
++	int spellUpgradeBonus(int spellID);         // Spell Upgrades: extra spell power in percent
 +	bool launcherGate();        // start of main(): the launcher window first; false = quit
 +	bool holidayThemeAllowed(); // Barony's Halloween/Christmas themes, off unless archipelago.cfg says holiday_theme=1
 +
@@ -6017,10 +6119,10 @@ index 0000000..185908d
 +}
 diff --git a/src/archipelago_ids.hpp b/src/archipelago_ids.hpp
 new file mode 100644
-index 0000000..2fbe8d7
+index 0000000..f03bf2a
 --- /dev/null
 +++ b/src/archipelago_ids.hpp
-@@ -0,0 +1,134 @@
+@@ -0,0 +1,244 @@
 +// GENERATED by tools/gen_cpp_ids.py from apworld/barony/data.py. Do not edit by hand.
 +#pragma once
 +#include <cstdint>
@@ -6036,6 +6138,8 @@ index 0000000..2fbe8d7
 +constexpr int64_t BOSS_OFFSET = 700;
 +constexpr int64_t SPECIAL_OFFSET = 800;
 +constexpr int64_t SKILL_OFFSET = 900;
++constexpr int64_t SPELLBOOK_OFFSET = 1100;
++constexpr int64_t SPELL_ITEM_OFFSET = 100;
 +constexpr int MAX_FLOOR = 35;
 +constexpr int FLOORS_PER_SECTION = 5;
 +
@@ -6065,6 +6169,114 @@ index 0000000..2fbe8d7
 +constexpr int64_t ITEM_TRAP_HUNGER = 4270056; // Hunger Trap
 +constexpr int64_t ITEM_TRAP_DARKNESS = 4270057; // Darkness Trap
 +constexpr int64_t ITEM_TRAP_CURSE = 4270058; // Curse Trap
++constexpr int64_t ITEM_SPELL_FORCEBOLT = 4270101; // Forcebolt Spell
++constexpr int64_t ITEM_SPELL_MAGIC_MISSILE = 4270102; // Magic Missile Spell
++constexpr int64_t ITEM_SPELL_COLD = 4270103; // Cold Spell
++constexpr int64_t ITEM_SPELL_FIREBALL = 4270104; // Fireball Spell
++constexpr int64_t ITEM_SPELL_LIGHTNING = 4270105; // Lightning Spell
++constexpr int64_t ITEM_SPELL_REMOVE_CURSE = 4270106; // Remove Curse Spell
++constexpr int64_t ITEM_SPELL_LIGHT = 4270107; // Light Spell
++constexpr int64_t ITEM_SPELL_IDENTIFY = 4270108; // Identify Spell
++constexpr int64_t ITEM_SPELL_MAGIC_MAPPING = 4270109; // Magic Mapping Spell
++constexpr int64_t ITEM_SPELL_SLEEP = 4270110; // Sleep Spell
++constexpr int64_t ITEM_SPELL_CONFUSE = 4270111; // Confuse Spell
++constexpr int64_t ITEM_SPELL_SLOW = 4270112; // Slow Spell
++constexpr int64_t ITEM_SPELL_OPENING = 4270113; // Opening Spell
++constexpr int64_t ITEM_SPELL_LOCKING = 4270114; // Locking Spell
++constexpr int64_t ITEM_SPELL_LEVITATION = 4270115; // Levitation Spell
++constexpr int64_t ITEM_SPELL_INVISIBILITY = 4270116; // Invisibility Spell
++constexpr int64_t ITEM_SPELL_TELEPORTATION = 4270117; // Teleportation Spell
++constexpr int64_t ITEM_SPELL_HEALING = 4270118; // Healing Spell
++constexpr int64_t ITEM_SPELL_EXTRA_HEALING = 4270119; // Extra Healing Spell
++constexpr int64_t ITEM_SPELL_CURE_AILMENT = 4270120; // Cure Ailment Spell
++constexpr int64_t ITEM_SPELL_DIG = 4270121; // Dig Spell
++constexpr int64_t ITEM_SPELL_BLOODLETTING = 4270124; // Bloodletting Spell
++constexpr int64_t ITEM_SPELL_REFLECT_MAGIC = 4270126; // Reflect Magic Spell
++constexpr int64_t ITEM_SPELL_SPRAY_ACID = 4270127; // Spray Acid Spell
++constexpr int64_t ITEM_SPELL_REVERT_FORM = 4270132; // Revert Form Spell
++constexpr int64_t ITEM_SPELL_SPRAY_WEB = 4270137; // Spray Web Spell
++constexpr int64_t ITEM_SPELL_POISON = 4270138; // Poison Spell
++constexpr int64_t ITEM_SPELL_SPEED = 4270139; // Speed Spell
++constexpr int64_t ITEM_SPELL_FEAR = 4270140; // Fear Spell
++constexpr int64_t ITEM_SPELL_DETECT_FOOD = 4270142; // Detect Food Spell
++constexpr int64_t ITEM_SPELL_ELEMENTAL_FOCUS = 4270144; // Elemental Focus Spell
++constexpr int64_t ITEM_SPELL_ARCANE_MARK = 4270145; // Arcane Mark Spell
++constexpr int64_t ITEM_SPELL_TELEPORT_OTHER = 4270146; // Teleport Other Spell
++constexpr int64_t ITEM_SPELL_TROLL_S_BLOOD = 4270148; // Troll's Blood Spell
++constexpr int64_t ITEM_SPELL_SALVAGE = 4270149; // Salvage Spell
++constexpr int64_t ITEM_SPELL_FLUTTER = 4270150; // Flutter Spell
++constexpr int64_t ITEM_SPELL_DASH = 4270151; // Dash Spell
++constexpr int64_t ITEM_SPELL_POLYMORPH = 4270152; // Polymorph Spell
++constexpr int64_t ITEM_SPELL_CONJURE_SKELETON = 4270122; // Conjure Skeleton Spell
++constexpr int64_t ITEM_SPELL_STONE_BLOOD = 4270123; // Stone Blood Spell
++constexpr int64_t ITEM_SPELL_DOMINATE = 4270125; // Dominate Spell
++constexpr int64_t ITEM_SPELL_STEAL_WEAPON = 4270128; // Steal Weapon Spell
++constexpr int64_t ITEM_SPELL_DRAIN_SOUL = 4270129; // Drain Soul Spell
++constexpr int64_t ITEM_SPELL_VAMPIRIC_AURA = 4270130; // Vampiric Aura Spell
++constexpr int64_t ITEM_SPELL_CHARM_MONSTER = 4270131; // Charm Monster Spell
++constexpr int64_t ITEM_SPELL_RAT_FORM = 4270133; // Rat Form Spell
++constexpr int64_t ITEM_SPELL_ARTHROPOD_FORM = 4270134; // Arthropod Form Spell
++constexpr int64_t ITEM_SPELL_TROLL_FORM = 4270135; // Troll Form Spell
++constexpr int64_t ITEM_SPELL_IMP_FORM = 4270136; // Imp Form Spell
++constexpr int64_t ITEM_SPELL_POWER_STRIKE = 4270141; // Power Strike Spell
++constexpr int64_t ITEM_SPELL_WEAKNESS = 4270143; // Weakness Spell
++constexpr int64_t ITEM_SPELL_INNER_DEMON = 4270147; // Inner Demon Spell
++
++struct SpellEntry { int spell; const char* name; int depth; bool dlc; };
++static const SpellEntry SPELLS[] = {
++    { 1, "Forcebolt", 1, false },
++    { 2, "Magic Missile", 9, false },
++    { 3, "Cold", 6, false },
++    { 4, "Fireball", 11, false },
++    { 5, "Lightning", 11, false },
++    { 6, "Remove Curse", 9, false },
++    { 7, "Light", 0, false },
++    { 8, "Identify", 6, false },
++    { 9, "Magic Mapping", 9, false },
++    { 10, "Sleep", 6, false },
++    { 11, "Confuse", 4, false },
++    { 12, "Slow", 2, false },
++    { 13, "Opening", 4, false },
++    { 14, "Locking", 0, false },
++    { 15, "Levitation", 11, false },
++    { 16, "Invisibility", 15, false },
++    { 17, "Teleportation", 6, false },
++    { 18, "Healing", 6, false },
++    { 19, "Extra Healing", 11, false },
++    { 20, "Cure Ailment", 11, false },
++    { 21, "Dig", 9, false },
++    { 24, "Bloodletting", 22, false },
++    { 26, "Reflect Magic", 25, false },
++    { 27, "Spray Acid", 18, false },
++    { 32, "Revert Form", 15, false },
++    { 37, "Spray Web", 9, false },
++    { 38, "Poison", 6, false },
++    { 39, "Speed", 18, false },
++    { 40, "Fear", 25, false },
++    { 42, "Detect Food", 6, false },
++    { 44, "Elemental Focus", 30, false },
++    { 45, "Arcane Mark", 25, false },
++    { 46, "Teleport Other", 28, false },
++    { 48, "Troll's Blood", 4, false },
++    { 49, "Salvage", 28, false },
++    { 50, "Flutter", 8, false },
++    { 51, "Dash", 8, false },
++    { 52, "Polymorph", 18, false },
++    { 22, "Conjure Skeleton", 0, true },
++    { 23, "Stone Blood", 0, true },
++    { 25, "Dominate", 0, true },
++    { 28, "Steal Weapon", 0, true },
++    { 29, "Drain Soul", 0, true },
++    { 30, "Vampiric Aura", 0, true },
++    { 31, "Charm Monster", 0, true },
++    { 33, "Rat Form", 0, true },
++    { 34, "Arthropod Form", 0, true },
++    { 35, "Troll Form", 0, true },
++    { 36, "Imp Form", 0, true },
++    { 41, "Power Strike", 0, true },
++    { 43, "Weakness", 0, true },
++    { 47, "Inner Demon", 0, true },
++};
 +
 +struct MonsterEntry { int index; const char* name; int monster; int depth; bool early; };
 +struct BossEntry { int index; const char* name; int monster; int floor; };
@@ -6453,6 +6665,30 @@ index 15a5614..f1a73d4 100644
  	if ( item.type == SPELL_ITEM )
  	{
  		return ItemTooltips.getSpellIconPath(player, item, -1);
+diff --git a/src/item_usage_funcs.cpp b/src/item_usage_funcs.cpp
+index 02b85c1..676acaf 100644
+--- a/src/item_usage_funcs.cpp
++++ b/src/item_usage_funcs.cpp
+@@ -14,6 +14,7 @@
+ #include "game.hpp"
+ #include "stat.hpp"
+ #include "items.hpp"
++#include "archipelago_barony.hpp"
+ #include "engine/audio/sound.hpp"
+ #include "entity.hpp"
+ #include "magic/magic.hpp"
+@@ -6027,6 +6028,11 @@ void item_Spellbook(Item*& item, int player)
+ 
+ 	conductIlliterate = false;
+ 
++	if ( AP::spellbookRead(item, player) ) // Archipelago: Spell Sanity, Spellbook Checks
++	{
++		return;
++	}
++
+ 	if ( item->beatitude < 0 && !shouldInvertEquipmentBeatitude(stats[player]) )
+ 	{
+ 		messagePlayer(player, MESSAGE_INVENTORY, Language::get(971));
 diff --git a/src/items.cpp b/src/items.cpp
 index 879c6ea..56d293b 100644
 --- a/src/items.cpp
@@ -6549,6 +6785,26 @@ index f9102fe..f81e171 100644
          for (const auto& it : lights.GetObject()) {
              LightDef def;
              const auto& name = it.name.GetString();
+diff --git a/src/magic/castSpell.cpp b/src/magic/castSpell.cpp
+index 4d6eaf5..9d9879e 100644
+--- a/src/magic/castSpell.cpp
++++ b/src/magic/castSpell.cpp
+@@ -23,6 +23,7 @@
+ #include "../colors.hpp"
+ #include "../ui/MainMenu.hpp"
+ #include "magic.hpp"
++#include "../archipelago_barony.hpp"
+ #include "../prng.hpp"
+ #include "../mod_tools.hpp"
+ #include "../paths.hpp"
+@@ -680,6 +681,7 @@ Entity* castSpell(Uint32 caster_uid, spell_t* spell, bool using_magicstaff, bool
+ 
+ 			newbie = isSpellcasterBeginnerFromSpellbook(player, caster, stat, spell, stat->shield);
+ 		}
++		spellBookBonusPercent += AP::spellUpgradeBonus(spell->ID); // Archipelago: Spell Upgrades
+ 
+ 		/*magiccost = getCostOfSpell(spell);
+ 		if (magiccost < 0) {
 diff --git a/src/maps.cpp b/src/maps.cpp
 index 0ae7725..1147a23 100644
 --- a/src/maps.cpp

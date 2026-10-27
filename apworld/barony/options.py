@@ -723,6 +723,43 @@ class LockClass(DefaultOnToggle):
     display_name = "Lock Class"
 
 
+class SpellSanity(Toggle):
+    """
+    Spells become Archipelago items. Reading a spellbook doesn't teach you its spell until you've
+    received that spell; once you have it, every new character starts knowing it. The spells your
+    class starts with are always yours.
+    """
+    display_name = "Spell Sanity"
+
+
+class SpellUpgrades(Range):
+    """
+    Spell Sanity only: extra copies of each spell in the item pool. The first copy teaches the spell,
+    each extra one makes it permanently stronger (+10% power each, like a blessed +1 spellbook).
+    """
+    display_name = "Spell Upgrades"
+    range_start = 0
+    range_end = 2
+    default = 0
+
+
+class SpellbookChecks(Toggle):
+    """
+    Reading each kind of spellbook for the first time is a check (only spellbooks that turn up on the
+    floors you'll reach). Works with or without Spell Sanity.
+    """
+    display_name = "Spellbook Checks"
+
+
+class SpellSanityDLCSpells(Toggle):
+    """
+    Spell Sanity only: also adds the DLC classes' spells (Conjure Skeleton, Vampiric Aura, the
+    shapeshift forms, Inner Demon and more) as items. They're taught only if you own a Barony DLC on
+    Steam.
+    """
+    display_name = "DLC Spells"
+
+
 class SkillCheckMaxRank(Choice):
     """
     The highest skill rank that's a check. Higher ranks take a long time: Master and Legendary usually
@@ -942,6 +979,10 @@ class BaronyOptions(PerGameCommonOptions):
     skill_checks: SkillChecks
     skill_check_max_rank: SkillCheckMaxRank
     lock_class: LockClass
+    spell_sanity: SpellSanity
+    spell_upgrades: SpellUpgrades
+    spellbook_checks: SpellbookChecks
+    spell_sanity_dlc_spells: SpellSanityDLCSpells
     key_compass_time: KeyCompassTime
     floor_key_on_tracker_map: FloorKeyOnTrackerMap
     floor_key_requirement: FloorKeyRequirement
@@ -1002,7 +1043,8 @@ option_groups = [
         ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),
     OptionGroup("Dungeon", [FloorKeys, FloorKeyRequirement, Compass, CompassMode, CompassPingTime, CompassRecharge, KeyCompassTime, MinotaurTime, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemySeed, EnemyRandomizerSecretAreas, EnemyPool, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, DifficultyScaling, Difficulty]),
-    OptionGroup("Class & Skills", [SkillChecks, SkillCheckMaxRank, LockClass]),
+    OptionGroup("Class, Skills & Spells", [SkillChecks, SkillCheckMaxRank, LockClass, SpellSanity, SpellUpgrades,
+                                           SpellSanityDLCSpells, SpellbookChecks]),
     OptionGroup("Lives & Checkpoints", [Lives, ExtraLivesInPool, CheckpointInterval]),
     OptionGroup("Filler", [XPBoostWeight, GoldPouchWeight, HealingPotionWeight, FoodRationWeight, RandomItemWeight]),
     OptionGroup("Traps", [TrapChance, MinotaurTrapWeight, AmbushTrapWeight, PolymorphTrapWeight, FumbleTrapWeight, BlindnessTrapWeight, TeleportTrapWeight, HungerTrapWeight, DarknessTrapWeight, CurseTrapWeight,
