@@ -20,11 +20,6 @@ Barony:
   boss_checks: true
   special_area_checks: false
 
-  # Skills
-  skill_checks: off
-  skill_check_max_rank: expert
-  lock_class: true
-
   # Dungeon
   floor_keys: true
   floor_key_requirement: key_only
@@ -47,25 +42,22 @@ Barony:
   difficulty_scaling: true
   difficulty: normal
 
-  # Extras
-  floor_size:
-  - Normal
-  extra_monsters: 0
-  randomize_loot: same_kind
-  music_mods: mixed
+  # Class & Skills
+  skill_checks: off
+  skill_check_max_rank: expert
+  lock_class: true
 
   # Lives & Checkpoints
   lives: 5
   extra_lives_in_pool: 2
   checkpoint_interval: every_5_floors
 
-  # Death Link
-  death_link: true
-  death_link_mode: restart_floor
-  death_penalty: none
-  death_items: floor_start
-  floor_restart: new_layout
-  boss_death: keep_damage
+  # Filler
+  xp_boost_weight: 30
+  gold_pouch_weight: 25
+  healing_potion_weight: 20
+  food_ration_weight: 15
+  random_item_weight: 10
 
   # Traps
   trap_chance: 50
@@ -81,12 +73,20 @@ Barony:
   polymorph_trap_duration: 30
   blindness_trap_duration: 15
 
-  # Filler
-  xp_boost_weight: 30
-  gold_pouch_weight: 25
-  healing_potion_weight: 20
-  food_ration_weight: 15
-  random_item_weight: 10
+  # Death Link
+  death_link: true
+  death_link_mode: restart_floor
+  death_penalty: none
+  death_items: floor_start
+  floor_restart: new_layout
+  boss_death: keep_damage
+
+  # Extras
+  floor_size:
+  - Normal
+  extra_monsters: 0
+  randomize_loot: same_kind
+  music_mods: mixed
 
   # Players
   players: 1
