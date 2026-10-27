@@ -67,6 +67,7 @@ namespace AP
 
 	// The Archipelago item (floor pickups and shop items) and its own logo model and icon.
 	bool isApItem(const Item* item);
+	bool isFloorKey(const Item* item);  // this floor's Floor Key (a marked skeleton key)
 	int apItemModel();                 // model index, or -1 if the model didn't load
 	const char* apItemIconPath();
 	const char* apItemName(bool withArticle);

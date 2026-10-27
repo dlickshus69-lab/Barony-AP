@@ -25,12 +25,6 @@ shop items, a Minotaur and bosses before your goal, and (optional) secret areas.
 
 ## Items
 
-Progressive Stair Keys (optional), Extra Life, permanent stat items, Max HP Up, Starting Gold Bonus,
+Extra Life, permanent stat items, Max HP Up, Starting Gold Bonus,
 XP Boost, Gold Pouch, Healing Potion, Food Ration, Random Item, and the Minotaur, Ambush, Polymorph,
 Fumble, Blindness, Teleport, Hunger, Darkness and Curse traps.
-
-## Credits
-
-- The Archipelago item's model and icon are made from the Archipelago logo
-  (`data/icon.png` in https://github.com/ArchipelagoMW/Archipelago, MIT License).
-- Barony is by Turning Wheel LLC, open source under the GPLv3.

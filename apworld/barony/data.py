@@ -201,7 +201,7 @@ class ItemInfo(NamedTuple):
 
 ITEMS: dict[str, ItemInfo] = {
     # progression
-    "Progressive Stair Key": ItemInfo(1, "progression", "STAIR_KEY"),
+    "Progressive Stair Key": ItemInfo(1, "progression", "STAIR_KEY"),  # no longer placed (Floor Keys replaced it)
 
     # useful: permanent, applied to every new run
     "Extra Life": ItemInfo(10, "useful", "EXTRA_LIFE"),

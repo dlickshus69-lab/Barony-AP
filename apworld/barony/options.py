@@ -162,13 +162,14 @@ class SpecialAreaChecks(Toggle):
 
 
 # ---------------------------------------------------------------- progression
-class StairKeys(Toggle):
+class FloorKeys(DefaultOnToggle):
     """
-    Adds Progressive Stair Keys. Each key opens the stairs down into the next section of
-    5 floors, so you can only go as deep as your keys allow.
+    Every floor from floor 1 on has a Floor Key hidden somewhere on it, and the stairs down stay locked
+    until you find it. It's part of your own game only: it is never an Archipelago item, nobody can send
+    it to you, and you never wait on another game for it. The starting floor, secret areas and boss
+    floors don't have one. If you die and the floor restarts, a key you already found stays found.
     """
-    display_name = "Stair Keys"
-
+    display_name = "Floor Keys"
 
 class FloorShuffle(Choice):
     """
@@ -651,7 +652,7 @@ class BaronyOptions(PerGameCommonOptions):
     shop_checks: ShopChecks
     boss_checks: BossChecks
     special_area_checks: SpecialAreaChecks
-    stair_keys: StairKeys
+    floor_keys: FloorKeys
     floor_shuffle: FloorShuffle
     layout_seed: LayoutSeed
     enemy_randomizer: EnemyRandomizer
@@ -699,7 +700,7 @@ option_groups = [
         EnemySanityPerFloor, BestiaryChecks,
         ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),
-    OptionGroup("Dungeon", [StairKeys, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemyPool, EnemySeed, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, MinotaurTime, DifficultyScaling, Difficulty]),
+    OptionGroup("Dungeon", [FloorKeys, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemyPool, EnemySeed, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, MinotaurTime, DifficultyScaling, Difficulty]),
     OptionGroup("Lives & Checkpoints", [Lives, ExtraLivesInPool, CheckpointInterval]),
     OptionGroup("Death Link", [BaronyDeathLink, DeathLinkMode, DeathPenalty, DeathItems, FloorRestart, BossDeath]),
     OptionGroup("Traps", [TrapChance, MinotaurTrapWeight, AmbushTrapWeight, PolymorphTrapWeight, FumbleTrapWeight, BlindnessTrapWeight, TeleportTrapWeight, HungerTrapWeight, DarknessTrapWeight, CurseTrapWeight,

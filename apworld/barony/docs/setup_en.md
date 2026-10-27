@@ -13,7 +13,7 @@ Double-click `barony.apworld`, or copy it into the `custom_worlds` folder of you
 ## Making your YAML
 
 Open the Archipelago Launcher, choose **Generate Template Options**, and edit `Barony.yaml`.
-The main choices are your goal, how often floors give checks, Stair Keys, floor shuffle, lives and traps.
+The main choices are your goal, how often floors give checks, Floor Keys, floor shuffle, lives and traps.
 
 ## Connecting
 
@@ -32,5 +32,5 @@ Connect before you start or continue a run, so floor shuffle is in place when th
 
 ## Useful chat commands
 
-- `/ap_status`: connection, Stair Keys, lives, kills and queued traps
+- `/ap_status`: connection, lives, kills and queued traps
 - `/ap_say message`: chat with the room

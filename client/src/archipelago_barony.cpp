@@ -79,7 +79,8 @@ namespace
 		int shop_checks = 0;
 		int boss_checks = 0;
 		int special_area_checks = 0;
-		int stair_keys = 0;
+		int stair_keys = 0;           // old seeds only
+		int floor_keys = 0;           // a key on every floor opens its stairs
 		int floor_shuffle = 0;        // 0 off, 1 sections, 2 full
 		int floor_shuffle_seed = 0;
 		int difficulty_scaling = 1;
@@ -483,6 +484,7 @@ namespace
 		registerSlotInt("boss_checks", &SlotOptions::boss_checks);
 		registerSlotInt("special_area_checks", &SlotOptions::special_area_checks);
 		registerSlotInt("stair_keys", &SlotOptions::stair_keys);
+		registerSlotInt("floor_keys", &SlotOptions::floor_keys);
 		registerSlotInt("floor_shuffle", &SlotOptions::floor_shuffle);
 		registerSlotInt("floor_shuffle_seed", &SlotOptions::floor_shuffle_seed);
 		registerSlotInt("difficulty_scaling", &SlotOptions::difficulty_scaling);
@@ -1212,6 +1214,147 @@ namespace
 		return false;
 	}
 
+	// ----------------------------------------------------------- Floor Keys
+	// Every floor from floor 1 has a key somewhere on it; the stairs stay locked until it's found.
+	// It's part of this game only: never an Archipelago item.
+	constexpr ItemType FLOOR_KEY_TYPE = TOOL_SKELETONKEY;
+	constexpr Uint32 FLOOR_KEY_APPEARANCE = 0x464B4559; // "FKEY"
+	bool g_floorKeyFound = false;
+	bool g_floorNeedsKey = false;
+
+	bool isFloorKeyEntity(Entity* e)
+	{
+		return e && e->behavior == &actItem && e->skill[10] == FLOOR_KEY_TYPE && (Uint32)e->skill[14] == FLOOR_KEY_APPEARANCE;
+	}
+
+	bool isSpecialMap()
+	{
+		static const char* const SKIP[] = { "Boss", "Hell Boss", "Sanctum", "Hamlet", "Tutorial" };
+		for ( const char* name : SKIP )
+		{
+			if ( !strncmp(map.name, name, strlen(name)) ) { return true; }
+		}
+		return false;
+	}
+
+	bool floorUsesKey()
+	{
+		return g_slot.floor_keys && currentlevel >= 1 && !secretlevel && !isSpecialMap();
+	}
+
+	// A spot the player can walk to from where they stand (doors count as open; walls, chasms and lava
+	// don't), preferring ones far away.
+	bool findReachableSpot(int& outX, int& outY)
+	{
+		Entity* pl = players[clientnum] ? players[clientnum]->entity : nullptr;
+		if ( !pl || !map.tiles || map.width <= 0 || map.height <= 0 ) { return false; }
+		const int w = map.width, h = map.height;
+		auto walkable = [&](int x, int y) {
+			int index = y * MAPLAYERS + x * MAPLAYERS * h;
+			if ( !map.tiles[index] ) { return false; }
+			if ( lavatiles && lavatiles[map.tiles[index]] ) { return false; }
+			return map.tiles[OBSTACLELAYER + index] == 0;
+		};
+		int sx = (int)(pl->x / 16), sy = (int)(pl->y / 16);
+		if ( sx < 0 || sy < 0 || sx >= w || sy >= h ) { return false; }
+		std::vector<int> dist(w * h, -1);
+		std::vector<int> queue;
+		queue.push_back(sx + sy * w);
+		dist[sx + sy * w] = 0;
+		for ( size_t q = 0; q < queue.size(); ++q )
+		{
+			int cx = queue[q] % w, cy = queue[q] / w;
+			const int dx[] = { 1, -1, 0, 0 }, dy[] = { 0, 0, 1, -1 };
+			for ( int k = 0; k < 4; ++k )
+			{
+				int nx = cx + dx[k], ny = cy + dy[k];
+				if ( nx < 0 || ny < 0 || nx >= w || ny >= h || dist[nx + ny * w] >= 0 ) { continue; }
+				if ( !walkable(nx, ny) ) { continue; }
+				dist[nx + ny * w] = dist[queue[q]] + 1;
+				queue.push_back(nx + ny * w);
+			}
+		}
+		// Candidates: reachable, dry, not in a shop, nothing in the way. Far ones first.
+		std::vector<int> far, near;
+		int maxDist = 0;
+		for ( int c : queue ) { maxDist = std::max(maxDist, dist[c]); }
+		for ( int c : queue )
+		{
+			int x = c % w, y = c / w;
+			int index = y * MAPLAYERS + x * MAPLAYERS * h;
+			if ( swimmingtiles && swimmingtiles[map.tiles[index]] ) { continue; }
+			if ( shoparea && shoparea[y + x * h] ) { continue; }
+			if ( dist[c] < 5 ) { continue; }
+			if ( checkObstacle((x << 4) + 8, (y << 4) + 8, nullptr, nullptr) ) { continue; }
+			(dist[c] >= maxDist / 2 ? far : near).push_back(c);
+		}
+		std::vector<int>& pick = !far.empty() ? far : near;
+		if ( pick.empty() ) { return false; }
+		int c = pick[local_rng.rand() % pick.size()];
+		outX = c % w; outY = c / w;
+		return true;
+	}
+
+	void spawnFloorKey()
+	{
+		int x, y;
+		if ( !findReachableSpot(x, y) )
+		{
+			g_floorKeyFound = true; // nowhere to put it: the stairs stay open
+			printlog("[Archipelago] No spot for the Floor Key on this floor; stairs left open.");
+			return;
+		}
+		Entity* entity = newEntity(-1, 1, map.entities, nullptr);
+		entity->flags[INVISIBLE] = true;
+		entity->flags[UPDATENEEDED] = true;
+		entity->x = x * 16 + 8;
+		entity->y = y * 16 + 8;
+		entity->sizex = 4;
+		entity->sizey = 4;
+		entity->yaw = (local_rng.rand() % 360) * PI / 180.0;
+		entity->vel_z = -.5;
+		entity->flags[PASSABLE] = true;
+		entity->flags[USERFLAG1] = true;
+		entity->behavior = &actItem;
+		entity->skill[10] = FLOOR_KEY_TYPE;
+		entity->skill[11] = EXCELLENT;
+		entity->skill[12] = 0;
+		entity->skill[13] = 1;
+		entity->skill[14] = FLOOR_KEY_APPEARANCE;
+		entity->skill[15] = 1;
+	}
+
+	// Picked up? Then the stairs open. Lost (a monster took it, it fell somewhere)? Put out a new one.
+	void updateFloorKey()
+	{
+		if ( !g_floorNeedsKey || g_floorKeyFound ) { return; }
+		for ( int p = 0; p < MAXPLAYERS; ++p )
+		{
+			if ( client_disconnected[p] || !stats[p] ) { continue; }
+			for ( node_t* node = stats[p]->inventory.first; node; node = node->next )
+			{
+				Item* it = (Item*)node->element;
+				if ( it && it->type == FLOOR_KEY_TYPE && it->appearance == FLOOR_KEY_APPEARANCE )
+				{
+					list_RemoveNode(node);
+					g_floorKeyFound = true;
+					messagePlayerColor(p, MESSAGE_HINT, makeColorRGB(120, 230, 120), "You found the Floor Key! The stairs down are open.");
+					addLog("Found the Floor Key.", makeColorRGB(120, 230, 120));
+					playSound(91, 64);
+					return;
+				}
+			}
+		}
+		if ( map.entities )
+		{
+			for ( node_t* node = map.entities->first; node; node = node->next )
+			{
+				if ( isFloorKeyEntity((Entity*)node->element) ) { return; }
+			}
+		}
+		spawnFloorKey(); // gone from the floor without being found
+	}
+
 	void spawnFloorPickups()
 	{
 		if ( g_slot.archipelago_pickups <= 0 || currentlevel < 1 ) { return; } // none on the starting floor
@@ -1640,6 +1783,13 @@ namespace
 		sendSpecialAreaCheck();
 		spawnFloorPickups();
 		giveSecretAreaTools();
+		if ( !restarted ) { g_floorKeyFound = false; }
+		g_floorNeedsKey = floorUsesKey();
+		if ( g_floorNeedsKey && !g_floorKeyFound )
+		{
+			spawnFloorKey();
+			if ( !g_floorKeyFound ) { say(COLOR_AP, "Find this floor's Floor Key to open the stairs down."); }
+		}
 		pickMarkedEnemies();
 		if ( g_markedThisFloor > 0 )
 		{
@@ -1729,7 +1879,7 @@ namespace
 		{
 			Entity* e = (Entity*)node->element;
 			if ( !e ) { continue; }
-			if ( e->behavior == &actItem && e->skill[10] != AP_ITEM_TYPE )
+			if ( e->behavior == &actItem && e->skill[10] != AP_ITEM_TYPE && !isFloorKeyEntity(e) )
 			{
 				int type = e->skill[10];
 				if ( type >= 0 && type < NUMITEMS )
@@ -1817,6 +1967,7 @@ namespace
 		out << "pickups_left=" << uncheckedCount(ap_ids::PICKUP_OFFSET, g_slot.archipelago_pickups) << "\n";
 		out << "deaths_total=" << totalDeaths() << "\n";
 		out << "minotaur=" << g_minotaurSecs << "\n";
+		out << "floorkey=" << (!g_floorNeedsKey ? 2 : g_floorKeyFound ? 1 : 0) << "\n";
 		{
 			int per = std::max(1, g_slot.kill_check_interval);
 			out << "es_mode=" << g_slot.enemy_sanity << "\nes_left=" << uncheckedCount(ap_ids::KILL_OFFSET, g_slot.kill_checks)
@@ -1991,6 +2142,7 @@ void tick()
 		g_floorCounts = countFloor();
 		g_loot = countLoot();
 		updateMinotaurStatus();
+		updateFloorKey();
 	}
 }
 
@@ -2352,6 +2504,11 @@ void onPlayerDied(int player)
 bool canDescend(int player)
 {
 	if ( !g_ready || multiplayer == CLIENT ) { return true; }
+	if ( g_floorNeedsKey && !g_floorKeyFound )
+	{
+		messagePlayerColor(player, MESSAGE_HINT, COLOR_AP, "The stairs are locked. Find this floor's Floor Key first.");
+		return false;
+	}
 	// Warn once before leaving a floor with Archipelago things still on it; using the stairs again leaves.
 	FloorCounts c = countFloor();
 	if ( c.total() > 0 && (g_stairsWarnedAt == 0 || ticks - g_stairsWarnedAt > TICKS_PER_SECOND * 15) )
@@ -2464,6 +2621,11 @@ namespace
 		if ( title ) { SDL_FreeSurface(title); }
 		if ( patch ) { SDL_FreeSurface(patch); }
 	}
+}
+
+bool isFloorKey(const Item* item)
+{
+	return item && item->type == FLOOR_KEY_TYPE && item->appearance == FLOOR_KEY_APPEARANCE;
 }
 
 const char* titleImagePath()
@@ -2744,6 +2906,11 @@ void drawHud()
 			drawText("The Minotaur is hunting you!", BIG_FONT, makeColorRGB(255, 70, 60), 38, row);
 			row += 22;
 		}
+		if ( g_floorNeedsKey && !g_floorKeyFound )
+		{
+			drawText("Find the Floor Key", HUD_FONT, makeColorRGB(255, 200, 90), 38, row);
+			row += 18;
+		}
 		// Key hint: only for the first moments of a floor, so the corner stays clean.
 		if ( g_logPanel == 0 && ticks - g_floorStartTicks < (Uint32)(TICKS_PER_SECOND * 12) )
 		{
@@ -2830,7 +2997,7 @@ std::string statusLine()
 	if ( !g_started ) { return "Archipelago: not connected. Use /ap_connect host:port slot [password]."; }
 	if ( !g_ready ) { return "Archipelago: connecting to " + g_server + "..."; }
 	char buf[256];
-	snprintf(buf, sizeof(buf), "Archipelago: %s as %s | keys %d | lives %d | kills %ld | queued: %d Minotaur, %d darkness",
+	snprintf(buf, sizeof(buf), "Archipelago: %s as %s | stair keys %d | lives %d | kills %ld | queued: %d Minotaur, %d darkness",
 		isConnected() ? "connected" : "reconnecting", g_slotName.c_str(), countReceived(ap_ids::ITEM_STAIR_KEY),
 		g_save.livesLeft, g_save.totalKills, g_save.minotaurQueue, g_save.darknessQueue);
 	return buf;

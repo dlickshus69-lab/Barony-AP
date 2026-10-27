@@ -183,17 +183,11 @@ class BaronyWorld(World):
             self.multiworld.regions.append(region)
             sections.append(region)
 
-        use_keys = bool(self.options.stair_keys)
+        # Floor Keys are found on each floor in your own game, so the stairs need nothing from the
+        # multiworld.
         hamlet.connect(sections[0], "Enter the Dungeon")
         for s in range(1, len(sections)):
-            keys_needed = s  # section s+1 (1-based) needs s keys
-            if use_keys:
-                sections[s - 1].connect(
-                    sections[s], f"Stairs to section {s + 1}",
-                    lambda state, n=keys_needed: state.has("Progressive Stair Key", self.player, n),
-                )
-            else:
-                sections[s - 1].connect(sections[s], f"Stairs to section {s + 1}")
+            sections[s - 1].connect(sections[s], f"Stairs to section {s + 1}")
 
         for name, floor in self._planned_locations():
             region = sections[data.section_of_floor(floor) - 1]
@@ -244,44 +238,10 @@ class BaronyWorld(World):
         names = list(weights)
         return self.random.choices(names, weights=[weights[n] for n in names])[0]
 
-    def _keys_to_precollect(self) -> int:
-        """
-        How many Stair Keys to hand out at the start so the rest can always be placed.
-        With few checks (say every 10th floor only), the first sections may hold fewer
-        locations than the keys that open the next ones.
-        """
-        counts = [0] * (self.num_sections + 1)  # locations per section, 1-based
-        for _, floor in self._planned_locations():
-            counts[data.section_of_floor(floor)] += 1
-        keys = self.num_sections - 1
-        for start in range(keys + 1):
-            ok = True
-            open_spots = sum(counts[1:start + 2])
-            for j in range(keys - start):
-                # Placing the (j+1)-th remaining key needs j+1 spots in the sections open so far.
-                if open_spots < j + 1:
-                    ok = False
-                    break
-                open_spots += counts[start + 2 + j] if start + 2 + j <= self.num_sections else 0
-            if ok:
-                return start
-        return keys
-
     def create_items(self) -> None:
         total = len(self.multiworld.get_unfilled_locations(self.player))
 
         required: list[str] = []
-        if self.options.stair_keys:
-            keys = self.num_sections - 1
-            given = self._keys_to_precollect()
-            if given:
-                logger.warning(
-                    f"Barony ({self.player_name}): too few early checks for every Stair Key; "
-                    f"starting with {given} of them."
-                )
-                for _ in range(given):
-                    self.push_precollected(self.create_item("Progressive Stair Key"))
-            required += ["Progressive Stair Key"] * (keys - given)
 
         useful: list[str] = ["Extra Life"] * self.options.extra_lives_in_pool.value
         useful += data.PERMANENT_STAT_ITEMS
@@ -317,7 +277,8 @@ class BaronyWorld(World):
             "shop_checks": self.shop_count,
             "boss_checks": int(bool(o.boss_checks)),
             "special_area_checks": int(bool(o.special_area_checks)),
-            "stair_keys": int(bool(o.stair_keys)),
+            "stair_keys": 0,
+            "floor_keys": int(bool(o.floor_keys)),
             "floor_shuffle": o.floor_shuffle.value,
             "floor_shuffle_seed": self.floor_shuffle_seed,
             "difficulty_scaling": int(bool(o.difficulty_scaling)),

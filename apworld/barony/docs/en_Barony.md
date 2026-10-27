@@ -23,11 +23,16 @@ Defeat Baron Herx, the Devil, or the twin liches of the Sanctum, depending on yo
 
 ## What items can I receive?
 
-- **Progressive Stair Key** (optional): each one opens the next 5-floor section of the dungeon.
 - **Extra Life**: adds a life to your current run.
 - **Permanent stat items**, **Max HP Up**, **Starting Gold Bonus**
 - **Filler**: XP Boost, Gold Pouch, Healing Potion, Food Ration, Random Item
 - **Traps**: Minotaur, Ambush, Polymorph, Fumble, Blindness, Teleport, Hunger, Darkness, Curse
+
+## How do Floor Keys work?
+
+With Floor Keys on, every floor from floor 1 has a key lying somewhere you can walk to. The stairs down
+stay locked until you pick it up. It's only part of your own game: never an Archipelago item, so you
+never wait on someone else for it. The starting floor, secret areas and boss floors don't need one.
 
 ## How does the Minotaur Trap work?
 

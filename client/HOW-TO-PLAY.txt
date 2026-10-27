@@ -22,7 +22,7 @@ In game:
   (close it any time; it opens again the next time you start Barony).
 
 Chat commands (type in the in-game chat):
-  /ap_status    connection, Stair Keys, lives, kills, waiting traps
+  /ap_status    connection, lives, kills, waiting traps
   /ap_connect host:port slot [password]   connect by hand
   /ap_say text  chat with the room
 

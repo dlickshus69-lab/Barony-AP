@@ -21,7 +21,7 @@ Barony:
   special_area_checks: false
 
   # Dungeon
-  stair_keys: true
+  floor_keys: true
   floor_shuffle: full
   layout_seed: locked
   enemy_randomizer: off
