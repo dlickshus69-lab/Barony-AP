@@ -38,9 +38,9 @@ Barony:
   music_seed: locked
   enemy_level_scaling: off
   boss_level_scaling: off
-  minotaur_time: 100
   difficulty_scaling: true
   difficulty: normal
+  minotaur_time: 100
 
   # Extras
   floor_size: normal
