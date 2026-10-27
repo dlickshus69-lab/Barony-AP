@@ -477,7 +477,7 @@ namespace
 		std::vector<std::string> rows;
 		bool hasPlayer = false;
 		double px = 0, py = 0, pyaw = 0;
-		std::vector<MapPoint> ap, foes, chests, stairs, secrets;
+		std::vector<MapPoint> ap, foes, chests, stairs, secrets, bounties;
 		bool hasKey = false;
 		double kx = 0, ky = 0;
 		bool locked = false;
@@ -535,6 +535,7 @@ namespace
 			else if ( k == "player" ) { m.hasPlayer = true; m.px = d(0); m.py = d(1); m.pyaw = d(2); }
 			else if ( k == "ap" ) { m.ap.push_back({ d(0), d(1), f.size() > 2 ? f[2] : "" }); }
 			else if ( k == "foe" ) { m.foes.push_back({ d(0), d(1), "" }); }
+			else if ( k == "bounty" ) { m.bounties.push_back({ d(0), d(1), "" }); }
 			else if ( k == "chest" ) { m.chests.push_back({ d(0), d(1), "" }); }
 			else if ( k == "stairs" ) { m.stairs.push_back({ d(0), d(1), "" }); }
 			else if ( k == "secret" ) { m.secrets.push_back({ d(0), d(1), "" }); }
@@ -789,6 +790,15 @@ namespace
 			g.FillPolygon(&body, pts, 4);
 			g.DrawPolygon(&black, pts, 4);
 		}
+		for ( auto& f : g_map.bounties )
+		{
+			// A bounty: a bigger gold diamond.
+			float r = icon * 0.55f, cx = sx(f.x), cy = sy(f.y);
+			Gdiplus::PointF pts[4] = { { cx, cy - r }, { cx + r, cy }, { cx, cy + r }, { cx - r, cy } };
+			Gdiplus::SolidBrush body(Gdiplus::Color(255, 255, 200, 90));
+			g.FillPolygon(&body, pts, 4);
+			g.DrawPolygon(&black, pts, 4);
+		}
 		if ( g_map.hasKey )
 		{
 			float cx = sx(g_map.kx), cy = sy(g_map.ky);
@@ -824,7 +834,7 @@ namespace
 		SelectClipRgn(dc, nullptr);
 		// Legend under the map.
 		int ly = area.bottom - legendH - 4;
-		text(dc, area.left + 16, ly, L"Wheel: zoom   Drag: move   F: follow   R: fit   Hover a pile to see it", DIM, g_bodyFont);
+		text(dc, area.left + 16, ly, L"Wheel: zoom   Drag: move   F: follow   R: fit   Gold diamond: bounty", DIM, g_bodyFont);
 
 		// Hovering a pile: what's in it.
 		const MapPile* hp = pileAt(g_hoverX, g_hoverY);
@@ -982,6 +992,11 @@ namespace
 				else if ( mino == -2 )
 				{
 					text(dc, 14, y, L"The Minotaur is hunting you!", BAD, g_bodyFont);
+					y += 24;
+				}
+				if ( !g_state.values["bounty"].empty() )
+				{
+					text(dc, 14, y, L"Bounty: " + widen(g_state.values["bounty"]) + L" (glowing gold)", GOLD, g_bodyFont);
 					y += 24;
 				}
 				if ( num("secretarea") )

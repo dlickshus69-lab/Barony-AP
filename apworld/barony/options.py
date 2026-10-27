@@ -466,6 +466,35 @@ class ExtraMonsters(Range):
     default = 0
 
 
+class BountyEnemies(Toggle):
+    """
+    On some floors one enemy glows gold: a bounty. It's tougher (more health, a few levels higher)
+    and drops extra gold and a bonus item when you defeat it. It shows on the tracker map too.
+    """
+    display_name = "Bounty Enemies"
+
+
+class BountyChance(Range):
+    """
+    Bounty Enemies only: the chance (in percent) that a floor has a bounty.
+    """
+    display_name = "Bounty Chance"
+    range_start = 10
+    range_end = 100
+    default = 50
+
+
+class BountyChecks(Range):
+    """
+    Bounty Enemies only: the first this many bounties you defeat (counted across runs) are checks.
+    0 = bounties give their reward but no checks.
+    """
+    display_name = "Bounty Checks"
+    range_start = 0
+    range_end = 30
+    default = 5
+
+
 class RandomizeLoot(Choice):
     """
     Rerolls the ordinary loot: what's in chests, what shopkeepers sell, and items lying on the floor.
@@ -999,6 +1028,9 @@ class BaronyOptions(PerGameCommonOptions):
     enemy_seed: EnemySeed
     music_shuffle: MusicShuffle
     music_seed: MusicSeed
+    bounty_enemies: BountyEnemies
+    bounty_chance: BountyChance
+    bounty_checks: BountyChecks
     randomize_loot: RandomizeLoot
     music_mods: MusicMods
     extra_monsters: ExtraMonsters
@@ -1050,7 +1082,7 @@ option_groups = [
     OptionGroup("Traps", [TrapChance, MinotaurTrapWeight, AmbushTrapWeight, PolymorphTrapWeight, FumbleTrapWeight, BlindnessTrapWeight, TeleportTrapWeight, HungerTrapWeight, DarknessTrapWeight, CurseTrapWeight,
                           PolymorphTrapDuration, BlindnessTrapDuration]),
     OptionGroup("Death Link", [BaronyDeathLink, DeathLinkMode, DeathPenalty, DeathItems, FloorRestart, BossDeath]),
-    OptionGroup("Extras", [FloorSize, ExtraMonsters, RandomizeLoot, MusicMods]),
+    OptionGroup("Extras", [FloorSize, ExtraMonsters, BountyEnemies, BountyChance, BountyChecks, RandomizeLoot, MusicMods]),
     OptionGroup("Quality of Life", [FloorKeyOnTrackerMap]),
     OptionGroup("Players", [Players]),
 ]

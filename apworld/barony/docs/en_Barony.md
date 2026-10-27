@@ -25,6 +25,13 @@ starting spells are always yours). Spell Upgrades adds extra copies that make a 
 Spells adds the DLC classes' spells (taught if you own a DLC), and Spellbook Checks makes reading each
 kind of spellbook a check.
 
+Bounty Enemies (optional): on some floors one enemy glows gold. It's tougher, and defeating it gives
+extra gold and a bonus item; the first few (Bounty Checks) are checks too.
+
+The Hall of Fame (F5 in game, and shown by itself in the starting area) keeps every run on this seed:
+runs and wins, deepest floor, fastest win, fewest lives lost in a win, most kills and gold, and your
+last five runs.
+
 Randomize Loot (optional) rerolls the ordinary loot in chests, shops and on the floor: Same Kind keeps
 each item's kind (a potion becomes a different potion), Anything lets it become any item.
 

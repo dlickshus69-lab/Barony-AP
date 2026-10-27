@@ -31,6 +31,7 @@ In game:
   Top left   Archipelago status, and how many Archipelago things are left on this floor
   Top right  lives, and the skull with the total death count
   F1  items you received      F2  full log      F3  deaths per player
+  F5  Hall of Fame: your best runs on this seed (it also shows at the start of each run)
   F4  tracker: full or short list of the normal loot on the floor (also L or a click in the tracker)
   BaronyAPTracker.exe opens by itself when you connect: a window with the same information
   (close it any time; it opens again the next time you start Barony).

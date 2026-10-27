@@ -92,6 +92,9 @@ namespace
 		int skill_checks = 0;         // 0 off, 1 any class, 2.. a class (Barony class index + 2)
 		int skill_check_max_rank = 3; // 1 Basic .. 5 Legendary
 		int lock_class = 0;
+		int bounty_enemies = 0;       // a gold-glowing, tougher enemy on some floors
+		int bounty_chance = 50;       // percent of floors with a bounty
+		int bounty_checks = 0;        // the first N bounty kills are checks
 		int spell_sanity = 0;         // spells are Archipelago items
 		int spell_upgrades = 0;       // extra copies make a spell stronger
 		int spellbook_checks = 0;     // reading each kind of spellbook is a check
@@ -143,6 +146,12 @@ namespace
 		int darknessQueue = 0;
 		int goalBossesKilled = 0;     // bit per goal boss
 		bool goalSent = false;
+		long bountyKills = 0;         // bounty enemies defeated (all runs)
+		// Hall of Fame: this run so far, and every run before ("deepest,kills,livesLost,gold,seconds,result")
+		bool runActive = false;
+		int runDeepest = 0, runKills = 0, runLivesLost = 0;
+		long runGoldMax = 0, runStartPlay = 0;
+		std::vector<std::string> runs;
 		long playSeconds = 0;         // time spent in the dungeon for this seed (not the menus, not paused)
 		long finishSeconds = -1;      // playtime when the goal was completed (-1 = not yet)
 		std::string rushSeq;          // Boss Rush: this run's maps in order ("boss,hamlet,hellboss")
@@ -257,6 +266,9 @@ namespace
 	void warnSkillClass();
 	void giveCompassIfMissing();
 	void launchTracker();
+	void startRunRecord();
+	bool g_hofPanel = false;      // Hall of Fame panel (F5)
+	Uint32 g_hofAutoUntil = 0;    // shown by itself for a while at the start of a run
 	void placeRushTownExit();
 	void syncSpells();
 	int bossRushGoalMask();
@@ -385,6 +397,10 @@ namespace
 		out << "darknessQueue=" << g_save.darknessQueue << "\n";
 		out << "goalBossesKilled=" << g_save.goalBossesKilled << "\n";
 		out << "goalSent=" << (g_save.goalSent ? 1 : 0) << "\n";
+		out << "bountyKills=" << g_save.bountyKills << "\n";
+		out << "runActive=" << (g_save.runActive ? 1 : 0) << "\nrunDeepest=" << g_save.runDeepest << "\nrunKills=" << g_save.runKills
+			<< "\nrunLivesLost=" << g_save.runLivesLost << "\nrunGoldMax=" << g_save.runGoldMax << "\nrunStartPlay=" << g_save.runStartPlay << "\n";
+		for ( auto& r : g_save.runs ) { out << "run:" << r << "\n"; }
 		out << "playSeconds=" << g_save.playSeconds << "\nfinishSeconds=" << g_save.finishSeconds << "\n";
 		out << "carryPickups=" << g_carryPickups << "\nfloorUnfound=" << g_floorApUnfound << "\n";
 		out << "rushSeq=" << g_save.rushSeq << "\nrushPhase=" << g_save.rushPhase << "\nrushLevel=" << g_save.rushLevel
@@ -400,6 +416,8 @@ namespace
 		std::string line;
 		while ( std::getline(in, line) )
 		{
+			if ( !line.empty() && line.back() == '\r' ) { line.pop_back(); }
+			if ( line.compare(0, 4, "run:") == 0 ) { g_save.runs.push_back(line.substr(4)); continue; } // Hall of Fame
 			auto eq = line.rfind('=');
 			if ( eq == std::string::npos ) { continue; }
 			std::string key = line.substr(0, eq);
@@ -420,6 +438,13 @@ namespace
 			else if ( key == "goalBossesKilled" ) { g_save.goalBossesKilled = (int)value; }
 			else if ( key == "goalSent" ) { g_save.goalSent = value != 0; }
 			else if ( key == "playSeconds" ) { g_save.playSeconds = (long)value; }
+			else if ( key == "bountyKills" ) { g_save.bountyKills = (long)value; }
+			else if ( key == "runActive" ) { g_save.runActive = value != 0; }
+			else if ( key == "runDeepest" ) { g_save.runDeepest = (int)value; }
+			else if ( key == "runKills" ) { g_save.runKills = (int)value; }
+			else if ( key == "runLivesLost" ) { g_save.runLivesLost = (int)value; }
+			else if ( key == "runGoldMax" ) { g_save.runGoldMax = (long)value; }
+			else if ( key == "runStartPlay" ) { g_save.runStartPlay = (long)value; }
 			else if ( key == "finishSeconds" ) { g_save.finishSeconds = (long)value; }
 			else if ( key == "rushPhase" ) { g_save.rushPhase = (int)value; }
 			else if ( key == "carryPickups" ) { g_carryPickups = (int)value; }
@@ -572,6 +597,9 @@ namespace
 		registerSlotInt("enemy_randomizer_secret", &SlotOptions::enemy_randomizer_secret);
 		registerSlotInt("skill_check_max_rank", &SlotOptions::skill_check_max_rank);
 		registerSlotInt("lock_class", &SlotOptions::lock_class);
+		registerSlotInt("bounty_enemies", &SlotOptions::bounty_enemies);
+		registerSlotInt("bounty_chance", &SlotOptions::bounty_chance);
+		registerSlotInt("bounty_checks", &SlotOptions::bounty_checks);
 		registerSlotInt("spell_sanity", &SlotOptions::spell_sanity);
 		registerSlotInt("spell_upgrades", &SlotOptions::spell_upgrades);
 		registerSlotInt("spellbook_checks", &SlotOptions::spellbook_checks);
@@ -966,6 +994,8 @@ namespace
 		warnSkillClass();
 		g_compassGivePending = true;
 		g_save.runKey = uniqueGameKey;
+		startRunRecord();
+		g_hofAutoUntil = ticks + TICKS_PER_SECOND * 20; // the Hall of Fame shows in the starting area for a bit
 		g_save.livesLeft = g_slot.lives;
 		g_savedBossHP.clear();
 		g_savedBossFloor = -1;
@@ -2265,6 +2295,119 @@ namespace
 		}
 	}
 
+	// ------------------------------------------------------- Bounty Enemies
+	// On some floors one enemy glows gold: tougher, and it drops extra gold and a bonus item.
+	Uint32 g_bountyUid = 0;
+	bool g_bountyBuffed = false;
+	bool g_bountyClaimedHere = false; // killed on this floor: a restart doesn't bring a new one
+	int g_bountyFloorLoad = -1;
+
+	void pickBounty(bool restarted)
+	{
+		g_bountyUid = 0;
+		g_bountyBuffed = false;
+		if ( !restarted ) { g_bountyClaimedHere = false; }
+		if ( !g_slot.bounty_enemies || g_bountyClaimedHere || currentlevel < 1 || secretlevel || isSpecialMap() || !map.creatures ) { return; }
+		if ( (int)(local_rng.rand() % 100) >= std::max(0, std::min(100, g_slot.bounty_chance)) ) { return; }
+		std::vector<Entity*> pool;
+		for ( node_t* node = map.creatures->first; node; node = node->next )
+		{
+			Entity* e = (Entity*)node->element;
+			if ( isMarkableEnemy(e) && !g_markedEnemies.count(e->getUID()) ) { pool.push_back(e); }
+		}
+		if ( pool.empty() ) { return; }
+		Entity* pick = pool[local_rng.rand() % pool.size()];
+		g_bountyUid = pick->getUID();
+		Stat* st = pick->getStats();
+		say(COLOR_AP, "A bounty lurks on this floor: a %s glowing gold. Defeat it for a reward!",
+			st ? getMonsterLocalizedName((Monster)st->type).c_str() : "monster");
+	}
+
+	// Once the monster has set itself up (its first ticks), make it tougher.
+	void updateBounty()
+	{
+		if ( !g_bountyUid || g_bountyBuffed ) { return; }
+		Entity* e = uidToEntity(g_bountyUid);
+		if ( !e ) { g_bountyUid = 0; return; }
+		Stat* st = e->getStats();
+		if ( !st || e->ticks < 5 ) { return; }
+		st->MAXHP = st->MAXHP * 3 / 2;
+		st->HP = st->MAXHP;
+		st->LVL += 3;
+		g_bountyBuffed = true;
+	}
+
+	void claimBounty(Entity* my)
+	{
+		g_bountyUid = 0;
+		g_bountyClaimedHere = true;
+		++g_save.bountyKills;
+		int gold = 60 + 25 * std::max(1, currentlevel);
+		for ( int p : activePlayers() ) { if ( stats[p] ) { stats[p]->GOLD += gold; } }
+		// A bonus item, a few levels better than the floor usually gives.
+		Category cat = LOOT_CATEGORIES[local_rng.rand() % (sizeof(LOOT_CATEGORIES) / sizeof(LOOT_CATEGORIES[0]))];
+		ItemType type = itemLevelCurve(cat, 0, std::max(1, currentlevel) + 5, local_rng);
+		if ( lootRerollable(type, 0) )
+		{
+			Status status = static_cast<Status>(DECREPIT + local_rng.rand() % (EXCELLENT - DECREPIT + 1));
+			if ( status < WORN ) { status = WORN; }
+			if ( Item* item = newItem(type, status, local_rng.rand() % 2, 1, local_rng.rand(), false, nullptr) )
+			{
+				dropItemMonster(item, my, nullptr);
+			}
+		}
+		say(COLOR_AP, "Bounty claimed! +%d gold and a bonus item.", gold);
+		if ( g_slot.bounty_checks > 0 && g_save.bountyKills <= g_slot.bounty_checks )
+		{
+			sendLocation(ap_ids::BASE_ID + ap_ids::BOUNTY_OFFSET + g_save.bountyKills);
+			say(COLOR_AP, "Bounty check %ld of %d sent.", g_save.bountyKills, g_slot.bounty_checks);
+		}
+		writeSave();
+	}
+
+	// ------------------------------------------------------- Hall of Fame
+	// Every run on this seed: deepest floor, kills, lives lost, most gold, time, and how it ended.
+	enum RunResult { RUN_ONGOING = 0, RUN_GAME_OVER = 1, RUN_WON = 2, RUN_LEFT = 3 };
+
+	void endRunRecord(int result)
+	{
+		if ( !g_save.runActive ) { return; }
+		g_save.runActive = false;
+		long secs = std::max(0L, g_save.playSeconds - g_save.runStartPlay);
+		char buf[128];
+		snprintf(buf, sizeof(buf), "%d,%d,%d,%ld,%ld,%d", g_save.runDeepest, g_save.runKills, g_save.runLivesLost,
+			g_save.runGoldMax, secs, result);
+		g_save.runs.push_back(buf);
+		if ( g_save.runs.size() > 100 ) { g_save.runs.erase(g_save.runs.begin()); }
+		writeSave();
+	}
+
+	void startRunRecord()
+	{
+		endRunRecord(RUN_LEFT); // the last run never ended (you started over or quit)
+		g_save.runActive = true;
+		g_save.runDeepest = 0;
+		g_save.runKills = 0;
+		g_save.runLivesLost = 0;
+		g_save.runGoldMax = 0;
+		g_save.runStartPlay = g_save.playSeconds;
+	}
+
+	struct RunRow { int deepest, kills, lives; long gold, secs; int result; };
+	std::vector<RunRow> pastRuns()
+	{
+		std::vector<RunRow> rows;
+		for ( auto& r : g_save.runs )
+		{
+			RunRow row{};
+			if ( sscanf(r.c_str(), "%d,%d,%d,%ld,%ld,%d", &row.deepest, &row.kills, &row.lives, &row.gold, &row.secs, &row.result) == 6 )
+			{
+				rows.push_back(row);
+			}
+		}
+		return rows;
+	}
+
 	// Extra Monsters: more enemies on every floor from floor 1 (not the safe places, secret areas or
 	// boss arenas), picked like the floor's own spawns and put somewhere you can walk to.
 	void spawnExtraMonsters()
@@ -2341,6 +2484,8 @@ namespace
 		g_compassPingUntil = 0; // a new floor: the compass is ready
 		g_compassReadyAt = 0;
 		pickMarkedEnemies();
+		pickBounty(restarted);
+		g_save.runDeepest = std::max(g_save.runDeepest, currentlevel);
 		if ( g_markedThisFloor > 0 )
 		{
 			say(COLOR_AP, g_slot.enemy_sanity == 2 ? "Enemies glowing green are Archipelago checks."
@@ -2370,6 +2515,7 @@ namespace
 		if ( g_slot.death_link_mode == 1 && g_save.livesLeft > 0 )
 		{
 			--g_save.livesLeft;
+	++g_save.runLivesLost;
 			applyDeathPenalty(stats[p]);
 			say(COLOR_TRAP, "You lose a life (%d left).", g_save.livesLeft);
 			printlog("[Archipelago] Death Link: lost a life. Lives left: %d", g_save.livesLeft);
@@ -2547,6 +2693,11 @@ namespace
 		out << "keycompass=" << g_keyCompass << "\n";
 		out << "enemiesleft=" << g_enemiesLeft << "\n";
 		out << "keyreq=" << g_slot.floor_key_requirement << "\n";
+		{
+			Entity* b = g_bountyUid ? uidToEntity(g_bountyUid) : nullptr;
+			Stat* bs = b ? b->getStats() : nullptr;
+			out << "bounty=" << (bs && bs->HP > 0 ? getMonsterLocalizedName((Monster)bs->type) : std::string()) << "\n";
+		}
 		out << "secretexit=" << (g_floorHasSecretExit && !secretlevel ? 1 : 0) << "\n";
 		out << "secretarea=" << (secretlevel ? 1 : 0) << "\n";
 		{
@@ -2805,6 +2956,10 @@ namespace
 					{
 						out << "foe=" << tx << "\t" << ty << "\n";
 					}
+					else if ( g_bountyUid && e->getUID() == g_bountyUid && st && st->HP > 0 )
+					{
+						out << "bounty=" << tx << "\t" << ty << "\n";
+					}
 				}
 			}
 			out << "locked=" << (g_floorNeedsKey && !g_floorKeyFound && g_slot.floor_key_requirement != 2 ? 1 : 0) << "\n";
@@ -3001,6 +3156,7 @@ void tick()
 	if ( keystatus[SDLK_F2] ) { keystatus[SDLK_F2] = 0; g_logPanel = g_logPanel == 2 ? 0 : 2; }
 	if ( keystatus[SDLK_F3] ) { keystatus[SDLK_F3] = 0; g_logPanel = g_logPanel == 3 ? 0 : 3; }
 	if ( keystatus[SDLK_F4] ) { keystatus[SDLK_F4] = 0; ++g_lootToggles; } // tracker: full or short loot list
+	if ( keystatus[SDLK_F5] ) { keystatus[SDLK_F5] = 0; g_hofPanel = !g_hofPanel; g_hofAutoUntil = 0; } // Hall of Fame
 	pullDeathSources();
 	if ( g_floorReady && inGame() ) { g_floorApUnfound = std::max(0, g_floorApTotal - g_floorApFound); }
 	if ( g_rushSaveDirty ) { g_rushSaveDirty = false; writeSave(); }
@@ -3025,6 +3181,8 @@ void tick()
 	}
 	applyNewItems();
 	updatePendingTraps();
+	updateBounty();
+	if ( stats[clientnum] && stats[clientnum]->GOLD > g_save.runGoldMax ) { g_save.runGoldMax = stats[clientnum]->GOLD; }
 	syncPermanents();
 	if ( ticks % TICKS_PER_SECOND == 0 ) { syncSpells(); }
 	if ( g_resumePending && !loadnextlevel && players[clientnum]->entity && stats[clientnum]->HP > 0 )
@@ -3303,6 +3461,8 @@ void onMonsterDeath(Entity* my, Stat* myStats)
 	if ( type == SHOPKEEPER ) { return; }
 
 	++g_save.totalKills;
+	++g_save.runKills;
+	if ( g_bountyUid && my->getUID() == g_bountyUid ) { claimBounty(my); }
 	if ( type != MINOTAUR && type != LICH && type != DEVIL && type != LICH_ICE && type != LICH_FIRE )
 	{
 		++g_floorKills;
@@ -3363,6 +3523,7 @@ void onMonsterDeath(Entity* my, Stat* myStats)
 		{
 			g_save.goalSent = true;
 			if ( g_save.finishSeconds < 0 ) { g_save.finishSeconds = g_save.playSeconds; }
+			endRunRecord(RUN_WON);
 			AP_StoryComplete();
 			say(COLOR_AP, "Goal complete! Your world is done.");
 		}
@@ -3395,6 +3556,7 @@ bool tryConsumeLife(int player)
 	--g_save.livesLeft;
 	bool fromDeathLink = g_dyingFromDeathLink;
 	g_dyingFromDeathLink = false;
+	endRunRecord(RUN_GAME_OVER);
 
 	// Remember boss health on this floor, for "keep damage".
 	g_savedBossHP.clear();
@@ -3534,6 +3696,12 @@ bool isMarkedEnemy(const Entity* entity)
 	if ( !entity || g_markedEnemies.empty() ) { return false; }
 	if ( g_markedEnemies.count(entity->getUID()) ) { return true; }
 	return g_markedEnemies.count(entity->parent) > 0; // body parts belong to their monster
+}
+
+bool isBountyEnemy(const Entity* entity)
+{
+	if ( !entity || !g_bountyUid ) { return false; }
+	return entity->getUID() == g_bountyUid || entity->parent == g_bountyUid; // body parts too
 }
 
 bool isApItem(const Item* item)
@@ -4149,7 +4317,55 @@ void drawHud()
 			drawText("F1: items   F2: log   F3: deaths   F4: tracker loot list", HUD_FONT, makeColorRGB(140, 140, 140), 38, row);
 		}
 	}
-	if ( g_logPanel == 3 )
+	if ( (g_hofPanel || (g_hofAutoUntil && ticks < g_hofAutoUntil && currentlevel == 0)) && !g_deathScreen )
+	{
+		// Hall of Fame: the best of every run on this seed, and the last few runs.
+		auto rows = pastRuns();
+		int deepest = 0, mostKills = 0, wins = 0;
+		long fastest = -1, mostGold = 0;
+		int fewestLives = -1;
+		for ( auto& r : rows )
+		{
+			deepest = std::max(deepest, r.deepest);
+			mostKills = std::max(mostKills, r.kills);
+			mostGold = std::max(mostGold, r.gold);
+			if ( r.result == RUN_WON )
+			{
+				++wins;
+				if ( fastest < 0 || r.secs < fastest ) { fastest = r.secs; }
+				if ( fewestLives < 0 || r.lives < fewestLives ) { fewestLives = r.lives; }
+			}
+		}
+		auto hms = [](long t) { char b[32]; snprintf(b, sizeof(b), "%ld:%02ld:%02ld", t / 3600, (t / 60) % 60, t % 60); return std::string(b); };
+		const int x = 12, y = 80, w = 460, lineH = 22;
+		int shown = (int)std::min<size_t>(rows.size(), 5);
+		int h = 214 + lineH * std::max(1, shown);
+		drawImage("images/system/white.png", x, y, w, h, makeColor(10, 8, 6, 210));
+		drawText(g_hofPanel ? "Hall of Fame (F5 to close)" : "Hall of Fame (F5)", BIG_FONT, makeColorRGB(255, 200, 90), x + 8, y + 6);
+		char buf[160];
+		Uint32 txt = makeColorRGB(225, 220, 210), dim = makeColorRGB(150, 145, 135), gold = makeColorRGB(255, 200, 90);
+		int ly = y + 38;
+		snprintf(buf, sizeof(buf), "Runs %d   Wins %d", (int)rows.size(), wins); drawText(buf, HUD_FONT, txt, x + 12, ly); ly += lineH;
+		snprintf(buf, sizeof(buf), "Deepest floor  %d", deepest); drawText(buf, HUD_FONT, txt, x + 12, ly); ly += lineH;
+		snprintf(buf, sizeof(buf), "Fastest win  %s", fastest >= 0 ? hms(fastest).c_str() : "-"); drawText(buf, HUD_FONT, fastest >= 0 ? gold : dim, x + 12, ly); ly += lineH;
+		if ( fewestLives >= 0 ) { snprintf(buf, sizeof(buf), "Fewest lives lost in a win  %d", fewestLives); } else { snprintf(buf, sizeof(buf), "Fewest lives lost in a win  -"); }
+		drawText(buf, HUD_FONT, fewestLives >= 0 ? gold : dim, x + 12, ly); ly += lineH;
+		snprintf(buf, sizeof(buf), "Most kills in a run  %d   Most gold  %ld", mostKills, mostGold); drawText(buf, HUD_FONT, txt, x + 12, ly); ly += lineH;
+		if ( g_slot.bounty_enemies ) { snprintf(buf, sizeof(buf), "Bounties claimed  %ld", g_save.bountyKills); drawText(buf, HUD_FONT, txt, x + 12, ly); }
+		ly += lineH + 6;
+		drawText("Last runs", HUD_FONT, gold, x + 12, ly); ly += lineH;
+		if ( rows.empty() ) { drawText("No runs finished yet.", HUD_FONT, dim, x + 12, ly); }
+		static const char* const RESULT[] = { "playing", "game over", "won", "left" };
+		for ( int i = 0; i < shown; ++i )
+		{
+			const RunRow& r = rows[rows.size() - 1 - i];
+			snprintf(buf, sizeof(buf), "#%d  floor %d  %d kills  %s  %s", (int)(rows.size() - i), r.deepest, r.kills,
+				RESULT[std::max(0, std::min(3, r.result))], hms(r.secs).c_str());
+			drawText(buf, HUD_FONT, r.result == RUN_WON ? gold : txt, x + 12, ly);
+			ly += lineH;
+		}
+	}
+	else if ( g_logPanel == 3 )
 	{
 		// Death counter: total, then everyone who has died, most deaths first.
 		std::vector<std::pair<std::string, int>> rows(g_save.deaths.begin(), g_save.deaths.end());

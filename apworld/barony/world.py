@@ -182,6 +182,13 @@ class BaronyWorld(World):
                 planned.append((data.skill_location(skill, rank),
                                 self._floor_needed(min(data.SKILL_RANK_FLOOR[rank], self.goal_floor))))
 
+        if o.bounty_enemies and o.bounty_checks.value > 0:
+            # Bounties come on some floors, counted across runs: the k-th one expects about
+            # k * 100 / chance floors of play.
+            chance = max(10, o.bounty_chance.value)
+            for k in range(1, o.bounty_checks.value + 1):
+                planned.append((data.bounty_location(k), self._floor_needed(-(-k * 100 // chance))))
+
         if o.spellbook_checks:
             for spell in data.SPELLS:
                 if not spell.dlc and spell.depth <= self.goal_floor:
@@ -332,6 +339,9 @@ class BaronyWorld(World):
             "enemy_randomizer_secret": int(bool(o.enemy_randomizer_secret_areas)),
             "skill_check_max_rank": o.skill_check_max_rank.value,
             "lock_class": int(bool(o.lock_class)),
+            "bounty_enemies": int(bool(o.bounty_enemies)),
+            "bounty_chance": o.bounty_chance.value,
+            "bounty_checks": o.bounty_checks.value if o.bounty_enemies else 0,
             "spell_sanity": int(bool(o.spell_sanity)),
             "spell_upgrades": o.spell_upgrades.value,
             "spellbook_checks": int(bool(o.spellbook_checks)),

@@ -15,6 +15,7 @@ constexpr int64_t SPECIAL_OFFSET = 800;
 constexpr int64_t SKILL_OFFSET = 900;
 constexpr int64_t SPELLBOOK_OFFSET = 1100;
 constexpr int64_t SPELL_ITEM_OFFSET = 100;
+constexpr int64_t BOUNTY_OFFSET = 1200;
 constexpr int MAX_FLOOR = 35;
 constexpr int FLOORS_PER_SECTION = 5;
 

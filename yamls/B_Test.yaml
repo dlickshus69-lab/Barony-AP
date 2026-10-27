@@ -96,6 +96,9 @@ Barony:
   floor_size:
   - Normal
   extra_monsters: 0
+  bounty_enemies: false
+  bounty_chance: 50
+  bounty_checks: 5
   randomize_loot: same_kind
   music_mods: mixed
 

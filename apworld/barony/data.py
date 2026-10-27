@@ -145,6 +145,8 @@ BOSS_OFFSET = 700         # + BossInfo.index
 SPECIAL_OFFSET = 800      # + SpecialArea.index
 SKILL_OFFSET = 900        # + skill * 5 + rank (rank 1..5)
 SPELLBOOK_OFFSET = 1100   # + Barony spell id: reading that spellbook (Spellbook Checks)
+BOUNTY_OFFSET = 1200      # + k (1..30): the k-th bounty enemy defeated
+MAX_BOUNTY_CHECKS = 30
 
 # ---------------------------------------------------------------------------------------
 # Skills (Barony 5): index = PRO_ constant, name as the game shows it
@@ -287,6 +289,10 @@ def spellbook_location(spell: SpellInfo) -> str:
     return f"Read the {spell.name} Spellbook"
 
 
+def bounty_location(k: int) -> str:
+    return f"Bounty {k}"
+
+
 LOCATION_NAME_TO_ID: dict[str, int] = {}
 for _f in range(1, MAX_FLOOR + 1):
     LOCATION_NAME_TO_ID[floor_location(_f)] = BASE_ID + FLOOR_OFFSET + _f
@@ -310,6 +316,8 @@ for _sk in range(len(SKILLS)):
 for _sp in SPELLS:
     if not _sp.dlc:
         LOCATION_NAME_TO_ID[spellbook_location(_sp)] = BASE_ID + SPELLBOOK_OFFSET + _sp.spell_id
+for _bk in range(1, MAX_BOUNTY_CHECKS + 1):
+    LOCATION_NAME_TO_ID[bounty_location(_bk)] = BASE_ID + BOUNTY_OFFSET + _bk
 
 
 # ---------------------------------------------------------------------------------------

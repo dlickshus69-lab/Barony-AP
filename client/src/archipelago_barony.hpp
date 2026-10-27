@@ -63,6 +63,7 @@ namespace AP
 	void drawHud();
 
 	// opengl.cpp: Enemy Sanity marked enemies are drawn with a green glow.
+	bool isBountyEnemy(const Entity* entity); // Bounty Enemies glow gold
 	bool isMarkedEnemy(const Entity* entity);
 
 	// The Archipelago item (floor pickups and shop items) and its own logo model and icon.

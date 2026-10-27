@@ -190,3 +190,13 @@ class TestSpellSanityFewLocations(BaronyTestBase):
     options = {"spell_sanity": True, "spell_upgrades": 2, "floor_check_interval": 10, "level_checks": 0,
                "enemy_sanity": "off", "bestiary_checks": "off", "archipelago_pickups": 0, "shop_checks": 0,
                "boss_checks": False}
+
+
+class TestBounty(BaronyTestBase):
+    options = {"bounty_enemies": True, "bounty_chance": 50, "bounty_checks": 8}
+
+    def test_bounty(self) -> None:
+        locs = {loc.name for loc in self.multiworld.get_locations(self.player)}
+        self.assertIn("Bounty 8", locs)
+        self.assertNotIn("Bounty 9", locs)
+        self.assertEqual(self.world.fill_slot_data()["bounty_checks"], 8)
