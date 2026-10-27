@@ -1,18 +1,18 @@
-From a860fbf4a93d9e8fd8c451854af54de93cf80b20 Mon Sep 17 00:00:00 2001
+From 23a2f37452ca3dd12fecf0bc727e8d3191282958 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
 
 ---
  CMakeLists.txt                    |   32 +
- src/BaronyAPTracker.cpp           |  404 +++++
+ src/BaronyAPTracker.cpp           |  404 ++++
  src/CMakeLists.txt                |    1 +
  src/actchest.cpp                  |    7 +
  src/actgeneral.cpp                |    2 +
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 2821 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 2839 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |   99 +
  src/archipelago_ids.hpp           |   95 +
  src/engine/audio/sound_game.cpp   |    2 +
@@ -27,7 +27,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   10 +
  src/ui/MainMenu.cpp               |    5 +-
- 23 files changed, 3554 insertions(+), 4 deletions(-)
+ 23 files changed, 3572 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -640,10 +640,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..3e14a8b
+index 0000000..77f6914
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,2821 @@
+@@ -0,0 +1,2839 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -748,6 +748,7 @@ index 0000000..3e14a8b
 +		int polymorph_trap_duration = 30;
 +		int blindness_trap_duration = 15;
 +		int minotaur_time = 100;      // percent of the normal time before the Minotaur arrives
++		int death_link_mode = 0;      // 0 die and restart the floor, 1 just lose a life
 +		int death_items = 0;          // 0 back to what you had entering the floor, 1 keep everything you had
 +		int players = 1;
 +	};
@@ -1151,6 +1152,7 @@ index 0000000..3e14a8b
 +		registerSlotInt("blindness_trap_duration", &SlotOptions::blindness_trap_duration);
 +		registerSlotInt("minotaur_time", &SlotOptions::minotaur_time);
 +		registerSlotInt("death_items", &SlotOptions::death_items);
++		registerSlotInt("death_link_mode", &SlotOptions::death_link_mode);
 +		registerSlotInt("players", &SlotOptions::players);
 +
 +		AP_Start();
@@ -1991,6 +1993,14 @@ index 0000000..3e14a8b
 +		godmode = g_savedGodmode;
 +	}
 +
++	// Death Penalty: 0 just a life, 1 gold, 2 gold and XP, 3 XP. Never costs a level.
++	void applyDeathPenalty(Stat* s)
++	{
++		if ( !s ) { return; }
++		if ( g_slot.death_penalty == 1 || g_slot.death_penalty == 2 ) { s->GOLD -= s->GOLD / 4; }
++		if ( g_slot.death_penalty == 2 || g_slot.death_penalty == 3 ) { s->EXP /= 2; }
++	}
++
 +	void restartFloor()
 +	{
 +		endDeathScreen();
@@ -2005,9 +2015,7 @@ index 0000000..3e14a8b
 +		}
 +
 +		// Death penalty. Never costs a level.
-+		// 0 just a life, 1 gold, 2 gold and XP, 3 XP.
-+		if ( g_slot.death_penalty == 1 || g_slot.death_penalty == 2 ) { s->GOLD -= s->GOLD / 4; }
-+		if ( g_slot.death_penalty == 2 || g_slot.death_penalty == 3 ) { s->EXP /= 2; }
++		applyDeathPenalty(s);
 +
 +		for ( int c = 0; c < NUMEFFECTS; ++c )
 +		{
@@ -2304,6 +2312,16 @@ index 0000000..3e14a8b
 +		AP_DeathLinkClear();
 +		int p = clientnum;
 +		if ( !inGame() || !stats[p] || stats[p]->HP <= 0 || g_deathScreen || g_restartPending ) { return; }
++		// Death Link Mode "Lose a Life": just a life and the penalty; you keep playing where you are.
++		if ( g_slot.death_link_mode == 1 && g_save.livesLeft > 0 )
++		{
++			--g_save.livesLeft;
++			applyDeathPenalty(stats[p]);
++			say(COLOR_TRAP, "Death Link! Someone else died... you lose a life (%d left).", g_save.livesLeft);
++			printlog("[Archipelago] Death Link: lost a life. Lives left: %d", g_save.livesLeft);
++			writeSave();
++			return;
++		}
 +		say(COLOR_TRAP, "Death Link! Someone else died...");
 +		g_dyingFromDeathLink = true;
 +		stats[p]->HP = 0;

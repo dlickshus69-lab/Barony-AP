@@ -47,6 +47,8 @@ Each floor has a fixed number of Archipelago items, decided on your first try. A
 the ones you haven't found yet come back. A game over resets everything.
 
 Death Link deaths also cost a life, with the same Death Penalty (none, gold, XP, or gold and XP).
+With Death Link Mode set to Lose a Life, a Death Link only takes the life and the penalty; you keep
+playing where you are instead of restarting the floor.
 
 The top left of the screen shows whether you're connected and how many Archipelago things are left on
 the floor. The top right shows your lives and the total death count. F1 shows received items, F2

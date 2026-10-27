@@ -375,7 +375,6 @@ class ExtraLivesInPool(Range):
 class DeathPenalty(Choice):
     """
     What losing a life costs you.
-    Gold: lose a quarter of your gold.
     None: you only lose the life.
     Gold: lose a quarter of your gold.
     XP: lose half of your progress toward the next level.
@@ -385,9 +384,13 @@ class DeathPenalty(Choice):
     display_name = "Death Penalty"
     option_none = 0
     option_gold = 1
-    option_gold_and_xp = 2
     option_xp = 3
+    option_gold_and_xp = 2
     default = option_none
+
+    @classmethod
+    def get_option_name(cls, value) -> str:
+        return {0: "None", 1: "Gold", 3: "XP", 2: "Gold and XP"}.get(value, super().get_option_name(value))
 
 
 class BossDeath(Choice):
@@ -433,8 +436,22 @@ class DeathItems(Choice):
 class BaronyDeathLink(DeathLink):
     """
     When you die, everyone else with Death Link dies too, and the other way around.
-    If you have a life left, a Death Link death costs a life and restarts the floor.
+    What a Death Link does to you is set by Death Link Mode.
     """
+
+
+class DeathLinkMode(Choice):
+    """
+    What happens when someone else's death reaches you through Death Link (with a life left).
+    Restart Floor: you die, see the death screen, and restart the floor, like any other death.
+    Lose a Life: you just lose a life (and pay the Death Penalty) and keep playing where you are.
+    Either way the death counter counts it for the player who died, and with no lives left it's a real
+    death.
+    """
+    display_name = "Death Link Mode"
+    option_restart_floor = 0
+    option_lose_a_life = 1
+    default = option_restart_floor
 
 
 # ---------------------------------------------------------------- traps & players
@@ -601,6 +618,7 @@ class BaronyOptions(PerGameCommonOptions):
     death_items: DeathItems
     checkpoint_interval: CheckpointInterval
     death_link: BaronyDeathLink
+    death_link_mode: DeathLinkMode
     trap_chance: TrapChance
     enabled_traps: EnabledTraps
     trap_countdown_traps: TrapCountdownTraps
@@ -622,7 +640,7 @@ option_groups = [
         ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),
     OptionGroup("Dungeon", [StairKeys, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemyPool, EnemySeed, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, MinotaurTime, DifficultyScaling, Difficulty]),
-    OptionGroup("Lives & Death", [Lives, ExtraLivesInPool, DeathPenalty, BossDeath, FloorRestart, DeathItems, CheckpointInterval, BaronyDeathLink]),
+    OptionGroup("Lives & Death", [Lives, ExtraLivesInPool, DeathPenalty, BossDeath, FloorRestart, DeathItems, CheckpointInterval, BaronyDeathLink, DeathLinkMode]),
     OptionGroup("Traps", [TrapChance, EnabledTraps, TrapCountdownTraps, TrapCountdown, PolymorphTrapDuration,
                           BlindnessTrapDuration]),
     OptionGroup("Filler", [XPBoostWeight, GoldPouchWeight, HealingPotionWeight, FoodRationWeight, RandomItemWeight]),

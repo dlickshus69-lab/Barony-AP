@@ -102,6 +102,7 @@ namespace
 		int polymorph_trap_duration = 30;
 		int blindness_trap_duration = 15;
 		int minotaur_time = 100;      // percent of the normal time before the Minotaur arrives
+		int death_link_mode = 0;      // 0 die and restart the floor, 1 just lose a life
 		int death_items = 0;          // 0 back to what you had entering the floor, 1 keep everything you had
 		int players = 1;
 	};
@@ -505,6 +506,7 @@ namespace
 		registerSlotInt("blindness_trap_duration", &SlotOptions::blindness_trap_duration);
 		registerSlotInt("minotaur_time", &SlotOptions::minotaur_time);
 		registerSlotInt("death_items", &SlotOptions::death_items);
+		registerSlotInt("death_link_mode", &SlotOptions::death_link_mode);
 		registerSlotInt("players", &SlotOptions::players);
 
 		AP_Start();
@@ -1345,6 +1347,14 @@ namespace
 		godmode = g_savedGodmode;
 	}
 
+	// Death Penalty: 0 just a life, 1 gold, 2 gold and XP, 3 XP. Never costs a level.
+	void applyDeathPenalty(Stat* s)
+	{
+		if ( !s ) { return; }
+		if ( g_slot.death_penalty == 1 || g_slot.death_penalty == 2 ) { s->GOLD -= s->GOLD / 4; }
+		if ( g_slot.death_penalty == 2 || g_slot.death_penalty == 3 ) { s->EXP /= 2; }
+	}
+
 	void restartFloor()
 	{
 		endDeathScreen();
@@ -1359,9 +1369,7 @@ namespace
 		}
 
 		// Death penalty. Never costs a level.
-		// 0 just a life, 1 gold, 2 gold and XP, 3 XP.
-		if ( g_slot.death_penalty == 1 || g_slot.death_penalty == 2 ) { s->GOLD -= s->GOLD / 4; }
-		if ( g_slot.death_penalty == 2 || g_slot.death_penalty == 3 ) { s->EXP /= 2; }
+		applyDeathPenalty(s);
 
 		for ( int c = 0; c < NUMEFFECTS; ++c )
 		{
@@ -1658,6 +1666,16 @@ namespace
 		AP_DeathLinkClear();
 		int p = clientnum;
 		if ( !inGame() || !stats[p] || stats[p]->HP <= 0 || g_deathScreen || g_restartPending ) { return; }
+		// Death Link Mode "Lose a Life": just a life and the penalty; you keep playing where you are.
+		if ( g_slot.death_link_mode == 1 && g_save.livesLeft > 0 )
+		{
+			--g_save.livesLeft;
+			applyDeathPenalty(stats[p]);
+			say(COLOR_TRAP, "Death Link! Someone else died... you lose a life (%d left).", g_save.livesLeft);
+			printlog("[Archipelago] Death Link: lost a life. Lives left: %d", g_save.livesLeft);
+			writeSave();
+			return;
+		}
 		say(COLOR_TRAP, "Death Link! Someone else died...");
 		g_dyingFromDeathLink = true;
 		stats[p]->HP = 0;

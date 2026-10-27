@@ -28,6 +28,7 @@ Barony:
   boss_death: keep_damage
   death_items: floor_start
   death_link: true
+  death_link_mode: restart_floor
   trap_chance: 50
   enabled_traps:
   - Ambush Trap

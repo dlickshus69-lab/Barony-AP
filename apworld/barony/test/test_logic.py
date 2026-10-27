@@ -46,7 +46,7 @@ class TestFillerAndTraps(BaronyTestBase):
         "food_ration_weight": 0, "random_item_weight": 0,
         "trap_countdown_traps": ["Blindness Trap", "Minotaur Trap"], "trap_countdown": 7,
         "polymorph_trap_duration": 60, "blindness_trap_duration": 20,
-        "boss_level_scaling": "stronger_only", "death_penalty": "xp", "minotaur_time": 150,
+        "boss_level_scaling": "stronger_only", "death_penalty": "xp", "minotaur_time": 150, "death_link_mode": "lose_a_life",
     }
 
     def test_only_weighted_filler(self) -> None:
@@ -61,3 +61,9 @@ class TestFillerAndTraps(BaronyTestBase):
         self.assertEqual(slot["boss_level_scaling"], 1)
         self.assertEqual(slot["death_penalty"], 3)
         self.assertEqual(slot["minotaur_time"], 150)
+        self.assertEqual(slot["death_link_mode"], 1)
+
+    def test_death_penalty_names(self) -> None:
+        from ..options import DeathPenalty
+        names = [DeathPenalty.get_option_name(v) for v in DeathPenalty.name_lookup]
+        self.assertEqual(names, ["None", "Gold", "XP", "Gold and XP"])
