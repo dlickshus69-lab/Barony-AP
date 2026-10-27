@@ -1,4 +1,4 @@
-From 2c29f9bba9329ffb663717e6ec9320f88619c12e Mon Sep 17 00:00:00 2001
+From a8965bc0203a18ffd62fc42c30d4db7e9e1884c5 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -12,7 +12,7 @@ Subject: [PATCH] Archipelago client hooks
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 3331 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 3333 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |  114 +
  src/archipelago_ids.hpp           |  133 ++
  src/charclass.cpp                 |    4 +
@@ -29,7 +29,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   10 +
  src/ui/MainMenu.cpp               |    5 +-
- 25 files changed, 4204 insertions(+), 4 deletions(-)
+ 25 files changed, 4206 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -650,10 +650,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..8c48200
+index 0000000..2254804
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,3331 @@
+@@ -0,0 +1,3333 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -744,7 +744,7 @@ index 0000000..8c48200
 +		int lock_class = 0;
 +		int floor_size = 0;           // 0 normal, 1 bigger, 2 much bigger
 +		int music_mods = 0;           // 0 off, 1 mixed with the original, 2 mods only
-+		int extra_monsters = 0;       // percent more monsters per floor           // new characters always get the Skill Checks class    // Minotaur floors: seconds before he arrives that the key compass turns on
++		int extra_monsters = 0;       // 0 off, 1 a little more, 2 more           // new characters always get the Skill Checks class    // Minotaur floors: seconds before he arrives that the key compass turns on
 +		int floor_shuffle = 0;        // 0 off, 1 sections, 2 full
 +		int floor_shuffle_seed = 0;
 +		int difficulty_scaling = 1;
@@ -2524,7 +2524,9 @@ index 0000000..8c48200
 +		{
 +			if ( isMarkableEnemy((Entity*)node->element) ) { ++existing; }
 +		}
-+		int extra = std::max(1, existing) * g_slot.extra_monsters / 100;
++		// A Little More: half as many again (3 to 6 extra). More: about double (5 to 10 extra). The cap
++		// keeps busy floors from bogging down.
++		int extra = g_slot.extra_monsters == 1 ? std::clamp(existing / 2, 3, 6) : std::clamp(existing, 5, 10);
 +		int made = 0;
 +		for ( int i = 0; i < extra; ++i )
 +		{

@@ -88,7 +88,7 @@ namespace
 		int lock_class = 0;
 		int floor_size = 0;           // 0 normal, 1 bigger, 2 much bigger
 		int music_mods = 0;           // 0 off, 1 mixed with the original, 2 mods only
-		int extra_monsters = 0;       // percent more monsters per floor           // new characters always get the Skill Checks class    // Minotaur floors: seconds before he arrives that the key compass turns on
+		int extra_monsters = 0;       // 0 off, 1 a little more, 2 more           // new characters always get the Skill Checks class    // Minotaur floors: seconds before he arrives that the key compass turns on
 		int floor_shuffle = 0;        // 0 off, 1 sections, 2 full
 		int floor_shuffle_seed = 0;
 		int difficulty_scaling = 1;
@@ -1868,7 +1868,9 @@ namespace
 		{
 			if ( isMarkableEnemy((Entity*)node->element) ) { ++existing; }
 		}
-		int extra = std::max(1, existing) * g_slot.extra_monsters / 100;
+		// A Little More: half as many again (3 to 6 extra). More: about double (5 to 10 extra). The cap
+		// keeps busy floors from bogging down.
+		int extra = g_slot.extra_monsters == 1 ? std::clamp(existing / 2, 3, 6) : std::clamp(existing, 5, 10);
 		int made = 0;
 		for ( int i = 0; i < extra; ++i )
 		{

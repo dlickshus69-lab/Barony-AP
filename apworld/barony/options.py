@@ -330,18 +330,20 @@ class LayoutSeed(Choice):
     default = option_locked
 
 
-class ExtraMonsters(Range):
+class ExtraMonsters(Choice):
     """
-    More monsters on every floor from floor 1, as a percent of the floor's normal amount (50 = half as
-    many again, 100 = twice as many). They're the same kinds the floor would spawn (or random ones with
-    the Enemy Randomizer). Never in the starting area, the town, secret areas or boss arenas. Works
-    with Floor Size, which already adds more monsters for the extra space.
+    More monsters on every floor from floor 1. A normal floor starts with about 5 to 8.
+    A Little More: half as many again (3 to 6 extra).
+    More: about twice as many (5 to 10 extra).
+    They're the same kinds the floor would spawn (or random ones with the Enemy Randomizer), put where
+    you can walk to. Never in the starting area, the town, secret areas or boss arenas. Floor Size
+    already adds more for the extra space; this is on top of that.
     """
     display_name = "Extra Monsters"
-    range_start = 0
-    range_end = 200
-    default = 0
-
+    option_off = 0
+    option_a_little_more = 1
+    option_more = 2
+    default = option_off
 
 class MusicMods(Choice):
     """
