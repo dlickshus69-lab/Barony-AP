@@ -168,10 +168,24 @@ class FloorKeys(DefaultOnToggle):
     until you find it. It's part of your own game only: it is never an Archipelago item, nobody can send
     it to you, and you never wait on another game for it. The starting floor, secret areas and boss
     floors don't have one. If you die and the floor restarts, a key you already found stays found.
-    On Minotaur floors, once the Minotaur is 30 seconds away (or here), you're shown how far the key is
-    and which way.
+    On Minotaur floors you're shown how far the key is and which way, from the time set by Key Compass
+    Time.
     """
     display_name = "Floor Keys"
+
+
+class KeyCompassTime(Range):
+    """
+    On Minotaur floors (with Floor Keys on), how many seconds before the Minotaur arrives the screen starts
+    pointing you at the Floor Key ("Floor Key: 18 tiles NE"). 30 is the least help. Higher numbers turn
+    it on sooner, but never in the first 30 seconds after his timer starts. The normal wait is 150 to
+    210 seconds (changed by Minotaur Time and hard mode), so 180 or more means "30 seconds in" on most
+    floors.
+    """
+    display_name = "Key Compass Time"
+    range_start = 30
+    range_end = 600
+    default = 30
 
 class FloorShuffle(Choice):
     """
@@ -655,6 +669,7 @@ class BaronyOptions(PerGameCommonOptions):
     boss_checks: BossChecks
     special_area_checks: SpecialAreaChecks
     floor_keys: FloorKeys
+    key_compass_time: KeyCompassTime
     floor_shuffle: FloorShuffle
     layout_seed: LayoutSeed
     enemy_randomizer: EnemyRandomizer
@@ -702,7 +717,7 @@ option_groups = [
         EnemySanityPerFloor, BestiaryChecks,
         ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),
-    OptionGroup("Dungeon", [FloorKeys, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemyPool, EnemySeed, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, MinotaurTime, DifficultyScaling, Difficulty]),
+    OptionGroup("Dungeon", [FloorKeys, KeyCompassTime, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemyPool, EnemySeed, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, MinotaurTime, DifficultyScaling, Difficulty]),
     OptionGroup("Lives & Checkpoints", [Lives, ExtraLivesInPool, CheckpointInterval]),
     OptionGroup("Death Link", [BaronyDeathLink, DeathLinkMode, DeathPenalty, DeathItems, FloorRestart, BossDeath]),
     OptionGroup("Traps", [TrapChance, MinotaurTrapWeight, AmbushTrapWeight, PolymorphTrapWeight, FumbleTrapWeight, BlindnessTrapWeight, TeleportTrapWeight, HungerTrapWeight, DarknessTrapWeight, CurseTrapWeight,

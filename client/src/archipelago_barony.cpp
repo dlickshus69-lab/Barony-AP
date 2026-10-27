@@ -81,6 +81,7 @@ namespace
 		int special_area_checks = 0;
 		int stair_keys = 0;           // old seeds only
 		int floor_keys = 0;           // a key on every floor opens its stairs
+		int key_compass_time = 30;    // Minotaur floors: seconds before he arrives that the key compass turns on
 		int floor_shuffle = 0;        // 0 off, 1 sections, 2 full
 		int floor_shuffle_seed = 0;
 		int difficulty_scaling = 1;
@@ -166,6 +167,7 @@ namespace
 	int g_secretExitThisFloor = 0; // set by generateDungeon, used once in onNewFloor
 	Uint32 g_floorStartTicks = 0;  // when this floor started (the key hint shows for a little while)
 	int g_minotaurSecs = -1;       // seconds until the Minotaur arrives; -1 none coming, -2 he's here
+	int g_minotaurElapsed = 0;     // seconds since his timer started
 
 	void updateMinotaurStatus()
 	{
@@ -183,6 +185,7 @@ namespace
 				{
 					int left = getMinotaurTimeToArrive() - e->skill[0];
 					g_minotaurSecs = std::max(0, left / TICKS_PER_SECOND);
+					g_minotaurElapsed = e->skill[0] / TICKS_PER_SECOND;
 					return;
 				}
 			}
@@ -485,6 +488,7 @@ namespace
 		registerSlotInt("special_area_checks", &SlotOptions::special_area_checks);
 		registerSlotInt("stair_keys", &SlotOptions::stair_keys);
 		registerSlotInt("floor_keys", &SlotOptions::floor_keys);
+		registerSlotInt("key_compass_time", &SlotOptions::key_compass_time);
 		registerSlotInt("floor_shuffle", &SlotOptions::floor_shuffle);
 		registerSlotInt("floor_shuffle_seed", &SlotOptions::floor_shuffle_seed);
 		registerSlotInt("difficulty_scaling", &SlotOptions::difficulty_scaling);
@@ -1329,7 +1333,12 @@ namespace
 	void updateKeyCompass(int minotaurSecs)
 	{
 		g_keyCompass.clear();
-		if ( !g_floorNeedsKey || g_floorKeyFound || !(minotaurSecs == -2 || (minotaurSecs >= 0 && minotaurSecs <= 30)) ) { return; }
+		// Key Compass Time: how many seconds before he arrives it turns on (at least 30), but never in
+		// the first 30 seconds of his timer.
+		int when = std::max(30, g_slot.key_compass_time);
+		bool on = minotaurSecs == -2 || (minotaurSecs >= 0 && minotaurSecs <= when && g_minotaurElapsed >= 30);
+		if ( minotaurSecs >= 0 && minotaurSecs <= 30 ) { on = true; }
+		if ( !g_floorNeedsKey || g_floorKeyFound || !on ) { return; }
 		Entity* pl = players[clientnum] ? players[clientnum]->entity : nullptr;
 		if ( !pl || !map.entities ) { return; }
 		for ( node_t* node = map.entities->first; node; node = node->next )

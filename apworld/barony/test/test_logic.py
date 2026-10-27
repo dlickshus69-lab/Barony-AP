@@ -24,12 +24,13 @@ class TestFewChecks(BaronyTestBase):
 
 class TestFloorKeys(BaronyTestBase):
     """Floor Keys live in your own game: no key items, and every floor is reachable from the start."""
-    options = {"floor_keys": True, "goal": "herx"}
+    options = {"floor_keys": True, "goal": "herx", "key_compass_time": 90}
 
     def test_no_key_items(self) -> None:
         self.assertFalse(any(item.name == "Progressive Stair Key" for item in self.multiworld.itempool))
         self.assertTrue(self.can_reach_location("Reach Floor 20"))
         self.assertEqual(self.world.fill_slot_data()["floor_keys"], 1)
+        self.assertEqual(self.world.fill_slot_data()["key_compass_time"], 90)
 
 
 class TestRandomizers(BaronyTestBase):

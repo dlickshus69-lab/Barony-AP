@@ -36,6 +36,7 @@ never wait on someone else for it. The starting floor, secret areas and boss flo
 
 On a Minotaur floor, once the Minotaur is 30 seconds away (or already there), the screen and the
 tracker point you at the key: "Floor Key: 18 tiles NE" (directions as on the map, north up).
+Key Compass Time turns it on sooner if you want more help (never in the first 30 seconds).
 
 ## How does the Minotaur Trap work?
 

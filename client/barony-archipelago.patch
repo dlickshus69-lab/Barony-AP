@@ -1,4 +1,4 @@
-From b3e5723b81cf94e201d1981eff88274dea452e96 Mon Sep 17 00:00:00 2001
+From 21786305638d8d2b4815f342e21403944c7f77b2 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -12,7 +12,7 @@ Subject: [PATCH] Archipelago client hooks
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 3034 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 3043 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |  100 +
  src/archipelago_ids.hpp           |   95 +
  src/engine/audio/sound_game.cpp   |    2 +
@@ -27,7 +27,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   10 +
  src/ui/MainMenu.cpp               |    5 +-
- 23 files changed, 3786 insertions(+), 4 deletions(-)
+ 23 files changed, 3795 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -648,10 +648,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..3ef2db8
+index 0000000..91d6155
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,3034 @@
+@@ -0,0 +1,3043 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -735,6 +735,7 @@ index 0000000..3ef2db8
 +		int special_area_checks = 0;
 +		int stair_keys = 0;           // old seeds only
 +		int floor_keys = 0;           // a key on every floor opens its stairs
++		int key_compass_time = 30;    // Minotaur floors: seconds before he arrives that the key compass turns on
 +		int floor_shuffle = 0;        // 0 off, 1 sections, 2 full
 +		int floor_shuffle_seed = 0;
 +		int difficulty_scaling = 1;
@@ -820,6 +821,7 @@ index 0000000..3ef2db8
 +	int g_secretExitThisFloor = 0; // set by generateDungeon, used once in onNewFloor
 +	Uint32 g_floorStartTicks = 0;  // when this floor started (the key hint shows for a little while)
 +	int g_minotaurSecs = -1;       // seconds until the Minotaur arrives; -1 none coming, -2 he's here
++	int g_minotaurElapsed = 0;     // seconds since his timer started
 +
 +	void updateMinotaurStatus()
 +	{
@@ -837,6 +839,7 @@ index 0000000..3ef2db8
 +				{
 +					int left = getMinotaurTimeToArrive() - e->skill[0];
 +					g_minotaurSecs = std::max(0, left / TICKS_PER_SECOND);
++					g_minotaurElapsed = e->skill[0] / TICKS_PER_SECOND;
 +					return;
 +				}
 +			}
@@ -1139,6 +1142,7 @@ index 0000000..3ef2db8
 +		registerSlotInt("special_area_checks", &SlotOptions::special_area_checks);
 +		registerSlotInt("stair_keys", &SlotOptions::stair_keys);
 +		registerSlotInt("floor_keys", &SlotOptions::floor_keys);
++		registerSlotInt("key_compass_time", &SlotOptions::key_compass_time);
 +		registerSlotInt("floor_shuffle", &SlotOptions::floor_shuffle);
 +		registerSlotInt("floor_shuffle_seed", &SlotOptions::floor_shuffle_seed);
 +		registerSlotInt("difficulty_scaling", &SlotOptions::difficulty_scaling);
@@ -1983,7 +1987,12 @@ index 0000000..3ef2db8
 +	void updateKeyCompass(int minotaurSecs)
 +	{
 +		g_keyCompass.clear();
-+		if ( !g_floorNeedsKey || g_floorKeyFound || !(minotaurSecs == -2 || (minotaurSecs >= 0 && minotaurSecs <= 30)) ) { return; }
++		// Key Compass Time: how many seconds before he arrives it turns on (at least 30), but never in
++		// the first 30 seconds of his timer.
++		int when = std::max(30, g_slot.key_compass_time);
++		bool on = minotaurSecs == -2 || (minotaurSecs >= 0 && minotaurSecs <= when && g_minotaurElapsed >= 30);
++		if ( minotaurSecs >= 0 && minotaurSecs <= 30 ) { on = true; }
++		if ( !g_floorNeedsKey || g_floorKeyFound || !on ) { return; }
 +		Entity* pl = players[clientnum] ? players[clientnum]->entity : nullptr;
 +		if ( !pl || !map.entities ) { return; }
 +		for ( node_t* node = map.entities->first; node; node = node->next )

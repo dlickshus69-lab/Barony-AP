@@ -279,6 +279,7 @@ class BaronyWorld(World):
             "special_area_checks": int(bool(o.special_area_checks)),
             "stair_keys": 0,
             "floor_keys": int(bool(o.floor_keys)),
+            "key_compass_time": o.key_compass_time.value,
             "floor_shuffle": o.floor_shuffle.value,
             "floor_shuffle_seed": self.floor_shuffle_seed,
             "difficulty_scaling": int(bool(o.difficulty_scaling)),
