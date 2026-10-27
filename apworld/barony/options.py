@@ -476,6 +476,55 @@ class ExtraMonsters(Range):
     default = 0
 
 
+class ChampionFloors(Range):
+    """
+    Every this many floors, a Champion guards the stairs down: a monster from that floor with double
+    health, five more levels and a red glow. It drops a guaranteed good item. 0 = no Champions.
+    """
+    display_name = "Champion Floors"
+    range_start = 0
+    range_end = 10
+    default = 0
+    special_range_names = {"off": 0}
+
+
+class ChampionLocksStairs(DefaultOnToggle):
+    """
+    Champion Floors only: the stairs stay locked until the Champion is dead (on top of the Floor Key).
+    """
+    display_name = "Champion Locks the Stairs"
+
+
+class ChampionChecks(Range):
+    """
+    Champion Floors only: the first this many Champions you defeat (counted across runs) are checks.
+    """
+    display_name = "Champion Checks"
+    range_start = 0
+    range_end = 20
+    default = 5
+
+
+class ProgressiveLantern(Toggle):
+    """
+    You start every run with less light than normal, and three Progressive Lanterns in the pool each
+    light up more around you; with all three you see farther than normal Barony. The lantern is part of
+    your character: it doesn't use a bag or hand slot and can't be dropped or lost. Torches and light
+    spells still work as usual.
+    """
+    display_name = "Progressive Lantern"
+
+
+class LanternDarkness(Range):
+    """
+    Progressive Lantern only: how much darker than normal you start (1 = a little, 3 = very dark).
+    """
+    display_name = "Lantern Darkness"
+    range_start = 1
+    range_end = 3
+    default = 2
+
+
 class BountyEnemies(Toggle):
     """
     On some floors one enemy glows gold: a bounty. It's tougher (more health, a few levels higher)
@@ -699,6 +748,8 @@ class DeathLinkMode(Choice):
     What happens when someone else's death reaches you through Death Link (with a life left).
     Restart Floor: you die, see the death screen, and restart the floor, like any other death.
     Lose a Life: you just lose a life (and pay the Death Penalty) and keep playing where you are.
+    After losing a life you're safe for 5 seconds (shown on screen): no damage, enemies lose track of
+    you, and you're moved out from under a boulder or off a wall.
     Either way the death counter counts it for the player who died, and with no lives left it's a real
     death.
     """
@@ -1039,6 +1090,11 @@ class BaronyOptions(PerGameCommonOptions):
     enemy_seed: EnemySeed
     music_shuffle: MusicShuffle
     music_seed: MusicSeed
+    champion_floors: ChampionFloors
+    champion_locks_stairs: ChampionLocksStairs
+    champion_checks: ChampionChecks
+    progressive_lantern: ProgressiveLantern
+    lantern_darkness: LanternDarkness
     bounty_enemies: BountyEnemies
     bounty_chance: BountyChance
     bounty_checks: BountyChecks
@@ -1093,7 +1149,8 @@ option_groups = [
     OptionGroup("Traps", [TrapChance, MinotaurTrapWeight, AmbushTrapWeight, PolymorphTrapWeight, FumbleTrapWeight, BlindnessTrapWeight, TeleportTrapWeight, HungerTrapWeight, DarknessTrapWeight, CurseTrapWeight,
                           PolymorphTrapDuration, BlindnessTrapDuration]),
     OptionGroup("Death Link", [BaronyDeathLink, DeathLinkMode, DeathPenalty, DeathItems, FloorRestart, BossDeath]),
-    OptionGroup("Extras", [FloorSize, ExtraMonsters, BountyEnemies, BountyChance, BountyChecks, RandomizeLoot, MusicMods]),
+    OptionGroup("Extras", [FloorSize, ExtraMonsters, ProgressiveLantern, LanternDarkness, BountyEnemies, BountyChance, BountyChecks, RandomizeLoot, MusicMods]),
+    OptionGroup("Challenges", [ChampionFloors, ChampionLocksStairs, ChampionChecks]),
     OptionGroup("Quality of Life", [FloorKeyOnTrackerMap]),
     OptionGroup("Players", [Players]),
 ]

@@ -113,6 +113,15 @@ class BaronyWorld(World):
         self.shop_count = min(self.options.shop_checks.value, (self.goal_floor - 1) // 2)
 
     # ------------------------------------------------------------------ helpers
+    def champion_floors(self) -> list:
+        """The floors the Champion checks come from: every Champion Floors floors before the goal,
+        skipping boss, town and Sanctum floors (no Champion there)."""
+        every, wanted = self.options.champion_floors.value, self.options.champion_checks.value
+        if every <= 0 or wanted <= 0:
+            return []
+        floors = [f for f in range(every, self.goal_floor, every) if f not in data.NO_CHAMPION_FLOORS]
+        return floors[:wanted]
+
     def _floor_needed(self, floor: int) -> int:
         """Clamp a 'needs floor X' requirement to the floors that exist before the goal."""
         return max(1, min(floor, self.goal_floor))
@@ -184,6 +193,9 @@ class BaronyWorld(World):
             for skill, rank in data.skill_checks_for(class_name, o.skill_check_max_rank.value):
                 planned.append((data.skill_location(skill, rank),
                                 self._floor_needed(min(data.SKILL_RANK_FLOOR[rank], self.goal_floor))))
+
+        for k, floor in enumerate(self.champion_floors(), 1):
+            planned.append((data.champion_location(k), self._floor_needed(floor)))
 
         if o.bounty_enemies and o.bounty_checks.value > 0:
             # Bounties come on some floors, counted across runs: the k-th one expects about
@@ -286,6 +298,8 @@ class BaronyWorld(World):
                 spells_first.append(data.spell_item_name(spell))
                 spell_upgrades += [data.spell_item_name(spell)] * self.options.spell_upgrades.value
 
+        if self.options.progressive_lantern:
+            spells_first = ["Progressive Lantern"] * 3 + spells_first  # kept before other useful items
         useful: list[str] = ["Extra Life"] * self.options.extra_lives_in_pool.value
         useful += data.PERMANENT_STAT_ITEMS
         useful += ["Max HP Up"] * 2
@@ -342,6 +356,11 @@ class BaronyWorld(World):
             "enemy_randomizer_secret": int(bool(o.enemy_randomizer_secret_areas)),
             "skill_check_max_rank": o.skill_check_max_rank.value,
             "lock_class": int(bool(o.lock_class)),
+            "champion_floors": o.champion_floors.value,
+            "champion_locks_stairs": int(bool(o.champion_locks_stairs)),
+            "champion_checks": len(self.champion_floors()),
+            "progressive_lantern": int(bool(o.progressive_lantern)),
+            "lantern_darkness": o.lantern_darkness.value,
             "bounty_enemies": int(bool(o.bounty_enemies)),
             "bounty_chance": o.bounty_chance.value,
             "bounty_checks": o.bounty_checks.value if o.bounty_enemies else 0,

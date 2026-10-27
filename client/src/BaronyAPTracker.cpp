@@ -477,7 +477,7 @@ namespace
 		std::vector<std::string> rows;
 		bool hasPlayer = false;
 		double px = 0, py = 0, pyaw = 0;
-		std::vector<MapPoint> ap, foes, chests, stairs, secrets, bounties;
+		std::vector<MapPoint> ap, foes, chests, stairs, secrets, bounties, champions;
 		bool hasKey = false;
 		double kx = 0, ky = 0;
 		bool locked = false;
@@ -536,6 +536,7 @@ namespace
 			else if ( k == "ap" ) { m.ap.push_back({ d(0), d(1), f.size() > 2 ? f[2] : "" }); }
 			else if ( k == "foe" ) { m.foes.push_back({ d(0), d(1), "" }); }
 			else if ( k == "bounty" ) { m.bounties.push_back({ d(0), d(1), "" }); }
+			else if ( k == "champion" ) { m.champions.push_back({ d(0), d(1), "" }); }
 			else if ( k == "chest" ) { m.chests.push_back({ d(0), d(1), "" }); }
 			else if ( k == "stairs" ) { m.stairs.push_back({ d(0), d(1), "" }); }
 			else if ( k == "secret" ) { m.secrets.push_back({ d(0), d(1), "" }); }
@@ -799,6 +800,15 @@ namespace
 			g.FillPolygon(&body, pts, 4);
 			g.DrawPolygon(&black, pts, 4);
 		}
+		for ( auto& f : g_map.champions )
+		{
+			// A Champion: a big red diamond.
+			float r = icon * 0.65f, cx = sx(f.x), cy = sy(f.y);
+			Gdiplus::PointF pts[4] = { { cx, cy - r }, { cx + r, cy }, { cx, cy + r }, { cx - r, cy } };
+			Gdiplus::SolidBrush body(Gdiplus::Color(255, 235, 60, 50));
+			g.FillPolygon(&body, pts, 4);
+			g.DrawPolygon(&black, pts, 4);
+		}
 		if ( g_map.hasKey )
 		{
 			float cx = sx(g_map.kx), cy = sy(g_map.ky);
@@ -834,7 +844,7 @@ namespace
 		SelectClipRgn(dc, nullptr);
 		// Legend under the map.
 		int ly = area.bottom - legendH - 4;
-		text(dc, area.left + 16, ly, L"Wheel: zoom   Drag: move   F: follow   R: fit   Gold diamond: bounty", DIM, g_bodyFont);
+		text(dc, area.left + 16, ly, L"Wheel: zoom   Drag: move   F: follow   R: fit   Gold diamond: bounty   Red: champion", DIM, g_bodyFont);
 
 		// Hovering a pile: what's in it.
 		const MapPile* hp = pileAt(g_hoverX, g_hoverY);
@@ -992,6 +1002,16 @@ namespace
 				else if ( mino == -2 )
 				{
 					text(dc, 14, y, L"The Minotaur is hunting you!", BAD, g_bodyFont);
+					y += 24;
+				}
+				if ( !g_state.values["champion"].empty() )
+				{
+					text(dc, 14, y, L"Champion: " + widen(g_state.values["champion"]) + L" guards the stairs", BAD, g_bodyFont);
+					y += 24;
+				}
+				if ( g_state.values.count("lantern") )
+				{
+					text(dc, 14, y, L"Lantern " + widen(g_state.values["lantern"]) + L" / 3", GOLD, g_bodyFont);
 					y += 24;
 				}
 				if ( !g_state.values["bounty"].empty() )

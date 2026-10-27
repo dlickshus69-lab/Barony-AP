@@ -36,7 +36,7 @@ areas, and skill ranks by class.
 ## Items
 
 Extra Life, permanent stat items, Max HP Up, Starting Gold Bonus, Progressive Compass, XP Boost,
-Gold Pouch, Healing Potion, Food Ration, Random Item, and the Minotaur, Ambush, Polymorph, Fumble,
+Gold Pouch, Healing Potion, Food Ration, Random Item, Progressive Lantern, spells (Spell Sanity), and the Minotaur, Ambush, Polymorph, Fumble,
 Blindness, Teleport, Hunger, Darkness and Curse traps.
 
 ## In the dungeon
@@ -44,7 +44,8 @@ Blindness, Teleport, Hunger, Darkness and Curse traps.
 Floor Keys (or defeat every enemy) open the stairs, with a Compass and a key warning on Minotaur
 floors. Lives restart the floor instead of ending the run, with Death Link, death penalties and a
 death counter. Optional: Floor Shuffle, Enemy Randomizer, Randomize Loot, bigger floors, extra
-monsters, Music Shuffle and Workshop music mods, boss and enemy level scaling.
+monsters, Music Shuffle and Workshop music mods, boss and enemy level scaling, Bounty Enemies,
+Champion floors (a tough guard at the stairs), and a 5-second safe window after losing a life.
 
 ## Tracker window
 

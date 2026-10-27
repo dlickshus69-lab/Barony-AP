@@ -28,6 +28,14 @@ kind of spellbook a check.
 Bounty Enemies (optional): on some floors one enemy glows gold. It's tougher, and defeating it gives
 extra gold and a bonus item; the first few (Bounty Checks) are checks too.
 
+Champion Floors (Challenges): every few floors a Champion, a much tougher enemy glowing red, guards the
+stairs down. With Champion Locks the Stairs you can't go down until it's dead. It drops a good item,
+and the first few (Champion Checks) are checks. Boss, town and Sanctum floors never have one.
+
+Progressive Lantern (Extras): the dungeon starts darker (Lantern Darkness sets how much), and three
+Progressive Lanterns in the item pool each light it up again, ending brighter than normal. They aren't
+inventory items, so you can't lose or drop them.
+
 The Hall of Fame (F5 in game, and shown by itself in the starting area) keeps every run on this seed:
 runs and wins, deepest floor, fastest win, fewest lives lost in a win, most kills and gold, and your
 last five runs.
@@ -95,6 +103,10 @@ the ones you haven't found yet come back. A game over resets everything.
 Death Link deaths also cost a life, with the same Death Penalty (none, gold, XP, or gold and XP).
 With Death Link Mode set to Lose a Life, a Death Link only takes the life and the penalty; you keep
 playing where you are instead of restarting the floor.
+
+After you lose a life (in place, or when the floor restarts) you're safe for 5 seconds, with a
+countdown on screen: you take no damage, enemies lose track of you, and if a boulder or a wall has you
+pinned you're moved to the nearest open spot, so one hit can't cost two lives.
 
 The top left of the screen shows whether you're connected and how many Archipelago things are left on
 the floor. The top right shows your lives and the total death count. F1 shows received items, F2

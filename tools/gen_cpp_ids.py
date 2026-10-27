@@ -37,6 +37,7 @@ lines = [
     f"constexpr int64_t SPELLBOOK_OFFSET = {data.SPELLBOOK_OFFSET};",
     f"constexpr int64_t SPELL_ITEM_OFFSET = {data.SPELL_ITEM_OFFSET};",
     f"constexpr int64_t BOUNTY_OFFSET = {data.BOUNTY_OFFSET};",
+    f"constexpr int64_t CHAMPION_OFFSET = {data.CHAMPION_OFFSET};",
     f"constexpr int MAX_FLOOR = {data.MAX_FLOOR};",
     f"constexpr int FLOORS_PER_SECTION = {data.FLOORS_PER_SECTION};",
     "",

@@ -147,6 +147,8 @@ SKILL_OFFSET = 900        # + skill * 5 + rank (rank 1..5)
 SPELLBOOK_OFFSET = 1100   # + Barony spell id: reading that spellbook (Spellbook Checks)
 BOUNTY_OFFSET = 1200      # + k (1..30): the k-th bounty enemy defeated
 MAX_BOUNTY_CHECKS = 30
+CHAMPION_OFFSET = 1300    # + k (1..20): the k-th Champion defeated
+MAX_CHAMPION_CHECKS = 20
 
 # ---------------------------------------------------------------------------------------
 # Skills (Barony 5): index = PRO_ constant, name as the game shows it
@@ -293,6 +295,14 @@ def bounty_location(k: int) -> str:
     return f"Bounty {k}"
 
 
+# Boss, town and Sanctum floors: no Champion there.
+NO_CHAMPION_FLOORS = {20, 24, 25, 35}
+
+
+def champion_location(k: int) -> str:
+    return f"Champion {k}"
+
+
 LOCATION_NAME_TO_ID: dict[str, int] = {}
 for _f in range(1, MAX_FLOOR + 1):
     LOCATION_NAME_TO_ID[floor_location(_f)] = BASE_ID + FLOOR_OFFSET + _f
@@ -318,6 +328,8 @@ for _sp in SPELLS:
         LOCATION_NAME_TO_ID[spellbook_location(_sp)] = BASE_ID + SPELLBOOK_OFFSET + _sp.spell_id
 for _bk in range(1, MAX_BOUNTY_CHECKS + 1):
     LOCATION_NAME_TO_ID[bounty_location(_bk)] = BASE_ID + BOUNTY_OFFSET + _bk
+for _ck in range(1, MAX_CHAMPION_CHECKS + 1):
+    LOCATION_NAME_TO_ID[champion_location(_ck)] = BASE_ID + CHAMPION_OFFSET + _ck
 
 
 # ---------------------------------------------------------------------------------------
@@ -343,7 +355,8 @@ ITEMS: dict[str, ItemInfo] = {
     "Permanent Charisma": ItemInfo(16, "useful", "PERM_CHR"),
     "Max HP Up": ItemInfo(17, "useful", "MAX_HP_UP"),
     "Starting Gold Bonus": ItemInfo(18, "useful", "START_GOLD"),
-    "Progressive Compass": ItemInfo(20, "useful", "COMPASS"),  # Compass option: points at the Floor Key
+    "Progressive Compass": ItemInfo(20, "useful", "COMPASS"),
+    "Progressive Lantern": ItemInfo(21, "useful", "LANTERN"),  # Progressive Lantern: more light  # Compass option: points at the Floor Key
 
     # filler: one-shot, applied once when received
     "XP Boost": ItemInfo(30, "filler", "XP_BOOST"),

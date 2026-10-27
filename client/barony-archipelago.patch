@@ -1,20 +1,20 @@
-From 75c8188b949374512a16ed85a285c04ee7733425 Mon Sep 17 00:00:00 2001
+From 447d1c4aa355a86d779ceefa2177424061ee7ef9 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
 
 ---
  CMakeLists.txt                    |   32 +
- src/BaronyAPTracker.cpp           | 1512 ++++++++++
+ src/BaronyAPTracker.cpp           | 1532 +++++++++
  src/CMakeLists.txt                |    1 +
  src/actchest.cpp                  |    7 +
  src/actgeneral.cpp                |    2 +
  src/actladder.cpp                 |   25 +
  src/actmonster.cpp                |    3 +
- src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 4623 +++++++++++++++++++++++++++++
- src/archipelago_barony.hpp        |  126 +
- src/archipelago_ids.hpp           |  245 ++
+ src/actplayer.cpp                 |   10 +-
+ src/archipelago_barony.cpp        | 4855 +++++++++++++++++++++++++++++
+ src/archipelago_barony.hpp        |  128 +
+ src/archipelago_ids.hpp           |  247 ++
  src/charclass.cpp                 |    4 +
  src/engine/audio/music.cpp        |    4 +
  src/engine/audio/sound_game.cpp   |    2 +
@@ -29,9 +29,9 @@ Subject: [PATCH] Archipelago client hooks
  src/magic/castSpell.cpp           |    2 +
  src/maps.cpp                      |   34 +
  src/monster_minotaur.cpp          |    3 +-
- src/opengl.cpp                    |   15 +
+ src/opengl.cpp                    |   20 +
  src/ui/MainMenu.cpp               |    5 +-
- 27 files changed, 6790 insertions(+), 4 deletions(-)
+ 27 files changed, 7054 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -82,10 +82,10 @@ index 4e9ed8f..b417834 100644
      # Only for MinGW...
 diff --git a/src/BaronyAPTracker.cpp b/src/BaronyAPTracker.cpp
 new file mode 100644
-index 0000000..4b416cc
+index 0000000..07618f0
 --- /dev/null
 +++ b/src/BaronyAPTracker.cpp
-@@ -0,0 +1,1512 @@
+@@ -0,0 +1,1532 @@
 +// Barony Archipelago tracker window.
 +//
 +// Barony (the Archipelago build) starts this with the game, and writes
@@ -565,7 +565,7 @@ index 0000000..4b416cc
 +		std::vector<std::string> rows;
 +		bool hasPlayer = false;
 +		double px = 0, py = 0, pyaw = 0;
-+		std::vector<MapPoint> ap, foes, chests, stairs, secrets, bounties;
++		std::vector<MapPoint> ap, foes, chests, stairs, secrets, bounties, champions;
 +		bool hasKey = false;
 +		double kx = 0, ky = 0;
 +		bool locked = false;
@@ -624,6 +624,7 @@ index 0000000..4b416cc
 +			else if ( k == "ap" ) { m.ap.push_back({ d(0), d(1), f.size() > 2 ? f[2] : "" }); }
 +			else if ( k == "foe" ) { m.foes.push_back({ d(0), d(1), "" }); }
 +			else if ( k == "bounty" ) { m.bounties.push_back({ d(0), d(1), "" }); }
++			else if ( k == "champion" ) { m.champions.push_back({ d(0), d(1), "" }); }
 +			else if ( k == "chest" ) { m.chests.push_back({ d(0), d(1), "" }); }
 +			else if ( k == "stairs" ) { m.stairs.push_back({ d(0), d(1), "" }); }
 +			else if ( k == "secret" ) { m.secrets.push_back({ d(0), d(1), "" }); }
@@ -887,6 +888,15 @@ index 0000000..4b416cc
 +			g.FillPolygon(&body, pts, 4);
 +			g.DrawPolygon(&black, pts, 4);
 +		}
++		for ( auto& f : g_map.champions )
++		{
++			// A Champion: a big red diamond.
++			float r = icon * 0.65f, cx = sx(f.x), cy = sy(f.y);
++			Gdiplus::PointF pts[4] = { { cx, cy - r }, { cx + r, cy }, { cx, cy + r }, { cx - r, cy } };
++			Gdiplus::SolidBrush body(Gdiplus::Color(255, 235, 60, 50));
++			g.FillPolygon(&body, pts, 4);
++			g.DrawPolygon(&black, pts, 4);
++		}
 +		if ( g_map.hasKey )
 +		{
 +			float cx = sx(g_map.kx), cy = sy(g_map.ky);
@@ -922,7 +932,7 @@ index 0000000..4b416cc
 +		SelectClipRgn(dc, nullptr);
 +		// Legend under the map.
 +		int ly = area.bottom - legendH - 4;
-+		text(dc, area.left + 16, ly, L"Wheel: zoom   Drag: move   F: follow   R: fit   Gold diamond: bounty", DIM, g_bodyFont);
++		text(dc, area.left + 16, ly, L"Wheel: zoom   Drag: move   F: follow   R: fit   Gold diamond: bounty   Red: champion", DIM, g_bodyFont);
 +
 +		// Hovering a pile: what's in it.
 +		const MapPile* hp = pileAt(g_hoverX, g_hoverY);
@@ -1080,6 +1090,16 @@ index 0000000..4b416cc
 +				else if ( mino == -2 )
 +				{
 +					text(dc, 14, y, L"The Minotaur is hunting you!", BAD, g_bodyFont);
++					y += 24;
++				}
++				if ( !g_state.values["champion"].empty() )
++				{
++					text(dc, 14, y, L"Champion: " + widen(g_state.values["champion"]) + L" guards the stairs", BAD, g_bodyFont);
++					y += 24;
++				}
++				if ( g_state.values.count("lantern") )
++				{
++					text(dc, 14, y, L"Lantern " + widen(g_state.values["lantern"]) + L" / 3", GOLD, g_bodyFont);
 +					y += 24;
 +				}
 +				if ( !g_state.values["bounty"].empty() )
@@ -1756,7 +1776,7 @@ index e3f78b0..b7d0cb0 100644
  		if ( cursedFlesh & (1 << 7) )
  		{
 diff --git a/src/actplayer.cpp b/src/actplayer.cpp
-index 0872ea6..2f7f1f0 100644
+index 0872ea6..aee34f8 100644
 --- a/src/actplayer.cpp
 +++ b/src/actplayer.cpp
 @@ -11,6 +11,7 @@
@@ -1767,7 +1787,17 @@ index 0872ea6..2f7f1f0 100644
  #include "stat.hpp"
  #include "messages.hpp"
  #include "entity.hpp"
-@@ -10758,7 +10759,10 @@ void actPlayer(Entity* my)
+@@ -10676,6 +10677,9 @@ void actPlayer(Entity* my)
+             }
+         }
+ 	}
++#ifndef EDITOR
++    range_bonus += AP::lanternLightBonus(PLAYER_NUM); // Archipelago: Progressive Lantern
++#endif
+     if (*cvar_playerLight) {
+ 		if (my->flags[BURNING] ) {
+             my->light = addLight(my->x / 16, my->y / 16, "player_burning");
+@@ -10758,7 +10762,10 @@ void actPlayer(Entity* my)
  		{
  			my->handleEffects(stats[PLAYER_NUM]); // hunger, regaining hp/mp, poison, etc.
  
@@ -1779,7 +1809,7 @@ index 0872ea6..2f7f1f0 100644
  			{
  				bool doDeathProcedure = true;
  				if ( client_disconnected[PLAYER_NUM] )
-@@ -10833,6 +10837,7 @@ void actPlayer(Entity* my)
+@@ -10833,6 +10840,7 @@ void actPlayer(Entity* my)
  					}
  					if ( stats[PLAYER_NUM]->HP <= 0 )
  					{
@@ -1789,10 +1819,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..b7cf05a
+index 0000000..75d45d7
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,4623 @@
+@@ -0,0 +1,4855 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -1887,6 +1917,11 @@ index 0000000..b7cf05a
 +		int skill_checks = 0;         // 0 off, 1 any class, 2.. a class (Barony class index + 2)
 +		int skill_check_max_rank = 3; // 1 Basic .. 5 Legendary
 +		int lock_class = 0;
++		int champion_floors = 0;      // every this many floors a Champion guards the stairs (0 off)
++		int champion_locks_stairs = 1;
++		int champion_checks = 0;
++		int progressive_lantern = 0;  // less light, three Progressive Lanterns bring it back and more
++		int lantern_darkness = 2;
 +		int bounty_enemies = 0;       // a gold-glowing, tougher enemy on some floors
 +		int bounty_chance = 50;       // percent of floors with a bounty
 +		int bounty_checks = 0;        // the first N bounty kills are checks
@@ -1942,6 +1977,7 @@ index 0000000..b7cf05a
 +		int goalBossesKilled = 0;     // bit per goal boss
 +		bool goalSent = false;
 +		long bountyKills = 0;         // bounty enemies defeated (all runs)
++		long championKills = 0;       // Champions defeated (all runs)
 +		// Hall of Fame: this run so far, and every run before ("deepest,kills,livesLost,gold,seconds,result")
 +		bool runActive = false;
 +		int runDeepest = 0, runKills = 0, runLivesLost = 0;
@@ -2192,7 +2228,7 @@ index 0000000..b7cf05a
 +		out << "darknessQueue=" << g_save.darknessQueue << "\n";
 +		out << "goalBossesKilled=" << g_save.goalBossesKilled << "\n";
 +		out << "goalSent=" << (g_save.goalSent ? 1 : 0) << "\n";
-+		out << "bountyKills=" << g_save.bountyKills << "\n";
++		out << "bountyKills=" << g_save.bountyKills << "\nchampionKills=" << g_save.championKills << "\n";
 +		out << "runActive=" << (g_save.runActive ? 1 : 0) << "\nrunDeepest=" << g_save.runDeepest << "\nrunKills=" << g_save.runKills
 +			<< "\nrunLivesLost=" << g_save.runLivesLost << "\nrunGoldMax=" << g_save.runGoldMax << "\nrunStartPlay=" << g_save.runStartPlay << "\n";
 +		for ( auto& r : g_save.runs ) { out << "run:" << r << "\n"; }
@@ -2234,6 +2270,7 @@ index 0000000..b7cf05a
 +			else if ( key == "goalSent" ) { g_save.goalSent = value != 0; }
 +			else if ( key == "playSeconds" ) { g_save.playSeconds = (long)value; }
 +			else if ( key == "bountyKills" ) { g_save.bountyKills = (long)value; }
++			else if ( key == "championKills" ) { g_save.championKills = (long)value; }
 +			else if ( key == "runActive" ) { g_save.runActive = value != 0; }
 +			else if ( key == "runDeepest" ) { g_save.runDeepest = (int)value; }
 +			else if ( key == "runKills" ) { g_save.runKills = (int)value; }
@@ -2392,6 +2429,11 @@ index 0000000..b7cf05a
 +		registerSlotInt("enemy_randomizer_secret", &SlotOptions::enemy_randomizer_secret);
 +		registerSlotInt("skill_check_max_rank", &SlotOptions::skill_check_max_rank);
 +		registerSlotInt("lock_class", &SlotOptions::lock_class);
++		registerSlotInt("champion_floors", &SlotOptions::champion_floors);
++		registerSlotInt("champion_locks_stairs", &SlotOptions::champion_locks_stairs);
++		registerSlotInt("champion_checks", &SlotOptions::champion_checks);
++		registerSlotInt("progressive_lantern", &SlotOptions::progressive_lantern);
++		registerSlotInt("lantern_darkness", &SlotOptions::lantern_darkness);
 +		registerSlotInt("bounty_enemies", &SlotOptions::bounty_enemies);
 +		registerSlotInt("bounty_chance", &SlotOptions::bounty_chance);
 +		registerSlotInt("bounty_checks", &SlotOptions::bounty_checks);
@@ -2502,6 +2544,7 @@ index 0000000..b7cf05a
 +			case ITEM_START_GOLD: return "Starting Gold Bonus";
 +			case ITEM_COMPASS: return "Progressive Compass";
 +			case ITEM_XP_BOOST: return "XP Boost";
++			case ITEM_LANTERN: return "Progressive Lantern";
 +			case ITEM_GOLD_POUCH: return "Gold Pouch";
 +			case ITEM_HEAL_POTION: return "Healing Potion";
 +			case ITEM_FOOD: return "Food Ration";
@@ -2774,6 +2817,10 @@ index 0000000..b7cf05a
 +				default:
 +					break; // permanent items are handled by syncPermanents()
 +			}
++		}
++		if ( item == ITEM_LANTERN )
++		{
++			say(COLOR_AP, "Your lantern burns brighter (%d / 3).", std::min(3, countReceived(ITEM_LANTERN)));
 +		}
 +		if ( item == ITEM_EXTRA_LIFE )
 +		{
@@ -4160,6 +4207,175 @@ index 0000000..b7cf05a
 +		writeSave();
 +	}
 +
++	// ------------------------------------------------------- Grace after losing a life
++	// For a few seconds after losing a life and playing on (or a floor restart): no damage, enemies lose
++	// track of you, and you're moved out from under a boulder or a wall, so one hit can't take two lives.
++	const int GRACE_SECONDS = 5;
++	Uint32 g_graceUntil = 0;
++	Sint32 g_graceHP = 0;
++
++	bool boulderOn(double x, double y)
++	{
++		for ( node_t* node = map.entities ? map.entities->first : nullptr; node; node = node->next )
++		{
++			Entity* e = (Entity*)node->element;
++			if ( e && e->behavior == &actBoulder && std::fabs(e->x - x) < 14 && std::fabs(e->y - y) < 14 ) { return true; }
++		}
++		return false;
++	}
++
++	void unstickPlayer(Entity* pl)
++	{
++		if ( !pl ) { return; }
++		if ( !boulderOn(pl->x, pl->y) && !checkObstacle((long)pl->x, (long)pl->y, pl, nullptr) ) { return; }
++		for ( int r = 1; r <= 5; ++r )
++		{
++			for ( int dy = -r; dy <= r; ++dy )
++			{
++				for ( int dx = -r; dx <= r; ++dx )
++				{
++					if ( std::abs(dx) != r && std::abs(dy) != r ) { continue; } // just the ring
++					double nx = ((int)(pl->x / 16) + dx) * 16 + 8, ny = ((int)(pl->y / 16) + dy) * 16 + 8;
++					if ( nx < 0 || ny < 0 || nx >= map.width * 16 || ny >= map.height * 16 ) { continue; }
++					if ( checkObstacle((long)nx, (long)ny, pl, nullptr) || boulderOn(nx, ny) ) { continue; }
++					pl->x = nx; pl->y = ny;
++					pl->vel_x = pl->vel_y = 0;
++					return;
++				}
++			}
++		}
++	}
++
++	void startGrace()
++	{
++		Stat* s = stats[clientnum];
++		if ( !s ) { return; }
++		g_graceUntil = ticks + TICKS_PER_SECOND * GRACE_SECONDS;
++		g_graceHP = s->HP;
++		unstickPlayer(players[clientnum] ? players[clientnum]->entity : nullptr);
++	}
++
++	bool graceActive() { return g_graceUntil && ticks < g_graceUntil; }
++
++	void updateGrace()
++	{
++		if ( !g_graceUntil ) { return; }
++		if ( !graceActive() || g_deathScreen || g_restartPending ) { g_graceUntil = 0; return; }
++		Stat* s = stats[clientnum];
++		Entity* pl = players[clientnum] ? players[clientnum]->entity : nullptr;
++		if ( !s || !pl ) { return; }
++		if ( s->HP < g_graceHP ) { s->HP = g_graceHP; } // healing still counts
++		g_graceHP = std::max(g_graceHP, s->HP);
++		unstickPlayer(pl);
++		for ( node_t* node = map.creatures ? map.creatures->first : nullptr; node; node = node->next )
++		{
++			Entity* e = (Entity*)node->element;
++			if ( e && e != pl && e->getStats() && (Uint32)e->monsterTarget == pl->getUID() ) { e->monsterReleaseAttackTarget(true); }
++		}
++	}
++
++	// ------------------------------------------------------- Champions
++	// Every Champion Floors floors, a much tougher monster guards the stairs down.
++	Uint32 g_championUid = 0;
++	bool g_championBuffed = false;
++	bool g_championDeadHere = false;
++
++	Entity* findDownStairs()
++	{
++		for ( node_t* node = map.entities ? map.entities->first : nullptr; node; node = node->next )
++		{
++			Entity* e = (Entity*)node->element;
++			if ( e && e->behavior == &actLadder && e->skill[3] == 0 ) { return e; }
++		}
++		return nullptr;
++	}
++
++	void pickChampion(bool restarted)
++	{
++		g_championUid = 0;
++		g_championBuffed = false;
++		if ( !restarted ) { g_championDeadHere = false; }
++		int every = g_slot.champion_floors;
++		if ( every <= 0 || g_championDeadHere || currentlevel < 1 || currentlevel % every != 0 || secretlevel
++			|| isSpecialMap() || !map.creatures ) { return; }
++		Entity* stairs = findDownStairs();
++		std::vector<Entity*> pool;
++		for ( node_t* node = map.creatures->first; node; node = node->next )
++		{
++			Entity* e = (Entity*)node->element;
++			if ( isMarkableEnemy(e) && !g_markedEnemies.count(e->getUID()) && e->getUID() != g_bountyUid ) { pool.push_back(e); }
++		}
++		Entity* pick = nullptr;
++		if ( !pool.empty() ) { pick = pool[local_rng.rand() % pool.size()]; }
++		else if ( stairs )
++		{
++			Monster type = static_cast<Monster>(monsterCurve(currentlevel));
++			if ( type != NOTHING && type != SHOPKEEPER ) { pick = summonMonsterNoSmoke(type, stairs->x, stairs->y); }
++		}
++		if ( !pick ) { return; }
++		if ( stairs )
++		{
++			// Stand guard next to the stairs: the first open tile around them.
++			const int dx[] = { 1, -1, 0, 0, 1, -1, 1, -1 }, dy[] = { 0, 0, 1, -1, 1, 1, -1, -1 };
++			for ( int k = 0; k < 8; ++k )
++			{
++				double nx = stairs->x + dx[k] * 16, ny = stairs->y + dy[k] * 16;
++				if ( !checkObstacle((long)nx, (long)ny, pick, nullptr) ) { pick->x = nx; pick->y = ny; break; }
++			}
++		}
++		g_championUid = pick->getUID();
++		Stat* st = pick->getStats();
++		say(COLOR_TRAP, "A Champion %s guards the stairs down!", st ? getMonsterLocalizedName((Monster)st->type).c_str() : "monster");
++	}
++
++	void updateChampion()
++	{
++		if ( !g_championUid || g_championBuffed ) { return; }
++		Entity* e = uidToEntity(g_championUid);
++		if ( !e ) { g_championUid = 0; return; }
++		Stat* st = e->getStats();
++		if ( !st || e->ticks < 5 ) { return; }
++		st->MAXHP *= 2;
++		st->HP = st->MAXHP;
++		st->LVL += 5;
++		g_championBuffed = true;
++	}
++
++	bool championAlive()
++	{
++		if ( !g_championUid ) { return false; }
++		Entity* e = uidToEntity(g_championUid);
++		Stat* st = e ? e->getStats() : nullptr;
++		return st && st->HP > 0;
++	}
++
++	void claimChampion(Entity* my)
++	{
++		g_championUid = 0;
++		g_championDeadHere = true;
++		++g_save.championKills;
++		// A guaranteed good item: well above the floor's level, excellent and blessed.
++		for ( int tries = 0; tries < 10; ++tries )
++		{
++			Category cat = LOOT_CATEGORIES[local_rng.rand() % (sizeof(LOOT_CATEGORIES) / sizeof(LOOT_CATEGORIES[0]))];
++			if ( cat == FOOD || cat == BOOK || cat == GEM ) { continue; }
++			ItemType type = itemLevelCurve(cat, std::max(1, currentlevel), std::max(1, currentlevel) + 8, local_rng);
++			if ( !lootRerollable(type, 0) ) { continue; }
++			if ( Item* item = newItem(type, EXCELLENT, 1 + local_rng.rand() % 2, 1, local_rng.rand(), false, nullptr) )
++			{
++				dropItemMonster(item, my, nullptr);
++			}
++			break;
++		}
++		say(COLOR_AP, "The Champion falls! It dropped something good. The stairs are free.");
++		if ( g_slot.champion_checks > 0 && g_save.championKills <= g_slot.champion_checks )
++		{
++			sendLocation(ap_ids::BASE_ID + ap_ids::CHAMPION_OFFSET + g_save.championKills);
++			say(COLOR_AP, "Champion check %ld of %d sent.", g_save.championKills, g_slot.champion_checks);
++		}
++		writeSave();
++	}
++
 +	// ------------------------------------------------------- Hall of Fame
 +	// Every run on this seed: deepest floor, kills, lives lost, most gold, time, and how it ended.
 +	enum RunResult { RUN_ONGOING = 0, RUN_GAME_OVER = 1, RUN_WON = 2, RUN_LEFT = 3 };
@@ -4280,6 +4496,8 @@ index 0000000..b7cf05a
 +		g_compassReadyAt = 0;
 +		pickMarkedEnemies();
 +		pickBounty(restarted);
++		pickChampion(restarted);
++		if ( restarted ) { startGrace(); }
 +		g_save.runDeepest = std::max(g_save.runDeepest, currentlevel);
 +		if ( g_markedThisFloor > 0 )
 +		{
@@ -4312,7 +4530,8 @@ index 0000000..b7cf05a
 +			--g_save.livesLeft;
 +	++g_save.runLivesLost;
 +			applyDeathPenalty(stats[p]);
-+			say(COLOR_TRAP, "You lose a life (%d left).", g_save.livesLeft);
++			say(COLOR_TRAP, "You lose a life (%d left). Safe for %d seconds.", g_save.livesLeft, GRACE_SECONDS);
++			startGrace();
 +			printlog("[Archipelago] Death Link: lost a life. Lives left: %d", g_save.livesLeft);
 +			writeSave();
 +			return;
@@ -4492,6 +4711,10 @@ index 0000000..b7cf05a
 +			Entity* b = g_bountyUid ? uidToEntity(g_bountyUid) : nullptr;
 +			Stat* bs = b ? b->getStats() : nullptr;
 +			out << "bounty=" << (bs && bs->HP > 0 ? getMonsterLocalizedName((Monster)bs->type) : std::string()) << "\n";
++			Entity* c = g_championUid ? uidToEntity(g_championUid) : nullptr;
++			Stat* cs = c ? c->getStats() : nullptr;
++			out << "champion=" << (cs && cs->HP > 0 ? getMonsterLocalizedName((Monster)cs->type) : std::string()) << "\n";
++			if ( g_slot.progressive_lantern ) { out << "lantern=" << std::min(3, countReceived(ap_ids::ITEM_LANTERN)) << "\n"; }
 +		}
 +		out << "secretexit=" << (g_floorHasSecretExit && !secretlevel ? 1 : 0) << "\n";
 +		out << "secretarea=" << (secretlevel ? 1 : 0) << "\n";
@@ -4757,6 +4980,10 @@ index 0000000..b7cf05a
 +					{
 +						out << "foe=" << tx << "\t" << ty << "\n";
 +					}
++					else if ( g_championUid && e->getUID() == g_championUid && st && st->HP > 0 )
++					{
++						out << "champion=" << tx << "\t" << ty << "\n";
++					}
 +					else if ( g_bountyUid && e->getUID() == g_bountyUid && st && st->HP > 0 )
 +					{
 +						out << "bounty=" << tx << "\t" << ty << "\n";
@@ -4983,6 +5210,8 @@ index 0000000..b7cf05a
 +	applyNewItems();
 +	updatePendingTraps();
 +	updateBounty();
++	updateChampion();
++	updateGrace();
 +	if ( stats[clientnum] && stats[clientnum]->GOLD > g_save.runGoldMax ) { g_save.runGoldMax = stats[clientnum]->GOLD; }
 +	syncPermanents();
 +	if ( ticks % TICKS_PER_SECOND == 0 ) { syncSpells(); }
@@ -5283,6 +5512,7 @@ index 0000000..b7cf05a
 +	++g_save.totalKills;
 +	++g_save.runKills;
 +	if ( g_bountyUid && my->getUID() == g_bountyUid ) { claimBounty(my); }
++	if ( g_championUid && my->getUID() == g_championUid ) { claimChampion(my); }
 +	if ( type != MINOTAUR && type != LICH && type != DEVIL && type != LICH_ICE && type != LICH_FIRE )
 +	{
 +		++g_floorKills;
@@ -5371,6 +5601,11 @@ index 0000000..b7cf05a
 +		s->HP = std::max<Sint32>(1, s->HP); // stay "dead" on the death screen until the restart
 +		return true;
 +	}
++	if ( graceActive() && !g_dyingFromDeathLink )
++	{
++		s->HP = std::max<Sint32>(1, g_graceHP); // still safe from losing a life just after the last one
++		return true;
++	}
 +	if ( g_save.livesLeft <= 0 ) { return false; }
 +
 +	--g_save.livesLeft;
@@ -5449,6 +5684,11 @@ index 0000000..b7cf05a
 +			: "The stairs are locked. Find this floor's Floor Key, or defeat every enemy here.");
 +		return false;
 +	}
++	if ( g_slot.champion_locks_stairs && championAlive() )
++	{
++		messagePlayerColor(player, MESSAGE_HINT, COLOR_TRAP, "The Champion guards the stairs. Defeat it first.");
++		return false;
++	}
 +	// Warn once before leaving a floor with Archipelago things still on it; using the stairs again leaves.
 +	FloorCounts c = countFloor();
 +	if ( c.total() > 0 && (g_stairsWarnedAt == 0 || ticks - g_stairsWarnedAt > TICKS_PER_SECOND * 15) )
@@ -5516,6 +5756,21 @@ index 0000000..b7cf05a
 +	if ( !entity || g_markedEnemies.empty() ) { return false; }
 +	if ( g_markedEnemies.count(entity->getUID()) ) { return true; }
 +	return g_markedEnemies.count(entity->parent) > 0; // body parts belong to their monster
++}
++
++bool isChampionEnemy(const Entity* entity)
++{
++	if ( !entity || !g_championUid ) { return false; }
++	return entity->getUID() == g_championUid || entity->parent == g_championUid;
++}
++
++int lanternLightBonus(int player)
++{
++	// Progressive Lantern: from Lantern Darkness below normal up to one above, in three steps.
++	if ( !g_ready || !g_slot.progressive_lantern || player != clientnum ) { return 0; }
++	int dark = std::max(1, std::min(3, g_slot.lantern_darkness));
++	int have = std::min(3, countReceived(ap_ids::ITEM_LANTERN));
++	return -dark + (int)std::lround(have * (dark + 1) / 3.0);
 +}
 +
 +bool isBountyEnemy(const Entity* entity)
@@ -6108,6 +6363,13 @@ index 0000000..b7cf05a
 +			drawText("The Minotaur is hunting you!", BIG_FONT, makeColorRGB(255, 70, 60), 38, row);
 +			row += 22;
 +		}
++		if ( graceActive() )
++		{
++			char gb[64];
++			snprintf(gb, sizeof(gb), "Safe: %.1f s", (g_graceUntil - ticks) / (double)TICKS_PER_SECOND);
++			drawText(gb, BIG_FONT, makeColorRGB(120, 200, 255), 38, row);
++			row += 22;
++		}
 +		if ( g_floorNeedsKey && !g_floorKeyFound )
 +		{
 +			std::string keyLine;
@@ -6418,10 +6680,10 @@ index 0000000..b7cf05a
 +} // namespace AP
 diff --git a/src/archipelago_barony.hpp b/src/archipelago_barony.hpp
 new file mode 100644
-index 0000000..2b62aed
+index 0000000..40b9c96
 --- /dev/null
 +++ b/src/archipelago_barony.hpp
-@@ -0,0 +1,126 @@
+@@ -0,0 +1,128 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client.
@@ -6488,6 +6750,8 @@ index 0000000..2b62aed
 +
 +	// opengl.cpp: Enemy Sanity marked enemies are drawn with a green glow.
 +	bool isBountyEnemy(const Entity* entity); // Bounty Enemies glow gold
++	bool isChampionEnemy(const Entity* entity); // Champions glow red
++	int lanternLightBonus(int player);          // Progressive Lantern: light radius change
 +	bool isMarkedEnemy(const Entity* entity);
 +
 +	// The Archipelago item (floor pickups and shop items) and its own logo model and icon.
@@ -6550,10 +6814,10 @@ index 0000000..2b62aed
 +}
 diff --git a/src/archipelago_ids.hpp b/src/archipelago_ids.hpp
 new file mode 100644
-index 0000000..8e07376
+index 0000000..2c29451
 --- /dev/null
 +++ b/src/archipelago_ids.hpp
-@@ -0,0 +1,245 @@
+@@ -0,0 +1,247 @@
 +// GENERATED by tools/gen_cpp_ids.py from apworld/barony/data.py. Do not edit by hand.
 +#pragma once
 +#include <cstdint>
@@ -6572,6 +6836,7 @@ index 0000000..8e07376
 +constexpr int64_t SPELLBOOK_OFFSET = 1100;
 +constexpr int64_t SPELL_ITEM_OFFSET = 100;
 +constexpr int64_t BOUNTY_OFFSET = 1200;
++constexpr int64_t CHAMPION_OFFSET = 1300;
 +constexpr int MAX_FLOOR = 45;
 +constexpr int FLOORS_PER_SECTION = 5;
 +
@@ -6587,6 +6852,7 @@ index 0000000..8e07376
 +constexpr int64_t ITEM_MAX_HP_UP = 4270017; // Max HP Up
 +constexpr int64_t ITEM_START_GOLD = 4270018; // Starting Gold Bonus
 +constexpr int64_t ITEM_COMPASS = 4270020; // Progressive Compass
++constexpr int64_t ITEM_LANTERN = 4270021; // Progressive Lantern
 +constexpr int64_t ITEM_XP_BOOST = 4270030; // XP Boost
 +constexpr int64_t ITEM_GOLD_POUCH = 4270031; // Gold Pouch
 +constexpr int64_t ITEM_HEAL_POTION = 4270032; // Healing Potion
@@ -7347,7 +7613,7 @@ index f9a26a3..a309479 100644
  
  void actMinotaurTimer(Entity* my)
 diff --git a/src/opengl.cpp b/src/opengl.cpp
-index 1678756..215fb4d 100644
+index 1678756..1f123cf 100644
 --- a/src/opengl.cpp
 +++ b/src/opengl.cpp
 @@ -10,6 +10,9 @@
@@ -7360,7 +7626,7 @@ index 1678756..215fb4d 100644
  #include "draw.hpp"
  #include "entity.hpp"
  #include "files.hpp"
-@@ -979,6 +982,18 @@ static void uploadLightUniforms(view_t* camera, Shader& shader, Entity* entity,
+@@ -979,6 +982,23 @@ static void uploadLightUniforms(view_t* camera, Shader& shader, Entity* entity,
              constexpr GLfloat add[4] = { 0.f, 0.f, 0.f, 0.f };
              GL_CHECK_ERR(glUniform4fv(shader.uniform("uColorAdd"), 1, add));
          }
@@ -7368,6 +7634,11 @@ index 1678756..215fb4d 100644
 +        if (AP::isMarkedEnemy(entity)) { // Archipelago: Enemy Sanity marked enemies glow green
 +            const float pulse = 0.5f + 0.5f * sinf((float)(entity->ticks % 100) * 0.0628f);
 +            const GLfloat add[4] = { 0.f, 0.22f + 0.22f * pulse, 0.04f, 0.f };
++            GL_CHECK_ERR(glUniform4fv(shader.uniform("uColorAdd"), 1, add));
++        }
++        else if (AP::isChampionEnemy(entity)) { // Archipelago: Champions glow red
++            const float pulse = 0.5f + 0.5f * sinf((float)(entity->ticks % 100) * 0.0628f);
++            const GLfloat add[4] = { 0.3f + 0.22f * pulse, 0.02f, 0.02f, 0.f };
 +            GL_CHECK_ERR(glUniform4fv(shader.uniform("uColorAdd"), 1, add));
 +        }
 +        else if (AP::isBountyEnemy(entity)) { // Archipelago: Bounty Enemies glow gold

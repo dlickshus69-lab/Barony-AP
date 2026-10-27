@@ -33,7 +33,8 @@ when updating to a newer Barony. Hooks in files the level editor also builds are
 | `src/items.cpp` | `AP::isApItem()`, `AP::isFloorKey()`, `AP::isCompassItem()`, `AP::useCompassItem()` | Names, models and use of the AP item, Floor Key and Compass |
 | `src/interface/playerinventory.cpp` | same | Their inventory icons |
 | `src/monster_minotaur.cpp` | `AP::adjustMinotaurTime()` | Minotaur Time |
-| `src/opengl.cpp` | `AP::isMarkedEnemy()` | Enemy Sanity enemies glow green |
+| `src/opengl.cpp` | `AP::isMarkedEnemy()`, `isBountyEnemy()`, `isChampionEnemy()` | Enemy Sanity green, bounty gold, Champion red glow |
+| `src/actplayer.cpp` player light | `AP::lanternLightBonus()` | Progressive Lantern |
 | `src/engine/audio/music.cpp` | `AP::pickMusicVersion()` | Music Mods |
 | `src/engine/audio/sound_game.cpp` | `AP::MusicOverride` | Music Shuffle |
 | `src/init.cpp` | `AP::loadExtraModels()` | The AP item and Floor Key models |

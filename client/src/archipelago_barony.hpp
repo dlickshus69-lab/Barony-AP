@@ -64,6 +64,8 @@ namespace AP
 
 	// opengl.cpp: Enemy Sanity marked enemies are drawn with a green glow.
 	bool isBountyEnemy(const Entity* entity); // Bounty Enemies glow gold
+	bool isChampionEnemy(const Entity* entity); // Champions glow red
+	int lanternLightBonus(int player);          // Progressive Lantern: light radius change
 	bool isMarkedEnemy(const Entity* entity);
 
 	// The Archipelago item (floor pickups and shop items) and its own logo model and icon.

@@ -97,11 +97,18 @@ Barony:
   floor_size:
   - Normal
   extra_monsters: 0
+  progressive_lantern: false
+  lantern_darkness: 2
   bounty_enemies: false
   bounty_chance: 50
   bounty_checks: 5
   randomize_loot: same_kind
   music_mods: mixed
+
+  # Challenges
+  champion_floors: 0
+  champion_locks_stairs: true
+  champion_checks: 5
 
   # Quality of Life
   floor_key_on_tracker_map: false

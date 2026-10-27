@@ -202,6 +202,43 @@ class TestBounty(BaronyTestBase):
         self.assertEqual(self.world.fill_slot_data()["bounty_checks"], 8)
 
 
+class TestChampions(BaronyTestBase):
+    """Every 5 floors to the Devil (floor 24): 5, 10, 15 (20 is Herx's floor)."""
+    options = {"goal": "devil", "champion_floors": 5, "champion_checks": 10}
+
+    def test_champions(self) -> None:
+        locs = {loc.name for loc in self.multiworld.get_locations(self.player)}
+        self.assertIn("Champion 3", locs)
+        self.assertNotIn("Champion 4", locs)
+        self.assertEqual(self.world.champion_floors(), [5, 10, 15])
+        self.assertEqual(self.world.fill_slot_data()["champion_checks"], 3)
+
+
+class TestChampionsOff(BaronyTestBase):
+    options = {"champion_floors": 0, "champion_checks": 10}
+
+    def test_off(self) -> None:
+        locs = {loc.name for loc in self.multiworld.get_locations(self.player)}
+        self.assertNotIn("Champion 1", locs)
+        self.assertEqual(self.world.fill_slot_data()["champion_checks"], 0)
+
+
+class TestLantern(BaronyTestBase):
+    options = {"progressive_lantern": True, "lantern_darkness": 3}
+
+    def test_lantern(self) -> None:
+        pool = [i.name for i in self.multiworld.itempool if i.player == self.player]
+        self.assertEqual(pool.count("Progressive Lantern"), 3)
+        sd = self.world.fill_slot_data()
+        self.assertEqual((sd["progressive_lantern"], sd["lantern_darkness"]), (1, 3))
+
+
+class TestNoLantern(BaronyTestBase):
+    def test_no_lantern(self) -> None:
+        pool = [i.name for i in self.multiworld.itempool if i.player == self.player]
+        self.assertNotIn("Progressive Lantern", pool)
+
+
 class TestShortHerx(BaronyTestBase):
     """Dungeon Floors with a normal goal: 8 floors, then Baron Herx."""
     options = {"goal": "herx", "custom_dungeon_length": True, "dungeon_floors": 12, "boss_checks": True}

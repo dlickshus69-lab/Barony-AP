@@ -16,6 +16,7 @@ constexpr int64_t SKILL_OFFSET = 900;
 constexpr int64_t SPELLBOOK_OFFSET = 1100;
 constexpr int64_t SPELL_ITEM_OFFSET = 100;
 constexpr int64_t BOUNTY_OFFSET = 1200;
+constexpr int64_t CHAMPION_OFFSET = 1300;
 constexpr int MAX_FLOOR = 45;
 constexpr int FLOORS_PER_SECTION = 5;
 
@@ -31,6 +32,7 @@ constexpr int64_t ITEM_PERM_CHR = 4270016; // Permanent Charisma
 constexpr int64_t ITEM_MAX_HP_UP = 4270017; // Max HP Up
 constexpr int64_t ITEM_START_GOLD = 4270018; // Starting Gold Bonus
 constexpr int64_t ITEM_COMPASS = 4270020; // Progressive Compass
+constexpr int64_t ITEM_LANTERN = 4270021; // Progressive Lantern
 constexpr int64_t ITEM_XP_BOOST = 4270030; // XP Boost
 constexpr int64_t ITEM_GOLD_POUCH = 4270031; // Gold Pouch
 constexpr int64_t ITEM_HEAL_POTION = 4270032; // Healing Potion
