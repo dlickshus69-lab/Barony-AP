@@ -1,4 +1,4 @@
-From 89f0176246ac035768e7f51dfa9805cb72964b28 Mon Sep 17 00:00:00 2001
+From 1888357cc2b5fff5bc0c0635f350a65ddb17d3b5 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -220,7 +220,7 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..aff87ff
+index 0000000..5b747c6
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
 @@ -0,0 +1,1952 @@
@@ -1110,7 +1110,7 @@ index 0000000..aff87ff
 +
 +	void spawnFloorPickups()
 +	{
-+		if ( g_slot.archipelago_pickups <= 0 ) { return; }
++		if ( g_slot.archipelago_pickups <= 0 || currentlevel < 1 ) { return; } // none on the starting floor
 +		// Every dungeon floor gets them, generated or hand-made; not boss arenas or the town.
 +		static const char* const SKIP[] = { "Boss", "Hell Boss", "Sanctum", "Hamlet", "Tutorial" };
 +		for ( const char* name : SKIP )
@@ -1964,7 +1964,7 @@ index 0000000..aff87ff
 +
 +	bool apItemAvailable()
 +	{
-+		return g_ready && multiplayer != CLIENT && g_slot.archipelago_pickups > 0
++		return g_ready && multiplayer != CLIENT && g_slot.archipelago_pickups > 0 && currentlevel >= 1
 +			&& uncheckedCount(ap_ids::PICKUP_OFFSET, g_slot.archipelago_pickups) > apItemsLyingAround();
 +	}
 +}

@@ -884,7 +884,7 @@ namespace
 
 	void spawnFloorPickups()
 	{
-		if ( g_slot.archipelago_pickups <= 0 ) { return; }
+		if ( g_slot.archipelago_pickups <= 0 || currentlevel < 1 ) { return; } // none on the starting floor
 		// Every dungeon floor gets them, generated or hand-made; not boss arenas or the town.
 		static const char* const SKIP[] = { "Boss", "Hell Boss", "Sanctum", "Hamlet", "Tutorial" };
 		for ( const char* name : SKIP )
@@ -1738,7 +1738,7 @@ namespace
 
 	bool apItemAvailable()
 	{
-		return g_ready && multiplayer != CLIENT && g_slot.archipelago_pickups > 0
+		return g_ready && multiplayer != CLIENT && g_slot.archipelago_pickups > 0 && currentlevel >= 1
 			&& uncheckedCount(ap_ids::PICKUP_OFFSET, g_slot.archipelago_pickups) > apItemsLyingAround();
 	}
 }
