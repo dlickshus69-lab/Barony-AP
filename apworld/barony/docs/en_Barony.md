@@ -26,7 +26,7 @@ each item's kind (a potion becomes a different potion), Anything lets it become 
 
 Defeat Baron Herx, the Devil, or the twin liches of the Sanctum, depending on your options.
 
-Boss Rush: play the dungeon down to Boss Rush Floors (5 for a short run, 10 for a medium one), then
+Boss Rush: play the dungeon down to Boss Rush Floors (7 for a short run, 15 for a medium one, up to 34 for a long one; boss floors on the way down are skipped), then
 take the stairs into the bosses you picked, back to back: Baron Herx, the Devil, then the Twin Liches.
 With Rest Town Between Bosses on, you rest in the town (with its shops) after each boss, and the way
 down to the next boss is in the middle of town. Bosses you've already beaten, in any run, stay beaten.

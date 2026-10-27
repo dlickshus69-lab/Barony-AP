@@ -150,3 +150,12 @@ class TestBossRushEmptyBosses(BaronyTestBase):
 
     def test_empty_means_all(self) -> None:
         self.assertEqual(self.world.fill_slot_data()["boss_rush_mask"], 7)
+
+
+class TestBossRushLong(BaronyTestBase):
+    options = {"goal": "boss_rush", "boss_rush_floors": 34, "floor_shuffle": "full", "boss_checks": True}
+
+    def test_long(self) -> None:
+        self.assertEqual(self.world.fill_slot_data()["goal_floor"], 34)
+        names = {loc.name for loc in self.multiworld.get_locations(self.player)}
+        self.assertNotIn("Defeat the Devil", names)

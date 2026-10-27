@@ -29,12 +29,13 @@ class BossRushFloors(Range):
     """
     Boss Rush only: how many dungeon floors you play before the rush starts. Taking the stairs off
     the last one starts the first boss.
-    5 is a short run, 10 a medium one, 19 is the whole dungeon before Baron Herx's floor.
+    7 is a short run, 15 a medium one, and up to 34 for a long one. Boss floors on the way down are
+    skipped (you play a normal floor there instead): the bosses all come in the rush at the end.
     """
     display_name = "Boss Rush Floors"
     range_start = 3
-    range_end = 19
-    default = 10
+    range_end = 34
+    default = 7
 
 
 class BossRushBosses(OptionSet):

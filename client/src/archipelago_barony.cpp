@@ -2924,7 +2924,31 @@ void tick()
 	}
 }
 
+// Boss Rush with a long dungeon: boss arenas on the way down are skipped (a floor of the area just
+// before them is played instead); the bosses come in the rush at the end.
+static int skipRushBossLine(int line, const std::vector<std::string>& levelsList)
+{
+	if ( !g_ready || g_slot.goal != 3 || secretlevel || line < 1 || line >= (int)levelsList.size() ) { return line; }
+	std::string text = levelsList[line];
+	while ( !text.empty() && (text.back() == '\r' || text.back() == ' ' || text.back() == '\t') ) { text.pop_back(); }
+	bool bossLine = text == "map: boss" || text == "map: hellboss" || text == "map: sanctum";
+	if ( !bossLine ) { return line; }
+	for ( int i = line - 1; i >= 1; --i )
+	{
+		if ( levelsList[i].compare(0, 4, "gen:") == 0 ) { return i; }
+	}
+	return line;
+}
+
+int remapShuffledLine(int levelToLoad, const std::vector<std::string>& levelsList);
+
 int remapLevelLine(int levelToLoad, const std::vector<std::string>& levelsList)
+{
+	int mapped = remapShuffledLine(levelToLoad, levelsList);
+	return skipRushBossLine(mapped, levelsList);
+}
+
+int remapShuffledLine(int levelToLoad, const std::vector<std::string>& levelsList)
 {
 	if ( !g_ready || g_slot.floor_shuffle == 0 || secretlevel || multiplayer == CLIENT )
 	{

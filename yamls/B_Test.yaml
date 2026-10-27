@@ -7,7 +7,7 @@ Barony:
 
   # Goal & Checks
   goal: devil
-  boss_rush_floors: 10
+  boss_rush_floors: 7
   boss_rush_bosses:
   - Devil
   - Herx

@@ -29,7 +29,7 @@ GOAL_FLOOR = {
     GOAL_HERX: 20,
     GOAL_DEVIL: 24,
     GOAL_SANCTUM: 35,
-    GOAL_BOSS_RUSH: 10,  # replaced by Boss Rush Floors
+    GOAL_BOSS_RUSH: 7,  # replaced by Boss Rush Floors
 }
 
 MAX_FLOOR = 35
