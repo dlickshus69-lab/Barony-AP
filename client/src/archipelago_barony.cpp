@@ -2556,6 +2556,27 @@ namespace
 		{
 			out << "loot_" << CAT_KEYS[i] << "=" << g_loot.cat[i] << "\n";
 		}
+		// Spells tab: name, school (S/M/T), copies received, known from the class, spellbook read.
+		if ( g_slot.spell_sanity || g_slot.spellbook_checks )
+		{
+			out << "spellsanity=" << g_slot.spell_sanity << "\nspellupgrades=" << g_slot.spell_upgrades
+				<< "\nspellbooks=" << g_slot.spellbook_checks << "\n";
+			for ( auto& sp : ap_ids::SPELLS )
+			{
+				if ( sp.dlc && !g_slot.spell_dlc ) { continue; }
+				if ( !g_slot.spell_sanity && sp.dlc ) { continue; }
+				spell_t* def = getSpellFromID(sp.spell);
+				char school = 'S';
+				if ( def && def->skillID == PRO_MYSTICISM ) { school = 'M'; }
+				else if ( def && def->skillID == PRO_THAUMATURGY ) { school = 'T'; }
+				if ( sp.dlc ) { school = 'D'; }
+				int copies = spellCopies(sp.spell);
+				bool fromClass = copies == 0 && inGame() && knowsSpell(clientnum, sp.spell);
+				bool read = !sp.dlc && isChecked(ap_ids::BASE_ID + ap_ids::SPELLBOOK_OFFSET + sp.spell);
+				out << "spell=" << sp.name << "\t" << school << "\t" << copies << "\t" << (fromClass ? 1 : 0)
+					<< "\t" << (read ? 1 : 0) << "\n";
+			}
+		}
 		for ( auto& d : g_save.deaths ) { out << "death=" << d.first << "\t" << d.second << "\n"; }
 		size_t start = g_log.size() > 40 ? g_log.size() - 40 : 0;
 		for ( size_t i = start; i < g_log.size(); ++i )

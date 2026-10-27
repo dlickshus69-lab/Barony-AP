@@ -16,7 +16,9 @@ The tracker window:
              Archipelago items (green) and green enemies show from the start; other items show
              once you've seen them, with their own icons. Hover a pile to see what's in it.
              The Floor Key shows only while the Compass or the key warning points at it.
-  Right      connection, floor, Floor Key, Minotaur, secret area entrance, counts, deaths, item log.
+  Right      connection, floor, Floor Key, Minotaur, secret area entrance, counts, deaths, and tabs:
+             Item log, Full log and Spells (Tab or click to switch). The mouse wheel over this
+             column scrolls it; the map stays where it is.
   Map view: mouse wheel zooms, drag moves it, F = Follow (keeps you in the middle),
              R = Fit (whole floor), + / - zoom, arrow keys move. Buttons for these sit on the map.
   Make the window narrow to hide the map.

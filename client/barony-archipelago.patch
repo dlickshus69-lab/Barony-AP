@@ -1,18 +1,18 @@
-From 55784fe2cac1f7b132e5cd3e11703b2305ecd614 Mon Sep 17 00:00:00 2001
+From 96e1930f5719676b6a5ef39f4155c3efc9dd8666 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
 
 ---
  CMakeLists.txt                    |   32 +
- src/BaronyAPTracker.cpp           | 1364 +++++++++
+ src/BaronyAPTracker.cpp           | 1475 ++++++++++
  src/CMakeLists.txt                |    1 +
  src/actchest.cpp                  |    7 +
  src/actgeneral.cpp                |    2 +
  src/actladder.cpp                 |   25 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 4341 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 4362 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |  125 +
  src/archipelago_ids.hpp           |  244 ++
  src/charclass.cpp                 |    4 +
@@ -31,7 +31,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   10 +
  src/ui/MainMenu.cpp               |    5 +-
- 27 files changed, 6353 insertions(+), 4 deletions(-)
+ 27 files changed, 6485 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -82,10 +82,10 @@ index 4e9ed8f..b417834 100644
      # Only for MinGW...
 diff --git a/src/BaronyAPTracker.cpp b/src/BaronyAPTracker.cpp
 new file mode 100644
-index 0000000..165dae9
+index 0000000..c1231ef
 --- /dev/null
 +++ b/src/BaronyAPTracker.cpp
-@@ -0,0 +1,1364 @@
+@@ -0,0 +1,1475 @@
 +// Barony Archipelago tracker window.
 +//
 +// Barony (the Archipelago build) starts this with the game, and writes
@@ -120,11 +120,16 @@ index 0000000..165dae9
 +		std::vector<std::string> items;
 +		std::vector<std::string> log;
 +		std::vector<std::pair<std::string, int>> deaths;
++		struct Spell { std::string name; char school; int copies; bool fromClass; bool read; };
++		std::vector<Spell> spells;
 +		bool fileFound = false;
 +	};
 +
 +	TrackerState g_state;
-+	bool g_showAll = false;
++	int g_tab = 0;              // bottom of the column: 0 item log, 1 full log, 2 spells
++	RECT g_tabRects[3] = {};
++	int g_sideScroll = 0;       // the right-hand column scrolls on its own (the map stays put)
++	int g_sideContentH = 0;
 +	bool g_lootShort = false;   // the "other loot" box: full list (default) or just the total
 +	int g_lastLootToggle = -1;  // F4 presses counted by the game
 +	RECT g_lootBox{};           // where the loot box was drawn, for clicks
@@ -196,6 +201,16 @@ index 0000000..165dae9
 +				if ( eq == std::string::npos ) { continue; }
 +				std::string k = line.substr(0, eq), v = line.substr(eq + 1);
 +				if ( k == "item" ) { st.items.push_back(v); st.log.push_back(v); }
++				else if ( k == "spell" )
++				{
++					std::vector<std::string> f;
++					size_t a = 0;
++					while ( true ) { size_t t = v.find('\t', a); f.push_back(v.substr(a, t == std::string::npos ? std::string::npos : t - a)); if ( t == std::string::npos ) { break; } a = t + 1; }
++					if ( f.size() >= 5 )
++					{
++						st.spells.push_back(TrackerState::Spell{ f[0], f[1].empty() ? 'S' : f[1][0], atoi(f[2].c_str()), f[3] == "1", f[4] == "1" });
++					}
++				}
 +				else if ( k == "log" ) { st.log.push_back(v); }
 +				else if ( k == "death" )
 +				{
@@ -1143,16 +1158,89 @@ index 0000000..165dae9
 +				y += 14;
 +			}
 +
-+			text(dc, 14, y, g_showAll ? L"Full log   (Tab: items only)" : L"Item log   (Tab: full log)", GOLD, g_bodyFont);
-+			y += 24;
-+			const auto& lines = g_showAll ? g_state.log : g_state.items;
-+			int room = (rc.bottom - y - 8) / 20;
-+			int start = (int)lines.size() > room ? (int)lines.size() - room : 0;
-+			if ( lines.empty() ) { text(dc, 14, y, L"Nothing yet.", DIM, g_bodyFont); }
-+			for ( int i = start; i < (int)lines.size(); ++i, y += 20 )
++			// Tabs: Item log, Full log, and Spells (with Spell Sanity or Spellbook Checks).
++			bool spellTab = !g_state.spells.empty();
++			if ( !spellTab && g_tab == 2 ) { g_tab = 0; }
 +			{
-+				text(dc, 14, y, widen(lines[i]), TEXT, g_bodyFont);
++				const wchar_t* names[3] = { L"Item log", L"Full log", L"Spells" };
++				int x = 14;
++				SelectObject(dc, g_bodyFont);
++				for ( int t = 0; t < 3; ++t )
++				{
++					if ( t == 2 && !spellTab ) { g_tabRects[t] = RECT{}; continue; }
++					SIZE sz{};
++					GetTextExtentPoint32W(dc, names[t], (int)wcslen(names[t]), &sz);
++					RECT r{ x, y, x + sz.cx + 20, y + 30 };
++					bool on = g_tab == t;
++					fill(dc, r, on ? RGB(90, 70, 40) : PANEL);
++					HBRUSH b = CreateSolidBrush(on ? GOLD : RGB(74, 62, 48));
++					FrameRect(dc, &r, b);
++					DeleteObject(b);
++					SetTextColor(dc, on ? GOLD : TEXT);
++					DrawTextW(dc, names[t], -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
++					g_tabRects[t] = r;
++					x = r.right + 6;
++				}
++				text(dc, std::max(x + 8, (int)rc.right - 110), y + 4, L"Tab: next", DIM, g_bodyFont);
++				y += 38;
 +			}
++			if ( g_tab == 2 )
++			{
++				int have = 0;
++				for ( auto& sp : g_state.spells ) { if ( sp.copies > 0 || sp.fromClass ) { ++have; } }
++				wchar_t buf[128];
++				drawPanel(dc, 10, y - 4, rc.right - 20, 34);
++				text(dc, 20, y, L"Spells you have", GOLD, g_bodyFont);
++				swprintf(buf, 128, L"%d / %d", have, (int)g_state.spells.size());
++				text(dc, rc.right - 110, y, buf, have ? GOOD : DIM, g_bodyFont);
++				y += 40;
++				bool upgrades = num("spellupgrades") > 0, books = num("spellbooks") != 0;
++				const char order[4] = { 'S', 'M', 'T', 'D' };
++				const wchar_t* schoolName[4] = { L"Sorcery", L"Mysticism", L"Thaumaturgy", L"DLC spells" };
++				int colW = (rc.right - 40) / 2;
++				for ( int g = 0; g < 4; ++g )
++				{
++					std::vector<const TrackerState::Spell*> list;
++					for ( auto& sp : g_state.spells ) { if ( sp.school == order[g] ) { list.push_back(&sp); } }
++					if ( list.empty() ) { continue; }
++					int gh = 0;
++					for ( auto* sp : list ) { if ( sp->copies > 0 || sp->fromClass ) { ++gh; } }
++					text(dc, 14, y, schoolName[g], GOLD, g_bodyFont);
++					swprintf(buf, 128, L"%d / %d", gh, (int)list.size());
++					text(dc, rc.right - 90, y, buf, DIM, g_bodyFont);
++					y += 26;
++					for ( size_t i = 0; i < list.size(); ++i )
++					{
++						const auto* sp = list[i];
++						int cx = 20 + (int)(i % 2) * (colW + 4), cy = y + (int)(i / 2) * 22;
++						if ( books && g != 3 )
++						{
++							RECT bk{ cx, cy + 6, cx + 10, cy + 18 };
++							fill(dc, bk, sp->read ? GOLD : RGB(58, 51, 43));
++							cx += 14;
++						}
++						COLORREF c = sp->copies > 0 ? GOOD : sp->fromClass ? STEEL : RGB(111, 106, 98);
++						std::wstring label = widen(sp->name);
++						if ( upgrades && sp->copies > 1 ) { label += L" +" + std::to_wstring(sp->copies - 1); }
++						if ( sp->fromClass ) { label += L" (class)"; }
++						text(dc, cx, cy, label, c, g_bodyFont);
++					}
++					y += (int)((list.size() + 1) / 2) * 22 + 10;
++				}
++				text(dc, 14, y, L"Green: received   Blue: your class   Grey: not yet", DIM, g_bodyFont);
++				y += 22;
++				if ( books ) { text(dc, 14, y, L"Gold square: spellbook read (a check)", DIM, g_bodyFont); y += 22; }
++			}
++			else
++			{
++				const auto& lines = g_tab == 1 ? g_state.log : g_state.items;
++				if ( lines.empty() ) { text(dc, 14, y, L"Nothing yet.", DIM, g_bodyFont); y += 20; }
++				for ( int i = (int)lines.size() - 1; i >= 0; --i, y += 20 ) // newest first
++				{
++					text(dc, 14, y, widen(lines[i]), TEXT, g_bodyFont);
++				}
++			}
++			g_sideContentH = y + 12;
 +		}
 +
 +	}
@@ -1176,10 +1264,23 @@ index 0000000..165dae9
 +		if ( sideX != g_sideX ) { g_sideX = sideX; g_formTop = -1; }
 +		{
 +			HDC sdc = CreateCompatibleDC(wdc);
-+			HBITMAP sbmp = CreateCompatibleBitmap(wdc, sideW, rc.bottom);
++			// The column is drawn tall and scrolled on its own (mouse wheel over it); the map stays put.
++			int tallH = std::max((int)rc.bottom, (int)3000);
++			HBITMAP sbmp = CreateCompatibleBitmap(wdc, sideW, tallH);
 +			HGDIOBJ sold = SelectObject(sdc, sbmp);
-+			paintSidebar(sdc, RECT{ 0, 0, sideW, rc.bottom });
-+			BitBlt(dc, sideX, 0, sideW, rc.bottom, sdc, 0, 0, SRCCOPY);
++			g_sideContentH = rc.bottom;
++			paintSidebar(sdc, RECT{ 0, 0, sideW, tallH });
++			if ( g_formShown ) { g_sideScroll = 0; } // the connect boxes sit at fixed spots
++			g_sideScroll = std::max(0, std::min(g_sideScroll, std::min(g_sideContentH, tallH) - (int)rc.bottom));
++			BitBlt(dc, sideX, 0, sideW, rc.bottom, sdc, 0, g_sideScroll, SRCCOPY);
++			if ( g_sideContentH > rc.bottom )
++			{
++				// A thin scroll bar on the column's right edge.
++				int track = rc.bottom - 8, thumb = std::max(30, (int)((long long)track * rc.bottom / g_sideContentH));
++				int top = 4 + (int)((long long)(track - thumb) * g_sideScroll / std::max(1, g_sideContentH - (int)rc.bottom));
++				RECT bar{ rc.right - 6, top, rc.right - 2, top + thumb };
++				fill(dc, bar, RGB(110, 95, 75));
++			}
 +			SelectObject(sdc, sold);
 +			DeleteObject(sbmp);
 +			DeleteDC(sdc);
@@ -1229,7 +1330,8 @@ index 0000000..165dae9
 +				InvalidateRect(hwnd, nullptr, FALSE);
 +				return 0;
 +			case WM_KEYDOWN:
-+				if ( wp == VK_TAB ) { g_showAll = !g_showAll; InvalidateRect(hwnd, nullptr, FALSE); }
++				if ( wp == VK_TAB ) { g_tab = (g_tab + 1) % (g_state.spells.empty() ? 2 : 3); InvalidateRect(hwnd, nullptr, FALSE); }
++				if ( wp == VK_PRIOR || wp == VK_NEXT ) { g_sideScroll += wp == VK_NEXT ? 300 : -300; InvalidateRect(hwnd, nullptr, FALSE); }
 +				if ( wp == 'L' || wp == VK_F4 ) { g_lootShort = !g_lootShort; InvalidateRect(hwnd, nullptr, FALSE); }
 +				// Map view: F follow, R fit, + / - zoom, arrows move.
 +				if ( wp == 'F' ) { toggleFollow(); }
@@ -1283,6 +1385,11 @@ index 0000000..165dae9
 +					zoomBy((short)HIWORD(wp) > 0 ? 1.25 : 0.8);
 +					InvalidateRect(hwnd, nullptr, FALSE);
 +				}
++				else if ( sp.x >= g_sideX )
++				{
++					g_sideScroll -= (short)HIWORD(wp) / WHEEL_DELTA * 60; // over the column: scroll it
++					InvalidateRect(hwnd, nullptr, FALSE);
++				}
 +				return 0;
 +			}
 +			case WM_CAPTURECHANGED:
@@ -1316,7 +1423,11 @@ index 0000000..165dae9
 +						}
 +					}
 +				}
-+				POINT pt{ (short)LOWORD(lp) - g_sideX, (short)HIWORD(lp) };
++				POINT pt{ (short)LOWORD(lp) - g_sideX, (short)HIWORD(lp) + g_sideScroll };
++				for ( int t = 0; t < 3; ++t )
++				{
++					if ( PtInRect(&g_tabRects[t], pt) ) { g_tab = t; InvalidateRect(hwnd, nullptr, FALSE); return 0; }
++				}
 +				if ( PtInRect(&g_lootBox, pt) ) { g_lootShort = !g_lootShort; InvalidateRect(hwnd, nullptr, FALSE); }
 +				return 0;
 +			}
@@ -1641,10 +1752,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..4b09f83
+index 0000000..4b54e2e
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,4341 @@
+@@ -0,0 +1,4362 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -4202,6 +4313,27 @@ index 0000000..4b09f83
 +		for ( int i = 0; i < CATEGORY_MAX && i < (int)(sizeof(CAT_KEYS) / sizeof(CAT_KEYS[0])); ++i )
 +		{
 +			out << "loot_" << CAT_KEYS[i] << "=" << g_loot.cat[i] << "\n";
++		}
++		// Spells tab: name, school (S/M/T), copies received, known from the class, spellbook read.
++		if ( g_slot.spell_sanity || g_slot.spellbook_checks )
++		{
++			out << "spellsanity=" << g_slot.spell_sanity << "\nspellupgrades=" << g_slot.spell_upgrades
++				<< "\nspellbooks=" << g_slot.spellbook_checks << "\n";
++			for ( auto& sp : ap_ids::SPELLS )
++			{
++				if ( sp.dlc && !g_slot.spell_dlc ) { continue; }
++				if ( !g_slot.spell_sanity && sp.dlc ) { continue; }
++				spell_t* def = getSpellFromID(sp.spell);
++				char school = 'S';
++				if ( def && def->skillID == PRO_MYSTICISM ) { school = 'M'; }
++				else if ( def && def->skillID == PRO_THAUMATURGY ) { school = 'T'; }
++				if ( sp.dlc ) { school = 'D'; }
++				int copies = spellCopies(sp.spell);
++				bool fromClass = copies == 0 && inGame() && knowsSpell(clientnum, sp.spell);
++				bool read = !sp.dlc && isChecked(ap_ids::BASE_ID + ap_ids::SPELLBOOK_OFFSET + sp.spell);
++				out << "spell=" << sp.name << "\t" << school << "\t" << copies << "\t" << (fromClass ? 1 : 0)
++					<< "\t" << (read ? 1 : 0) << "\n";
++			}
 +		}
 +		for ( auto& d : g_save.deaths ) { out << "death=" << d.first << "\t" << d.second << "\n"; }
 +		size_t start = g_log.size() > 40 ? g_log.size() - 40 : 0;

@@ -32,11 +32,16 @@ namespace
 		std::vector<std::string> items;
 		std::vector<std::string> log;
 		std::vector<std::pair<std::string, int>> deaths;
+		struct Spell { std::string name; char school; int copies; bool fromClass; bool read; };
+		std::vector<Spell> spells;
 		bool fileFound = false;
 	};
 
 	TrackerState g_state;
-	bool g_showAll = false;
+	int g_tab = 0;              // bottom of the column: 0 item log, 1 full log, 2 spells
+	RECT g_tabRects[3] = {};
+	int g_sideScroll = 0;       // the right-hand column scrolls on its own (the map stays put)
+	int g_sideContentH = 0;
 	bool g_lootShort = false;   // the "other loot" box: full list (default) or just the total
 	int g_lastLootToggle = -1;  // F4 presses counted by the game
 	RECT g_lootBox{};           // where the loot box was drawn, for clicks
@@ -108,6 +113,16 @@ namespace
 				if ( eq == std::string::npos ) { continue; }
 				std::string k = line.substr(0, eq), v = line.substr(eq + 1);
 				if ( k == "item" ) { st.items.push_back(v); st.log.push_back(v); }
+				else if ( k == "spell" )
+				{
+					std::vector<std::string> f;
+					size_t a = 0;
+					while ( true ) { size_t t = v.find('\t', a); f.push_back(v.substr(a, t == std::string::npos ? std::string::npos : t - a)); if ( t == std::string::npos ) { break; } a = t + 1; }
+					if ( f.size() >= 5 )
+					{
+						st.spells.push_back(TrackerState::Spell{ f[0], f[1].empty() ? 'S' : f[1][0], atoi(f[2].c_str()), f[3] == "1", f[4] == "1" });
+					}
+				}
 				else if ( k == "log" ) { st.log.push_back(v); }
 				else if ( k == "death" )
 				{
@@ -1055,16 +1070,89 @@ namespace
 				y += 14;
 			}
 
-			text(dc, 14, y, g_showAll ? L"Full log   (Tab: items only)" : L"Item log   (Tab: full log)", GOLD, g_bodyFont);
-			y += 24;
-			const auto& lines = g_showAll ? g_state.log : g_state.items;
-			int room = (rc.bottom - y - 8) / 20;
-			int start = (int)lines.size() > room ? (int)lines.size() - room : 0;
-			if ( lines.empty() ) { text(dc, 14, y, L"Nothing yet.", DIM, g_bodyFont); }
-			for ( int i = start; i < (int)lines.size(); ++i, y += 20 )
+			// Tabs: Item log, Full log, and Spells (with Spell Sanity or Spellbook Checks).
+			bool spellTab = !g_state.spells.empty();
+			if ( !spellTab && g_tab == 2 ) { g_tab = 0; }
 			{
-				text(dc, 14, y, widen(lines[i]), TEXT, g_bodyFont);
+				const wchar_t* names[3] = { L"Item log", L"Full log", L"Spells" };
+				int x = 14;
+				SelectObject(dc, g_bodyFont);
+				for ( int t = 0; t < 3; ++t )
+				{
+					if ( t == 2 && !spellTab ) { g_tabRects[t] = RECT{}; continue; }
+					SIZE sz{};
+					GetTextExtentPoint32W(dc, names[t], (int)wcslen(names[t]), &sz);
+					RECT r{ x, y, x + sz.cx + 20, y + 30 };
+					bool on = g_tab == t;
+					fill(dc, r, on ? RGB(90, 70, 40) : PANEL);
+					HBRUSH b = CreateSolidBrush(on ? GOLD : RGB(74, 62, 48));
+					FrameRect(dc, &r, b);
+					DeleteObject(b);
+					SetTextColor(dc, on ? GOLD : TEXT);
+					DrawTextW(dc, names[t], -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+					g_tabRects[t] = r;
+					x = r.right + 6;
+				}
+				text(dc, std::max(x + 8, (int)rc.right - 110), y + 4, L"Tab: next", DIM, g_bodyFont);
+				y += 38;
 			}
+			if ( g_tab == 2 )
+			{
+				int have = 0;
+				for ( auto& sp : g_state.spells ) { if ( sp.copies > 0 || sp.fromClass ) { ++have; } }
+				wchar_t buf[128];
+				drawPanel(dc, 10, y - 4, rc.right - 20, 34);
+				text(dc, 20, y, L"Spells you have", GOLD, g_bodyFont);
+				swprintf(buf, 128, L"%d / %d", have, (int)g_state.spells.size());
+				text(dc, rc.right - 110, y, buf, have ? GOOD : DIM, g_bodyFont);
+				y += 40;
+				bool upgrades = num("spellupgrades") > 0, books = num("spellbooks") != 0;
+				const char order[4] = { 'S', 'M', 'T', 'D' };
+				const wchar_t* schoolName[4] = { L"Sorcery", L"Mysticism", L"Thaumaturgy", L"DLC spells" };
+				int colW = (rc.right - 40) / 2;
+				for ( int g = 0; g < 4; ++g )
+				{
+					std::vector<const TrackerState::Spell*> list;
+					for ( auto& sp : g_state.spells ) { if ( sp.school == order[g] ) { list.push_back(&sp); } }
+					if ( list.empty() ) { continue; }
+					int gh = 0;
+					for ( auto* sp : list ) { if ( sp->copies > 0 || sp->fromClass ) { ++gh; } }
+					text(dc, 14, y, schoolName[g], GOLD, g_bodyFont);
+					swprintf(buf, 128, L"%d / %d", gh, (int)list.size());
+					text(dc, rc.right - 90, y, buf, DIM, g_bodyFont);
+					y += 26;
+					for ( size_t i = 0; i < list.size(); ++i )
+					{
+						const auto* sp = list[i];
+						int cx = 20 + (int)(i % 2) * (colW + 4), cy = y + (int)(i / 2) * 22;
+						if ( books && g != 3 )
+						{
+							RECT bk{ cx, cy + 6, cx + 10, cy + 18 };
+							fill(dc, bk, sp->read ? GOLD : RGB(58, 51, 43));
+							cx += 14;
+						}
+						COLORREF c = sp->copies > 0 ? GOOD : sp->fromClass ? STEEL : RGB(111, 106, 98);
+						std::wstring label = widen(sp->name);
+						if ( upgrades && sp->copies > 1 ) { label += L" +" + std::to_wstring(sp->copies - 1); }
+						if ( sp->fromClass ) { label += L" (class)"; }
+						text(dc, cx, cy, label, c, g_bodyFont);
+					}
+					y += (int)((list.size() + 1) / 2) * 22 + 10;
+				}
+				text(dc, 14, y, L"Green: received   Blue: your class   Grey: not yet", DIM, g_bodyFont);
+				y += 22;
+				if ( books ) { text(dc, 14, y, L"Gold square: spellbook read (a check)", DIM, g_bodyFont); y += 22; }
+			}
+			else
+			{
+				const auto& lines = g_tab == 1 ? g_state.log : g_state.items;
+				if ( lines.empty() ) { text(dc, 14, y, L"Nothing yet.", DIM, g_bodyFont); y += 20; }
+				for ( int i = (int)lines.size() - 1; i >= 0; --i, y += 20 ) // newest first
+				{
+					text(dc, 14, y, widen(lines[i]), TEXT, g_bodyFont);
+				}
+			}
+			g_sideContentH = y + 12;
 		}
 
 	}
@@ -1088,10 +1176,23 @@ namespace
 		if ( sideX != g_sideX ) { g_sideX = sideX; g_formTop = -1; }
 		{
 			HDC sdc = CreateCompatibleDC(wdc);
-			HBITMAP sbmp = CreateCompatibleBitmap(wdc, sideW, rc.bottom);
+			// The column is drawn tall and scrolled on its own (mouse wheel over it); the map stays put.
+			int tallH = std::max((int)rc.bottom, (int)3000);
+			HBITMAP sbmp = CreateCompatibleBitmap(wdc, sideW, tallH);
 			HGDIOBJ sold = SelectObject(sdc, sbmp);
-			paintSidebar(sdc, RECT{ 0, 0, sideW, rc.bottom });
-			BitBlt(dc, sideX, 0, sideW, rc.bottom, sdc, 0, 0, SRCCOPY);
+			g_sideContentH = rc.bottom;
+			paintSidebar(sdc, RECT{ 0, 0, sideW, tallH });
+			if ( g_formShown ) { g_sideScroll = 0; } // the connect boxes sit at fixed spots
+			g_sideScroll = std::max(0, std::min(g_sideScroll, std::min(g_sideContentH, tallH) - (int)rc.bottom));
+			BitBlt(dc, sideX, 0, sideW, rc.bottom, sdc, 0, g_sideScroll, SRCCOPY);
+			if ( g_sideContentH > rc.bottom )
+			{
+				// A thin scroll bar on the column's right edge.
+				int track = rc.bottom - 8, thumb = std::max(30, (int)((long long)track * rc.bottom / g_sideContentH));
+				int top = 4 + (int)((long long)(track - thumb) * g_sideScroll / std::max(1, g_sideContentH - (int)rc.bottom));
+				RECT bar{ rc.right - 6, top, rc.right - 2, top + thumb };
+				fill(dc, bar, RGB(110, 95, 75));
+			}
 			SelectObject(sdc, sold);
 			DeleteObject(sbmp);
 			DeleteDC(sdc);
@@ -1141,7 +1242,8 @@ namespace
 				InvalidateRect(hwnd, nullptr, FALSE);
 				return 0;
 			case WM_KEYDOWN:
-				if ( wp == VK_TAB ) { g_showAll = !g_showAll; InvalidateRect(hwnd, nullptr, FALSE); }
+				if ( wp == VK_TAB ) { g_tab = (g_tab + 1) % (g_state.spells.empty() ? 2 : 3); InvalidateRect(hwnd, nullptr, FALSE); }
+				if ( wp == VK_PRIOR || wp == VK_NEXT ) { g_sideScroll += wp == VK_NEXT ? 300 : -300; InvalidateRect(hwnd, nullptr, FALSE); }
 				if ( wp == 'L' || wp == VK_F4 ) { g_lootShort = !g_lootShort; InvalidateRect(hwnd, nullptr, FALSE); }
 				// Map view: F follow, R fit, + / - zoom, arrows move.
 				if ( wp == 'F' ) { toggleFollow(); }
@@ -1195,6 +1297,11 @@ namespace
 					zoomBy((short)HIWORD(wp) > 0 ? 1.25 : 0.8);
 					InvalidateRect(hwnd, nullptr, FALSE);
 				}
+				else if ( sp.x >= g_sideX )
+				{
+					g_sideScroll -= (short)HIWORD(wp) / WHEEL_DELTA * 60; // over the column: scroll it
+					InvalidateRect(hwnd, nullptr, FALSE);
+				}
 				return 0;
 			}
 			case WM_CAPTURECHANGED:
@@ -1228,7 +1335,11 @@ namespace
 						}
 					}
 				}
-				POINT pt{ (short)LOWORD(lp) - g_sideX, (short)HIWORD(lp) };
+				POINT pt{ (short)LOWORD(lp) - g_sideX, (short)HIWORD(lp) + g_sideScroll };
+				for ( int t = 0; t < 3; ++t )
+				{
+					if ( PtInRect(&g_tabRects[t], pt) ) { g_tab = t; InvalidateRect(hwnd, nullptr, FALSE); return 0; }
+				}
 				if ( PtInRect(&g_lootBox, pt) ) { g_lootShort = !g_lootShort; InvalidateRect(hwnd, nullptr, FALSE); }
 				return 0;
 			}
