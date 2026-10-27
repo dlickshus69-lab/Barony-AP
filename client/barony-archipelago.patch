@@ -1,18 +1,18 @@
-From b730c66558668bbbbf4313f56362a0c78cdc7f4d Mon Sep 17 00:00:00 2001
+From 3fdf8a4cbd7ba5363ca8a875c9c7079d6f0e4741 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
 
 ---
  CMakeLists.txt                    |   32 +
- src/BaronyAPTracker.cpp           |  256 +++
+ src/BaronyAPTracker.cpp           |  269 +++
  src/CMakeLists.txt                |    1 +
  src/actchest.cpp                  |    7 +
  src/actgeneral.cpp                |    2 +
  src/actladder.cpp                 |    9 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |    7 +-
- src/archipelago_barony.cpp        | 2571 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 2631 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |   97 ++
  src/archipelago_ids.hpp           |   95 ++
  src/engine/audio/sound_game.cpp   |    2 +
@@ -26,7 +26,7 @@ Subject: [PATCH] Archipelago client hooks
  src/maps.cpp                      |   11 +
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   10 +
- 22 files changed, 3151 insertions(+), 2 deletions(-)
+ 22 files changed, 3224 insertions(+), 2 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -77,10 +77,10 @@ index 4e9ed8f..b1f0a2c 100644
      # Only for MinGW...
 diff --git a/src/BaronyAPTracker.cpp b/src/BaronyAPTracker.cpp
 new file mode 100644
-index 0000000..8d3768c
+index 0000000..28a0bcc
 --- /dev/null
 +++ b/src/BaronyAPTracker.cpp
-@@ -0,0 +1,256 @@
+@@ -0,0 +1,269 @@
 +// Barony Archipelago tracker window.
 +//
 +// Barony (the Archipelago build) starts this when it connects, and writes
@@ -216,7 +216,20 @@ index 0000000..8d3768c
 +				wchar_t buf[256];
 +				swprintf(buf, 256, L"Floor %d     Lives %d     Stair Keys %d", num("floor"), num("lives"), num("keys"));
 +				text(dc, 14, y, buf, TEXT, g_bodyFont);
-+				y += 30;
++				y += 24;
++				int mino = num("minotaur");
++				if ( mino >= 0 && g_state.values.count("minotaur") )
++				{
++					swprintf(buf, 256, L"Minotaur arrives in %d:%02d", mino / 60, mino % 60);
++					text(dc, 14, y, buf, mino <= 30 ? BAD : RGB(240, 150, 110), g_bodyFont);
++					y += 24;
++				}
++				else if ( mino == -2 )
++				{
++					text(dc, 14, y, L"The Minotaur is hunting you!", BAD, g_bodyFont);
++					y += 24;
++				}
++				y += 6;
 +
 +				RECT panel{ 10, y, rc.right - 10, y + 118 };
 +				fill(dc, panel, PANEL);
@@ -491,10 +504,10 @@ index 0872ea6..2f7f1f0 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..b8f026d
+index 0000000..4c9e0ef
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,2571 @@
+@@ -0,0 +1,2631 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -598,6 +611,7 @@ index 0000000..b8f026d
 +		int trap_countdown = 10;      // seconds
 +		int polymorph_trap_duration = 30;
 +		int blindness_trap_duration = 15;
++		int minotaur_time = 100;      // percent of the normal time before the Minotaur arrives
 +		int death_items = 0;          // 0 back to what you had entering the floor, 1 keep everything you had
 +		int players = 1;
 +	};
@@ -657,6 +671,40 @@ index 0000000..b8f026d
 +	bool g_floorReady = false;     // onNewFloor finished; the next generation starts a new count
 +
 +	int g_secretExitThisFloor = 0; // set by generateDungeon, used once in onNewFloor
++	Uint32 g_floorStartTicks = 0;  // when this floor started (the key hint shows for a little while)
++	int g_minotaurSecs = -1;       // seconds until the Minotaur arrives; -1 none coming, -2 he's here
++
++	void updateMinotaurStatus()
++	{
++		g_minotaurSecs = -1;
++		if ( !map.entities ) { return; }
++		bool timerActive = false;
++		for ( node_t* node = map.entities->first; node; node = node->next )
++		{
++			Entity* e = (Entity*)node->element;
++			if ( !e ) { continue; }
++			if ( e->behavior == &actMinotaurTimer )
++			{
++				if ( e->skill[1] ) { timerActive = true; }
++				else
++				{
++					int left = getMinotaurTimeToArrive() - e->skill[0];
++					g_minotaurSecs = std::max(0, left / TICKS_PER_SECOND);
++					return;
++				}
++			}
++		}
++		if ( map.creatures )
++		{
++			for ( node_t* node = map.creatures->first; node; node = node->next )
++			{
++				Entity* e = (Entity*)node->element;
++				Stat* st = e ? e->getStats() : nullptr;
++				if ( st && st->type == MINOTAUR && st->HP > 0 ) { g_minotaurSecs = -2; return; }
++			}
++		}
++		(void)timerActive;
++	}
 +
 +	void noteApItemMade()
 +	{
@@ -962,6 +1010,7 @@ index 0000000..b8f026d
 +		registerSlotInt("trap_countdown", &SlotOptions::trap_countdown);
 +		registerSlotInt("polymorph_trap_duration", &SlotOptions::polymorph_trap_duration);
 +		registerSlotInt("blindness_trap_duration", &SlotOptions::blindness_trap_duration);
++		registerSlotInt("minotaur_time", &SlotOptions::minotaur_time);
 +		registerSlotInt("death_items", &SlotOptions::death_items);
 +		registerSlotInt("players", &SlotOptions::players);
 +
@@ -2043,6 +2092,7 @@ index 0000000..b8f026d
 +		g_markedEnemies.clear();
 +		g_markedThisFloor = 0;
 +		g_stairsWarnedAt = 0;
++		g_floorStartTicks = ticks;
 +		sendFloorChecks();
 +		sendSpecialAreaCheck();
 +		spawnFloorPickups();
@@ -2172,6 +2222,7 @@ index 0000000..b8f026d
 +		out << "lives=" << g_save.livesLeft << "\nkeys=" << countReceived(ap_ids::ITEM_STAIR_KEY) << "\n";
 +		out << "pickups_left=" << uncheckedCount(ap_ids::PICKUP_OFFSET, g_slot.archipelago_pickups) << "\n";
 +		out << "deaths_total=" << totalDeaths() << "\n";
++		out << "minotaur=" << g_minotaurSecs << "\n";
 +		for ( auto& d : g_save.deaths ) { out << "death=" << d.first << "\t" << d.second << "\n"; }
 +		size_t start = g_log.size() > 40 ? g_log.size() - 40 : 0;
 +		for ( size_t i = start; i < g_log.size(); ++i )
@@ -2330,6 +2381,7 @@ index 0000000..b8f026d
 +		sendLevelChecks();
 +		scanInventories();
 +		g_floorCounts = countFloor();
++		updateMinotaurStatus();
 +	}
 +}
 +
@@ -2689,11 +2741,11 @@ index 0000000..b8f026d
 +
 +int adjustMinotaurTime(int ticks)
 +{
-+	if ( g_ready && g_slot.difficulty == 1 )
-+	{
-+		return ticks * 2 / 3;
-+	}
-+	return ticks;
++	if ( !g_ready ) { return ticks; }
++	long long t = ticks;
++	t = t * std::max(25, g_slot.minotaur_time) / 100; // Minotaur Time option (percent)
++	if ( g_slot.difficulty == 1 ) { t = t * 2 / 3; }
++	return (int)t;
 +}
 +
 +// ---------------------------------------------------------------- Archipelago item look
@@ -2976,15 +3028,36 @@ index 0000000..b8f026d
 +	if ( g_ready && inGame() )
 +	{
 +		Uint32 c2 = g_floorCounts.total() > 0 ? makeColorRGB(255, 200, 90) : makeColorRGB(170, 170, 170);
-+		drawText(floorCountsText(g_floorCounts).c_str(), HUD_FONT, c2, 38, 32);
-+		drawText("F1: item log   F2: full log   F3: deaths", HUD_FONT, makeColorRGB(140, 140, 140), 38, 50);
++		int row = 32;
++		drawText(floorCountsText(g_floorCounts).c_str(), HUD_FONT, c2, 38, row);
++		row += 18;
++		// The Minotaur: how long until he arrives, or that he's here.
++		if ( g_minotaurSecs >= 0 )
++		{
++			char buf[64];
++			snprintf(buf, sizeof(buf), "Minotaur arrives in %d:%02d", g_minotaurSecs / 60, g_minotaurSecs % 60);
++			bool urgent = g_minotaurSecs <= 30;
++			Uint32 mc = urgent && (ticks / (TICKS_PER_SECOND / 2)) % 2 ? makeColorRGB(255, 70, 60) : makeColorRGB(240, 120, 90);
++			drawText(buf, BIG_FONT, mc, 38, row);
++			row += 22;
++		}
++		else if ( g_minotaurSecs == -2 )
++		{
++			drawText("The Minotaur is hunting you!", BIG_FONT, makeColorRGB(255, 70, 60), 38, row);
++			row += 22;
++		}
++		// Key hint: only for the first moments of a floor, so the corner stays clean.
++		if ( g_logPanel == 0 && ticks - g_floorStartTicks < (Uint32)(TICKS_PER_SECOND * 12) )
++		{
++			drawText("F1: items   F2: log   F3: deaths", HUD_FONT, makeColorRGB(140, 140, 140), 38, row);
++		}
 +	}
 +	if ( g_logPanel == 3 )
 +	{
 +		// Death counter: total, then everyone who has died, most deaths first.
 +		std::vector<std::pair<std::string, int>> rows(g_save.deaths.begin(), g_save.deaths.end());
 +		std::stable_sort(rows.begin(), rows.end(), [](auto& a, auto& b) { return a.second > b.second; });
-+		const int x = 12, y = 74, w = 360, lineH = 22;
++		const int x = 12, y = 96, w = 360, lineH = 22;
 +		int h = 70 + lineH * (int)std::max<size_t>(1, rows.size());
 +		drawImage("images/system/white.png", x, y, w, h, makeColor(10, 8, 6, 200));
 +		drawText("Deaths (F3 to close)", BIG_FONT, makeColorRGB(255, 200, 90), x + 8, y + 6);
@@ -3011,7 +3084,7 @@ index 0000000..b8f026d
 +		{
 +			if ( g_logPanel == 2 || it->item ) { lines.push_back(&*it); }
 +		}
-+		const int x = 12, y = 74, w = 520, lineH = 18;
++		const int x = 12, y = 96, w = 520, lineH = 18;
 +		int h = 30 + lineH * (int)std::max<size_t>(1, lines.size());
 +		drawImage("images/system/white.png", x, y, w, h, makeColor(10, 8, 6, 200));
 +		drawText(g_logPanel == 1 ? "Archipelago items (F1 to close)" : "Archipelago log (F2 to close)",

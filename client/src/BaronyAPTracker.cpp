@@ -133,7 +133,20 @@ namespace
 				wchar_t buf[256];
 				swprintf(buf, 256, L"Floor %d     Lives %d     Stair Keys %d", num("floor"), num("lives"), num("keys"));
 				text(dc, 14, y, buf, TEXT, g_bodyFont);
-				y += 30;
+				y += 24;
+				int mino = num("minotaur");
+				if ( mino >= 0 && g_state.values.count("minotaur") )
+				{
+					swprintf(buf, 256, L"Minotaur arrives in %d:%02d", mino / 60, mino % 60);
+					text(dc, 14, y, buf, mino <= 30 ? BAD : RGB(240, 150, 110), g_bodyFont);
+					y += 24;
+				}
+				else if ( mino == -2 )
+				{
+					text(dc, 14, y, L"The Minotaur is hunting you!", BAD, g_bodyFont);
+					y += 24;
+				}
+				y += 6;
 
 				RECT panel{ 10, y, rc.right - 10, y + 118 };
 				fill(dc, panel, PANEL);

@@ -302,6 +302,18 @@ class BossLevelScaling(Choice):
     default = option_off
 
 
+class MinotaurTime(Range):
+    """
+    How long before the Minotaur arrives on a Minotaur floor (or after a Minotaur Trap), as a percent of
+    the normal time. 100 = normal (2.5 to 3.5 minutes), 200 = twice as long. Hard mode still brings him
+    a third sooner. The time left is shown on screen.
+    """
+    display_name = "Minotaur Time"
+    range_start = 25
+    range_end = 300
+    default = 100
+
+
 class DifficultyScaling(DefaultOnToggle):
     """
     Monsters are scaled to how deep you actually are, not to where they normally live.
@@ -537,6 +549,7 @@ class BaronyOptions(PerGameCommonOptions):
     music_seed: MusicSeed
     enemy_level_scaling: EnemyLevelScaling
     boss_level_scaling: BossLevelScaling
+    minotaur_time: MinotaurTime
     difficulty_scaling: DifficultyScaling
     difficulty: Difficulty
     lives: Lives
@@ -567,7 +580,7 @@ option_groups = [
         EnemySanityPerFloor, BestiaryChecks,
         ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),
-    OptionGroup("Dungeon", [StairKeys, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemyPool, EnemySeed, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, DifficultyScaling, Difficulty]),
+    OptionGroup("Dungeon", [StairKeys, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemyPool, EnemySeed, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, MinotaurTime, DifficultyScaling, Difficulty]),
     OptionGroup("Lives & Death", [Lives, ExtraLivesInPool, DeathPenalty, BossDeath, FloorRestart, DeathItems, CheckpointInterval, BaronyDeathLink]),
     OptionGroup("Traps", [TrapChance, EnabledTraps, TrapCountdownTraps, TrapCountdown, PolymorphTrapDuration,
                           BlindnessTrapDuration]),

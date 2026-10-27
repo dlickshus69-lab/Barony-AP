@@ -101,6 +101,7 @@ namespace
 		int trap_countdown = 10;      // seconds
 		int polymorph_trap_duration = 30;
 		int blindness_trap_duration = 15;
+		int minotaur_time = 100;      // percent of the normal time before the Minotaur arrives
 		int death_items = 0;          // 0 back to what you had entering the floor, 1 keep everything you had
 		int players = 1;
 	};
@@ -160,6 +161,40 @@ namespace
 	bool g_floorReady = false;     // onNewFloor finished; the next generation starts a new count
 
 	int g_secretExitThisFloor = 0; // set by generateDungeon, used once in onNewFloor
+	Uint32 g_floorStartTicks = 0;  // when this floor started (the key hint shows for a little while)
+	int g_minotaurSecs = -1;       // seconds until the Minotaur arrives; -1 none coming, -2 he's here
+
+	void updateMinotaurStatus()
+	{
+		g_minotaurSecs = -1;
+		if ( !map.entities ) { return; }
+		bool timerActive = false;
+		for ( node_t* node = map.entities->first; node; node = node->next )
+		{
+			Entity* e = (Entity*)node->element;
+			if ( !e ) { continue; }
+			if ( e->behavior == &actMinotaurTimer )
+			{
+				if ( e->skill[1] ) { timerActive = true; }
+				else
+				{
+					int left = getMinotaurTimeToArrive() - e->skill[0];
+					g_minotaurSecs = std::max(0, left / TICKS_PER_SECOND);
+					return;
+				}
+			}
+		}
+		if ( map.creatures )
+		{
+			for ( node_t* node = map.creatures->first; node; node = node->next )
+			{
+				Entity* e = (Entity*)node->element;
+				Stat* st = e ? e->getStats() : nullptr;
+				if ( st && st->type == MINOTAUR && st->HP > 0 ) { g_minotaurSecs = -2; return; }
+			}
+		}
+		(void)timerActive;
+	}
 
 	void noteApItemMade()
 	{
@@ -465,6 +500,7 @@ namespace
 		registerSlotInt("trap_countdown", &SlotOptions::trap_countdown);
 		registerSlotInt("polymorph_trap_duration", &SlotOptions::polymorph_trap_duration);
 		registerSlotInt("blindness_trap_duration", &SlotOptions::blindness_trap_duration);
+		registerSlotInt("minotaur_time", &SlotOptions::minotaur_time);
 		registerSlotInt("death_items", &SlotOptions::death_items);
 		registerSlotInt("players", &SlotOptions::players);
 
@@ -1546,6 +1582,7 @@ namespace
 		g_markedEnemies.clear();
 		g_markedThisFloor = 0;
 		g_stairsWarnedAt = 0;
+		g_floorStartTicks = ticks;
 		sendFloorChecks();
 		sendSpecialAreaCheck();
 		spawnFloorPickups();
@@ -1675,6 +1712,7 @@ namespace
 		out << "lives=" << g_save.livesLeft << "\nkeys=" << countReceived(ap_ids::ITEM_STAIR_KEY) << "\n";
 		out << "pickups_left=" << uncheckedCount(ap_ids::PICKUP_OFFSET, g_slot.archipelago_pickups) << "\n";
 		out << "deaths_total=" << totalDeaths() << "\n";
+		out << "minotaur=" << g_minotaurSecs << "\n";
 		for ( auto& d : g_save.deaths ) { out << "death=" << d.first << "\t" << d.second << "\n"; }
 		size_t start = g_log.size() > 40 ? g_log.size() - 40 : 0;
 		for ( size_t i = start; i < g_log.size(); ++i )
@@ -1833,6 +1871,7 @@ void tick()
 		sendLevelChecks();
 		scanInventories();
 		g_floorCounts = countFloor();
+		updateMinotaurStatus();
 	}
 }
 
@@ -2192,11 +2231,11 @@ uint32_t lockedMapSeed(uint32_t seed)
 
 int adjustMinotaurTime(int ticks)
 {
-	if ( g_ready && g_slot.difficulty == 1 )
-	{
-		return ticks * 2 / 3;
-	}
-	return ticks;
+	if ( !g_ready ) { return ticks; }
+	long long t = ticks;
+	t = t * std::max(25, g_slot.minotaur_time) / 100; // Minotaur Time option (percent)
+	if ( g_slot.difficulty == 1 ) { t = t * 2 / 3; }
+	return (int)t;
 }
 
 // ---------------------------------------------------------------- Archipelago item look
@@ -2479,15 +2518,36 @@ void drawHud()
 	if ( g_ready && inGame() )
 	{
 		Uint32 c2 = g_floorCounts.total() > 0 ? makeColorRGB(255, 200, 90) : makeColorRGB(170, 170, 170);
-		drawText(floorCountsText(g_floorCounts).c_str(), HUD_FONT, c2, 38, 32);
-		drawText("F1: item log   F2: full log   F3: deaths", HUD_FONT, makeColorRGB(140, 140, 140), 38, 50);
+		int row = 32;
+		drawText(floorCountsText(g_floorCounts).c_str(), HUD_FONT, c2, 38, row);
+		row += 18;
+		// The Minotaur: how long until he arrives, or that he's here.
+		if ( g_minotaurSecs >= 0 )
+		{
+			char buf[64];
+			snprintf(buf, sizeof(buf), "Minotaur arrives in %d:%02d", g_minotaurSecs / 60, g_minotaurSecs % 60);
+			bool urgent = g_minotaurSecs <= 30;
+			Uint32 mc = urgent && (ticks / (TICKS_PER_SECOND / 2)) % 2 ? makeColorRGB(255, 70, 60) : makeColorRGB(240, 120, 90);
+			drawText(buf, BIG_FONT, mc, 38, row);
+			row += 22;
+		}
+		else if ( g_minotaurSecs == -2 )
+		{
+			drawText("The Minotaur is hunting you!", BIG_FONT, makeColorRGB(255, 70, 60), 38, row);
+			row += 22;
+		}
+		// Key hint: only for the first moments of a floor, so the corner stays clean.
+		if ( g_logPanel == 0 && ticks - g_floorStartTicks < (Uint32)(TICKS_PER_SECOND * 12) )
+		{
+			drawText("F1: items   F2: log   F3: deaths", HUD_FONT, makeColorRGB(140, 140, 140), 38, row);
+		}
 	}
 	if ( g_logPanel == 3 )
 	{
 		// Death counter: total, then everyone who has died, most deaths first.
 		std::vector<std::pair<std::string, int>> rows(g_save.deaths.begin(), g_save.deaths.end());
 		std::stable_sort(rows.begin(), rows.end(), [](auto& a, auto& b) { return a.second > b.second; });
-		const int x = 12, y = 74, w = 360, lineH = 22;
+		const int x = 12, y = 96, w = 360, lineH = 22;
 		int h = 70 + lineH * (int)std::max<size_t>(1, rows.size());
 		drawImage("images/system/white.png", x, y, w, h, makeColor(10, 8, 6, 200));
 		drawText("Deaths (F3 to close)", BIG_FONT, makeColorRGB(255, 200, 90), x + 8, y + 6);
@@ -2514,7 +2574,7 @@ void drawHud()
 		{
 			if ( g_logPanel == 2 || it->item ) { lines.push_back(&*it); }
 		}
-		const int x = 12, y = 74, w = 520, lineH = 18;
+		const int x = 12, y = 96, w = 520, lineH = 18;
 		int h = 30 + lineH * (int)std::max<size_t>(1, lines.size());
 		drawImage("images/system/white.png", x, y, w, h, makeColor(10, 8, 6, 200));
 		drawText(g_logPanel == 1 ? "Archipelago items (F1 to close)" : "Archipelago log (F2 to close)",

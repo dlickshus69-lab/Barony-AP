@@ -317,6 +317,7 @@ class BaronyWorld(World):
             "floor_restart": o.floor_restart.value,
             "death_items": o.death_items.value,
             "boss_level_scaling": o.boss_level_scaling.value,
+            "minotaur_time": o.minotaur_time.value,
             "trap_countdown_mask": sum(1 << i for i, name in enumerate(data.TRAP_ITEMS)
                                        if name in o.trap_countdown_traps.value),
             "trap_countdown": o.trap_countdown.value,
