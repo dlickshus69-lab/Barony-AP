@@ -3679,6 +3679,35 @@ namespace
 		return v;
 	}
 
+	// The fast part of the map, 10 times a second: you and everything that moves. The tracker
+	// lays it over the full map (written once a second), so your marker keeps up with you.
+	void writeTrackerPos()
+	{
+		static std::string lastWritten;
+		std::ostringstream out;
+		Entity* pl = players[clientnum] ? players[clientnum]->entity : nullptr;
+		if ( inGame() && map.tiles && pl )
+		{
+			out << "floorid=" << g_floorLoads << "\n";
+			out << "player=" << pl->x / 16.0 << "\t" << pl->y / 16.0 << "\t" << pl->yaw << "\n";
+			for ( node_t* node = map.creatures ? map.creatures->first : nullptr; node; node = node->next )
+			{
+				Entity* e = (Entity*)node->element;
+				Stat* st = e ? e->getStats() : nullptr;
+				if ( !st || st->HP <= 0 ) { continue; }
+				double tx = e->x / 16.0, ty = e->y / 16.0;
+				Uint32 uid = e->getUID();
+				if ( g_caravanUid && uid == g_caravanUid ) { out << "caravan=" << tx << "\t" << ty << "\n"; }
+				else if ( isMarkedEnemy(e) ) { out << "foe=" << tx << "\t" << ty << "\n"; }
+				else if ( g_championUid && uid == g_championUid ) { out << "champion=" << tx << "\t" << ty << "\n"; }
+				else if ( g_bountyUid && uid == g_bountyUid ) { out << "bounty=" << tx << "\t" << ty << "\n"; }
+			}
+		}
+		std::string text = out.str();
+		if ( text == lastWritten ) { return; }
+		if ( writeWhole("archipelago/trackerpos.txt", text) ) { lastWritten = text; }
+	}
+
 	void writeTrackerMap()
 	{
 		static std::string lastWritten;
@@ -3989,6 +4018,7 @@ void tick()
 	if ( g_floorReady && inGame() ) { g_floorApUnfound = std::max(0, g_floorApTotal - g_floorApFound); }
 	if ( g_rushSaveDirty ) { g_rushSaveDirty = false; writeSave(); }
 	if ( ticks % TICKS_PER_SECOND == 0 ) { writeTrackerFile(); writeTrackerMap(); }
+	if ( ticks % (TICKS_PER_SECOND / 10) == 0 ) { writeTrackerPos(); }
 	if ( !inGame() )
 	{
 		// A Death Link that arrives in the menus or between runs is dropped, so it can't

@@ -6,6 +6,8 @@
 // floor, what's left on the floor, lives, keys, deaths and the item log.
 
 #define NOMINMAX
+#include <sstream>
+#include <iterator>
 #include <windows.h>
 #include <algorithm>
 namespace Gdiplus { using std::min; using std::max; } // gdiplus.h needs these without the macros
@@ -510,6 +512,46 @@ namespace
 			start = tab + 1;
 		}
 		return out;
+	}
+
+	// archipelago/trackerpos.txt: you and the things that move, 10 times a second. Laid over the
+	// full map when it's for the same floor. Returns true when something moved.
+	bool readPos(bool force = false)
+	{
+		std::ifstream in(exeDir() + "\\archipelago\\trackerpos.txt", std::ios::binary);
+		if ( !in ) { return false; }
+		std::string all((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+		static std::string last;
+		if ( all == last && !force ) { return false; }
+		std::istringstream lines(all);
+		std::string line, floorId;
+		bool hasPlayer = false;
+		double px = 0, py = 0, pyaw = 0;
+		std::vector<MapPoint> foes, bounties, champions, caravans;
+		while ( std::getline(lines, line) )
+		{
+			if ( !line.empty() && line.back() == '\r' ) { line.pop_back(); }
+			size_t eq = line.find('=');
+			if ( eq == std::string::npos ) { continue; }
+			std::string k = line.substr(0, eq), v = line.substr(eq + 1);
+			auto f = splitTabs(v);
+			auto d = [&](size_t i) { return i < f.size() ? atof(f[i].c_str()) : 0.0; };
+			if ( k == "floorid" ) { floorId = v; }
+			else if ( k == "player" ) { hasPlayer = true; px = d(0); py = d(1); pyaw = d(2); }
+			else if ( k == "foe" ) { foes.push_back({ d(0), d(1), "" }); }
+			else if ( k == "bounty" ) { bounties.push_back({ d(0), d(1), "" }); }
+			else if ( k == "champion" ) { champions.push_back({ d(0), d(1), "" }); }
+			else if ( k == "caravan" ) { caravans.push_back({ d(0), d(1), "" }); }
+		}
+		if ( floorId.empty() || floorId != g_map.floorId || !hasPlayer ) { return false; } // half-written, or another floor
+		last = all;
+		g_map.hasPlayer = true;
+		g_map.px = px; g_map.py = py; g_map.pyaw = pyaw;
+		g_map.foes = foes;
+		g_map.bounties = bounties;
+		g_map.champions = champions;
+		g_map.caravans = caravans;
+		return true;
 	}
 
 	void readMap()
@@ -1334,8 +1376,15 @@ namespace
 		switch ( msg )
 		{
 			case WM_TIMER:
+				if ( wp == 2 )
+				{
+					// Fast timer: only the moving markers, and only the map is drawn again.
+					if ( readPos() ) { InvalidateRect(hwnd, &g_mapArea, FALSE); }
+					return 0;
+				}
 				readState();
 				readMap();
+				readPos(true); // the full map may be a moment older than the last position
 				if ( gameRunning() && num("connected") == 0 ) { autoReconnect(g_state.values["status"], num("lostfor")); }
 				InvalidateRect(hwnd, nullptr, FALSE);
 				return 0;
@@ -1540,6 +1589,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE, LPSTR, int show)
 	fillForm();
 	ShowWindow(hwnd, show);
 	SetTimer(hwnd, 1, 1000, nullptr);
+	SetTimer(hwnd, 2, 100, nullptr); // your position on the map, 10 times a second
 	readState();
 	readMap();
 

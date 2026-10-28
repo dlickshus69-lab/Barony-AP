@@ -1,18 +1,18 @@
-From a3229fcc51779d3825c88518501b07a6eb72d74d Mon Sep 17 00:00:00 2001
+From 1c1807e905f46ea68fe1b07283a8b53180f22bc9 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
 
 ---
  CMakeLists.txt                    |   32 +
- src/BaronyAPTracker.cpp           | 1573 ++++++++
+ src/BaronyAPTracker.cpp           | 1623 +++++++++
  src/CMakeLists.txt                |    1 +
  src/actchest.cpp                  |    7 +
  src/actgeneral.cpp                |    2 +
  src/actladder.cpp                 |   25 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |   10 +-
- src/archipelago_barony.cpp        | 5513 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 5543 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |  129 +
  src/archipelago_ids.hpp           |  248 ++
  src/charclass.cpp                 |    4 +
@@ -31,7 +31,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   20 +
  src/ui/MainMenu.cpp               |    5 +-
- 27 files changed, 7756 insertions(+), 4 deletions(-)
+ 27 files changed, 7836 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -82,10 +82,10 @@ index 4e9ed8f..b417834 100644
      # Only for MinGW...
 diff --git a/src/BaronyAPTracker.cpp b/src/BaronyAPTracker.cpp
 new file mode 100644
-index 0000000..7fda872
+index 0000000..01de19b
 --- /dev/null
 +++ b/src/BaronyAPTracker.cpp
-@@ -0,0 +1,1573 @@
+@@ -0,0 +1,1623 @@
 +// Barony Archipelago tracker window.
 +//
 +// Barony (the Archipelago build) starts this with the game, and writes
@@ -94,6 +94,8 @@ index 0000000..7fda872
 +// floor, what's left on the floor, lives, keys, deaths and the item log.
 +
 +#define NOMINMAX
++#include <sstream>
++#include <iterator>
 +#include <windows.h>
 +#include <algorithm>
 +namespace Gdiplus { using std::min; using std::max; } // gdiplus.h needs these without the macros
@@ -598,6 +600,46 @@ index 0000000..7fda872
 +			start = tab + 1;
 +		}
 +		return out;
++	}
++
++	// archipelago/trackerpos.txt: you and the things that move, 10 times a second. Laid over the
++	// full map when it's for the same floor. Returns true when something moved.
++	bool readPos(bool force = false)
++	{
++		std::ifstream in(exeDir() + "\\archipelago\\trackerpos.txt", std::ios::binary);
++		if ( !in ) { return false; }
++		std::string all((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
++		static std::string last;
++		if ( all == last && !force ) { return false; }
++		std::istringstream lines(all);
++		std::string line, floorId;
++		bool hasPlayer = false;
++		double px = 0, py = 0, pyaw = 0;
++		std::vector<MapPoint> foes, bounties, champions, caravans;
++		while ( std::getline(lines, line) )
++		{
++			if ( !line.empty() && line.back() == '\r' ) { line.pop_back(); }
++			size_t eq = line.find('=');
++			if ( eq == std::string::npos ) { continue; }
++			std::string k = line.substr(0, eq), v = line.substr(eq + 1);
++			auto f = splitTabs(v);
++			auto d = [&](size_t i) { return i < f.size() ? atof(f[i].c_str()) : 0.0; };
++			if ( k == "floorid" ) { floorId = v; }
++			else if ( k == "player" ) { hasPlayer = true; px = d(0); py = d(1); pyaw = d(2); }
++			else if ( k == "foe" ) { foes.push_back({ d(0), d(1), "" }); }
++			else if ( k == "bounty" ) { bounties.push_back({ d(0), d(1), "" }); }
++			else if ( k == "champion" ) { champions.push_back({ d(0), d(1), "" }); }
++			else if ( k == "caravan" ) { caravans.push_back({ d(0), d(1), "" }); }
++		}
++		if ( floorId.empty() || floorId != g_map.floorId || !hasPlayer ) { return false; } // half-written, or another floor
++		last = all;
++		g_map.hasPlayer = true;
++		g_map.px = px; g_map.py = py; g_map.pyaw = pyaw;
++		g_map.foes = foes;
++		g_map.bounties = bounties;
++		g_map.champions = champions;
++		g_map.caravans = caravans;
++		return true;
 +	}
 +
 +	void readMap()
@@ -1422,8 +1464,15 @@ index 0000000..7fda872
 +		switch ( msg )
 +		{
 +			case WM_TIMER:
++				if ( wp == 2 )
++				{
++					// Fast timer: only the moving markers, and only the map is drawn again.
++					if ( readPos() ) { InvalidateRect(hwnd, &g_mapArea, FALSE); }
++					return 0;
++				}
 +				readState();
 +				readMap();
++				readPos(true); // the full map may be a moment older than the last position
 +				if ( gameRunning() && num("connected") == 0 ) { autoReconnect(g_state.values["status"], num("lostfor")); }
 +				InvalidateRect(hwnd, nullptr, FALSE);
 +				return 0;
@@ -1628,6 +1677,7 @@ index 0000000..7fda872
 +	fillForm();
 +	ShowWindow(hwnd, show);
 +	SetTimer(hwnd, 1, 1000, nullptr);
++	SetTimer(hwnd, 2, 100, nullptr); // your position on the map, 10 times a second
 +	readState();
 +	readMap();
 +
@@ -1860,10 +1910,10 @@ index 0872ea6..aee34f8 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..d682693
+index 0000000..2b87698
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,5513 @@
+@@ -0,0 +1,5543 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -5545,6 +5595,35 @@ index 0000000..d682693
 +		return v;
 +	}
 +
++	// The fast part of the map, 10 times a second: you and everything that moves. The tracker
++	// lays it over the full map (written once a second), so your marker keeps up with you.
++	void writeTrackerPos()
++	{
++		static std::string lastWritten;
++		std::ostringstream out;
++		Entity* pl = players[clientnum] ? players[clientnum]->entity : nullptr;
++		if ( inGame() && map.tiles && pl )
++		{
++			out << "floorid=" << g_floorLoads << "\n";
++			out << "player=" << pl->x / 16.0 << "\t" << pl->y / 16.0 << "\t" << pl->yaw << "\n";
++			for ( node_t* node = map.creatures ? map.creatures->first : nullptr; node; node = node->next )
++			{
++				Entity* e = (Entity*)node->element;
++				Stat* st = e ? e->getStats() : nullptr;
++				if ( !st || st->HP <= 0 ) { continue; }
++				double tx = e->x / 16.0, ty = e->y / 16.0;
++				Uint32 uid = e->getUID();
++				if ( g_caravanUid && uid == g_caravanUid ) { out << "caravan=" << tx << "\t" << ty << "\n"; }
++				else if ( isMarkedEnemy(e) ) { out << "foe=" << tx << "\t" << ty << "\n"; }
++				else if ( g_championUid && uid == g_championUid ) { out << "champion=" << tx << "\t" << ty << "\n"; }
++				else if ( g_bountyUid && uid == g_bountyUid ) { out << "bounty=" << tx << "\t" << ty << "\n"; }
++			}
++		}
++		std::string text = out.str();
++		if ( text == lastWritten ) { return; }
++		if ( writeWhole("archipelago/trackerpos.txt", text) ) { lastWritten = text; }
++	}
++
 +	void writeTrackerMap()
 +	{
 +		static std::string lastWritten;
@@ -5855,6 +5934,7 @@ index 0000000..d682693
 +	if ( g_floorReady && inGame() ) { g_floorApUnfound = std::max(0, g_floorApTotal - g_floorApFound); }
 +	if ( g_rushSaveDirty ) { g_rushSaveDirty = false; writeSave(); }
 +	if ( ticks % TICKS_PER_SECOND == 0 ) { writeTrackerFile(); writeTrackerMap(); }
++	if ( ticks % (TICKS_PER_SECOND / 10) == 0 ) { writeTrackerPos(); }
 +	if ( !inGame() )
 +	{
 +		// A Death Link that arrives in the menus or between runs is dropped, so it can't

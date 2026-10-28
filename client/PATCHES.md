@@ -55,6 +55,7 @@ when updating to a newer Barony. Hooks in files the level editor also builds are
 | `connect.txt` | tracker | Server and name to connect with; the game reads and deletes it |
 | `tracker.txt` | game | Status, floor, counts, deaths and log for the right-hand column |
 | `trackermap.txt` | game | The floor map: explored tiles, items, AP items, green enemies |
+| `trackerpos.txt` | game | You and the moving markers, 10 times a second |
 | `tracker_login.txt` | tracker | The last server, port, name and room link typed in |
 | `<seed>_<slot>.txt` | game | Saved progress for one multiworld slot |
 
