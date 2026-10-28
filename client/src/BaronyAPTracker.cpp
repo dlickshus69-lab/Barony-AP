@@ -651,7 +651,7 @@ namespace
 			button(g_btnFollow, right, 86, L"Follow", g_follow);
 		}
 		top += 38;
-		int legendH = 30;
+		int legendH = 50; // two short lines of help under the map
 		int availW = area.right - area.left - 24, availH = area.bottom - top - legendH - 12;
 		int fitCell = std::max(2, std::min(availW / g_map.w, availH / g_map.h));
 		int cell = std::max(2, (int)(fitCell * g_zoom + 0.5));
@@ -863,8 +863,14 @@ namespace
 		g.ResetClip();
 		SelectClipRgn(dc, nullptr);
 		// Legend under the map.
+		// Two lines, each cut off with "..." if the window is narrow, so they never run into the column.
 		int ly = area.bottom - legendH - 4;
-		text(dc, area.left + 16, ly, L"Wheel: zoom   Drag: move   F: follow   R: fit   Gold diamond: bounty   Red: champion   Purple: caravan   Cross: your grave", DIM, g_bodyFont);
+		SelectObject(dc, g_bodyFont);
+		SetTextColor(dc, DIM);
+		RECT l1 = { area.left + 16, ly, area.right - 8, ly + 24 };
+		RECT l2 = { area.left + 16, ly + 24, area.right - 8, ly + 48 };
+		DrawTextW(dc, L"Wheel: zoom   Drag: move   F: follow   R: fit", -1, &l1, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+		DrawTextW(dc, L"Gold: bounty   Red: champion   Purple: caravan   Cross: your grave", -1, &l2, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
 
 		// Hovering a pile: what's in it.
 		const MapPile* hp = pileAt(g_hoverX, g_hoverY);

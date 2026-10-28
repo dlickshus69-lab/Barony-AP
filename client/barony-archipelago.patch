@@ -1,11 +1,11 @@
-From bf427ec283fe3c39f85c79c787830c7d41384cdf Mon Sep 17 00:00:00 2001
+From a3229fcc51779d3825c88518501b07a6eb72d74d Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
 
 ---
  CMakeLists.txt                    |   32 +
- src/BaronyAPTracker.cpp           | 1567 ++++++++
+ src/BaronyAPTracker.cpp           | 1573 ++++++++
  src/CMakeLists.txt                |    1 +
  src/actchest.cpp                  |    7 +
  src/actgeneral.cpp                |    2 +
@@ -31,7 +31,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   20 +
  src/ui/MainMenu.cpp               |    5 +-
- 27 files changed, 7750 insertions(+), 4 deletions(-)
+ 27 files changed, 7756 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -82,10 +82,10 @@ index 4e9ed8f..b417834 100644
      # Only for MinGW...
 diff --git a/src/BaronyAPTracker.cpp b/src/BaronyAPTracker.cpp
 new file mode 100644
-index 0000000..cc901f3
+index 0000000..7fda872
 --- /dev/null
 +++ b/src/BaronyAPTracker.cpp
-@@ -0,0 +1,1567 @@
+@@ -0,0 +1,1573 @@
 +// Barony Archipelago tracker window.
 +//
 +// Barony (the Archipelago build) starts this with the game, and writes
@@ -739,7 +739,7 @@ index 0000000..cc901f3
 +			button(g_btnFollow, right, 86, L"Follow", g_follow);
 +		}
 +		top += 38;
-+		int legendH = 30;
++		int legendH = 50; // two short lines of help under the map
 +		int availW = area.right - area.left - 24, availH = area.bottom - top - legendH - 12;
 +		int fitCell = std::max(2, std::min(availW / g_map.w, availH / g_map.h));
 +		int cell = std::max(2, (int)(fitCell * g_zoom + 0.5));
@@ -951,8 +951,14 @@ index 0000000..cc901f3
 +		g.ResetClip();
 +		SelectClipRgn(dc, nullptr);
 +		// Legend under the map.
++		// Two lines, each cut off with "..." if the window is narrow, so they never run into the column.
 +		int ly = area.bottom - legendH - 4;
-+		text(dc, area.left + 16, ly, L"Wheel: zoom   Drag: move   F: follow   R: fit   Gold diamond: bounty   Red: champion   Purple: caravan   Cross: your grave", DIM, g_bodyFont);
++		SelectObject(dc, g_bodyFont);
++		SetTextColor(dc, DIM);
++		RECT l1 = { area.left + 16, ly, area.right - 8, ly + 24 };
++		RECT l2 = { area.left + 16, ly + 24, area.right - 8, ly + 48 };
++		DrawTextW(dc, L"Wheel: zoom   Drag: move   F: follow   R: fit", -1, &l1, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
++		DrawTextW(dc, L"Gold: bounty   Red: champion   Purple: caravan   Cross: your grave", -1, &l2, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
 +
 +		// Hovering a pile: what's in it.
 +		const MapPile* hp = pileAt(g_hoverX, g_hoverY);
