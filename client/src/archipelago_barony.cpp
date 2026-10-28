@@ -99,6 +99,9 @@ namespace
 		int champion_checks = 0;
 		int progressive_lantern = 0;  // less light, three Progressive Lanterns bring it back and more
 		int lantern_darkness = 2;
+		int floor_themes = 0;         // some floors get a theme (a twist for the whole floor)
+		int floor_theme_chance = 30;
+		int floor_theme_mask = 0;     // which themes (bit per theme, 0 = all)
 		int death_markers = 0;        // gravestones where you died give some gold back
 		int death_marker_gold = 20;   // percent of the gold you had
 		int merchant_caravan = 0;     // a travelling shop on some floors
@@ -634,6 +637,9 @@ namespace
 		registerSlotInt("champion_checks", &SlotOptions::champion_checks);
 		registerSlotInt("progressive_lantern", &SlotOptions::progressive_lantern);
 		registerSlotInt("lantern_darkness", &SlotOptions::lantern_darkness);
+		registerSlotInt("floor_themes", &SlotOptions::floor_themes);
+		registerSlotInt("floor_theme_chance", &SlotOptions::floor_theme_chance);
+		registerSlotInt("floor_theme_mask", &SlotOptions::floor_theme_mask);
 		registerSlotInt("death_markers", &SlotOptions::death_markers);
 		registerSlotInt("death_marker_gold", &SlotOptions::death_marker_gold);
 		registerSlotInt("merchant_caravan", &SlotOptions::merchant_caravan);
@@ -2962,6 +2968,238 @@ namespace
 		if ( made ) { printlog("[Archipelago] Extra Monsters: %d more on this floor.", made); }
 	}
 
+	// ------------------------------------------------------- Floor Themes
+	// Some floors get a theme: a downside and an upside for the whole floor.
+	enum Theme { THEME_NONE, THEME_DARK, THEME_HAUNTED, THEME_RICH, THEME_SWARM, THEME_ELITE, THEME_CURSED,
+		THEME_PEACEFUL, THEME_FAMINE, THEME_ARCANE, THEME_FRENZY, THEME_GOLD_RUSH, THEME_COUNT };
+	const char* const THEME_NAMES[THEME_COUNT] = { "", "Dark", "Haunted", "Rich", "Swarm", "Elite", "Cursed",
+		"Peaceful", "Famine", "Arcane", "Frenzy", "Gold Rush" };
+	const char* const THEME_TEXT[THEME_COUNT] = { "",
+		"Dark floor: hardly any light here, but extra loot lies around.",
+		"Haunted floor: the dead walk here, guarding extra loot.",
+		"Rich floor: gold and loot everywhere, and more monsters after it.",
+		"Swarm floor: crawling with small monsters. Plenty of easy experience.",
+		"Elite floor: fewer monsters, but every one is tougher and may drop loot.",
+		"Cursed floor: the gear here is finer, but much of it is cursed.",
+		"Peaceful floor: half the monsters are gone. Catch your breath.",
+		"Famine floor: you're starving, but food lies all over the floor.",
+		"Arcane floor: spellbooks, scrolls and staffs lie around, and more monsters guard them.",
+		"Frenzy floor: the monsters are fast, but every kill gives bonus experience.",
+		"Gold Rush floor: every kill drops gold, but the monsters are stronger." };
+	int g_theme = THEME_NONE, g_themeLevel = -1, g_lastTheme = THEME_NONE;
+	Uint32 g_themeRunKey = 0;
+	std::set<Uint32> g_themeBuffed; // monsters already toughened (Elite, Frenzy, Gold Rush)
+
+	void pickTheme(bool restarted)
+	{
+		if ( restarted && g_themeLevel == currentlevel && g_themeRunKey == uniqueGameKey ) { return; } // keeps its theme
+		g_theme = THEME_NONE;
+		g_themeLevel = currentlevel;
+		g_themeRunKey = uniqueGameKey;
+		if ( !g_slot.floor_themes || currentlevel < 1 || secretlevel || isSpecialMap() ) { return; }
+		if ( (int)(local_rng.rand() % 100) >= g_slot.floor_theme_chance ) { return; }
+		int mask = g_slot.floor_theme_mask ? g_slot.floor_theme_mask : (1 << (THEME_COUNT - 1)) - 1;
+		std::vector<int> pool;
+		for ( int t = 1; t < THEME_COUNT; ++t )
+		{
+			if ( (mask & (1 << (t - 1))) && t != g_lastTheme ) { pool.push_back(t); }
+		}
+		if ( pool.empty() ) { return; } // only one theme allowed and it was the last floor's
+		g_theme = pool[local_rng.rand() % pool.size()];
+		g_lastTheme = g_theme;
+	}
+
+	void spawnThemeItem(Category cat, int levelBonus)
+	{
+		int x, y;
+		if ( !findReachableSpot(x, y) && !findFloorSpot(x, y) ) { return; }
+		ItemType type = itemLevelCurve(cat, 0, std::max(1, currentlevel) + levelBonus, local_rng);
+		if ( !lootRerollable(type, 0) ) { return; }
+		Entity* e = newEntity(-1, 1, map.entities, nullptr);
+		e->flags[INVISIBLE] = true;
+		e->flags[UPDATENEEDED] = true;
+		e->x = x * 16 + 8;
+		e->y = y * 16 + 8;
+		e->sizex = 4;
+		e->sizey = 4;
+		e->yaw = (local_rng.rand() % 360) * PI / 180.0;
+		e->vel_z = -.5;
+		e->flags[PASSABLE] = true;
+		e->flags[USERFLAG1] = true;
+		e->behavior = &actItem;
+		e->skill[10] = type;
+		e->skill[11] = WORN + local_rng.rand() % 3;
+		e->skill[12] = 0;
+		e->skill[13] = 1;
+		e->skill[14] = local_rng.rand();
+		e->skill[15] = 0;
+		if ( Item* item = newItemFromEntity(e, true) ) { e->sprite = itemModel(item); free(item); }
+	}
+
+	void spawnThemeLoot(int n, int levelBonus)
+	{
+		const int count = (int)(sizeof(LOOT_CATEGORIES) / sizeof(LOOT_CATEGORIES[0]));
+		for ( int i = 0; i < n; ++i ) { spawnThemeItem(LOOT_CATEGORIES[local_rng.rand() % count], levelBonus); }
+	}
+
+	void spawnGoldBag(double x, double y, int amount)
+	{
+		Entity* e = newEntity(130, 0, map.entities, nullptr); // gold bag
+		e->sizex = 4;
+		e->sizey = 4;
+		e->x = x;
+		e->y = y;
+		e->goldAmount = amount;
+		e->z = 0;
+		e->vel_z = (-40 - local_rng.rand() % 5) * .01;
+		e->yaw = (local_rng.rand() % 360) * PI / 180.0;
+		e->goldBouncing = 0;
+		e->flags[PASSABLE] = true;
+		e->flags[UPDATENEEDED] = true;
+		e->behavior = &actGoldBag;
+	}
+
+	void spawnThemeMonsters(const std::vector<Monster>& types, int n)
+	{
+		for ( int i = 0; i < n; ++i )
+		{
+			int x, y;
+			if ( !findReachableSpot(x, y) ) { break; }
+			Monster type = types.empty() ? static_cast<Monster>(monsterCurve(currentlevel)) : types[local_rng.rand() % types.size()];
+			if ( type == NOTHING || type == SHOPKEEPER ) { continue; }
+			summonMonsterNoSmoke(type, x * 16 + 8, y * 16 + 8);
+		}
+	}
+
+	void thinOutMonsters(int keepOneIn, int outOf)
+	{
+		// Removes (outOf - keepOneIn) of every outOf ordinary enemies.
+		if ( !map.creatures ) { return; }
+		std::vector<Entity*> list;
+		for ( node_t* node = map.creatures->first; node; node = node->next )
+		{
+			Entity* e = (Entity*)node->element;
+			if ( isRemovableEnemy(e) ) { list.push_back(e); }
+		}
+		for ( size_t i = 0; i < list.size(); ++i )
+		{
+			if ( (int)(i % outOf) >= keepOneIn ) { list_RemoveNode(list[i]->mynode); }
+		}
+	}
+
+	// Runs as the floor is set up (before enemies already killed on a restart are taken away).
+	void applyTheme(bool restarted)
+	{
+		pickTheme(restarted);
+		g_themeBuffed.clear();
+		if ( g_theme == THEME_NONE ) { return; }
+		int depth = std::max(1, currentlevel);
+		switch ( g_theme )
+		{
+			case THEME_DARK: spawnThemeLoot(3, 3); break;
+			case THEME_HAUNTED:
+			{
+				std::vector<Monster> undead = { GHOUL, SKELETON };
+				if ( depth >= 12 ) { undead.push_back(SHADOW); }
+				spawnThemeMonsters(undead, 4 + depth / 6);
+				spawnThemeLoot(2, 3);
+				break;
+			}
+			case THEME_RICH:
+			{
+				for ( int i = 0; i < 5; ++i )
+				{
+					int x, y;
+					if ( findReachableSpot(x, y) ) { spawnGoldBag(x * 16 + 8, y * 16 + 8, 20 + 10 * depth + (int)(local_rng.rand() % 20)); }
+				}
+				spawnThemeLoot(2, 2);
+				spawnThemeMonsters({}, 4);
+				break;
+			}
+			case THEME_SWARM:
+			{
+				std::vector<Monster> small = { RAT, SPIDER, BAT_SMALL, SLIME };
+				if ( depth >= 8 ) { small.push_back(SCARAB); }
+				spawnThemeMonsters(small, std::min(14, 8 + depth / 4));
+				break;
+			}
+			case THEME_ELITE: thinOutMonsters(2, 3); break;
+			case THEME_CURSED:
+			{
+				for ( node_t* node = map.entities ? map.entities->first : nullptr; node; node = node->next )
+				{
+					Entity* e = (Entity*)node->element;
+					if ( !e || e->behavior != &actItem || isFloorKeyEntity(e) ) { continue; }
+					ItemType type = static_cast<ItemType>(e->skill[10]);
+					if ( !lootRerollable(type, (Uint32)e->skill[14]) ) { continue; }
+					Category cat = items[type].category;
+					if ( cat != WEAPON && cat != ARMOR && cat != RING && cat != AMULET ) { continue; }
+					e->skill[11] = EXCELLENT;
+					e->skill[12] = (local_rng.rand() % 100 < 45) ? -(1 + (int)(local_rng.rand() % 2)) : 1 + (int)(local_rng.rand() % 2);
+					e->skill[15] = 0; // unidentified: you won't know which until you try
+				}
+				spawnThemeItem(WEAPON, 4);
+				spawnThemeItem(ARMOR, 4);
+				break;
+			}
+			case THEME_PEACEFUL: thinOutMonsters(1, 2); break;
+			case THEME_FAMINE:
+				for ( int i = 0; i < 5; ++i ) { spawnThemeItem(FOOD, 0); }
+				if ( !restarted && stats[clientnum] ) { stats[clientnum]->HUNGER = std::min(stats[clientnum]->HUNGER, 200); }
+				break;
+			case THEME_ARCANE:
+			{
+				const Category magic[] = { SPELLBOOK, SCROLL, MAGICSTAFF };
+				for ( int i = 0; i < 4; ++i ) { spawnThemeItem(magic[local_rng.rand() % 3], 3); }
+				spawnThemeMonsters({}, 3);
+				break;
+			}
+			default: break;
+		}
+		say(COLOR_AP, "%s", THEME_TEXT[g_theme]);
+	}
+
+	// Elite, Frenzy and Gold Rush change each monster once it's set up.
+	void updateTheme()
+	{
+		if ( g_theme != THEME_ELITE && g_theme != THEME_FRENZY && g_theme != THEME_GOLD_RUSH ) { return; }
+		if ( !map.creatures ) { return; }
+		for ( node_t* node = map.creatures->first; node; node = node->next )
+		{
+			Entity* e = (Entity*)node->element;
+			if ( !isRemovableEnemy(e) || e->ticks < 5 || g_themeBuffed.count(e->getUID()) ) { continue; }
+			Stat* st = e->getStats();
+			if ( !st ) { continue; }
+			g_themeBuffed.insert(e->getUID());
+			if ( g_theme == THEME_ELITE )
+			{
+				st->LVL += 3;
+				st->MAXHP = st->MAXHP * 3 / 2;
+				st->HP = st->MAXHP;
+			}
+			else if ( g_theme == THEME_GOLD_RUSH ) { st->LVL += 2; }
+			else { e->setEffect(EFF_FAST, true, TICKS_PER_SECOND * 3600, false); }
+		}
+	}
+
+	void themeOnKill(Entity* my)
+	{
+		if ( g_theme == THEME_ELITE && g_themeBuffed.count(my->getUID()) && local_rng.rand() % 2 == 0 )
+		{
+			const int count = (int)(sizeof(LOOT_CATEGORIES) / sizeof(LOOT_CATEGORIES[0]));
+			ItemType type = itemLevelCurve(LOOT_CATEGORIES[local_rng.rand() % count], 0, std::max(1, currentlevel) + 3, local_rng);
+			if ( lootRerollable(type, 0) )
+			{
+				if ( Item* item = newItem(type, static_cast<Status>(WORN + local_rng.rand() % 3), 0, 1, local_rng.rand(), false, nullptr) )
+				{
+					dropItemMonster(item, my, nullptr);
+				}
+			}
+		}
+		else if ( g_theme == THEME_FRENZY && stats[clientnum] ) { stats[clientnum]->EXP += 10; }
+		else if ( g_theme == THEME_GOLD_RUSH ) { spawnGoldBag(my->x, my->y, 5 + 3 * std::max(1, currentlevel)); }
+	}
+
 	void onNewFloor()
 	{
 		bool restarted = g_restartPending;
@@ -2981,6 +3219,7 @@ namespace
 			g_floorApFound = 0;
 		}
 		spawnExtraMonsters(); // before the kill removal, so extra monsters you killed stay dead too
+		applyTheme(restarted);
 		if ( restarted ) { removeKilledEnemies(); }
 		else { g_floorKills = 0; }
 		if ( restarted && g_slot.death_items == 1 ) { removeTakenLoot(); }
@@ -3238,6 +3477,7 @@ namespace
 			Stat* cs = c ? c->getStats() : nullptr;
 			out << "champion=" << (cs && cs->HP > 0 ? getMonsterLocalizedName((Monster)cs->type) : std::string()) << "\n";
 			out << "caravan=" << (caravanAlive() ? 1 : 0) << "\ngraves=" << g_graveEntities.size() << "\n";
+			out << "theme=" << (g_theme != THEME_NONE && g_themeLevel == currentlevel ? THEME_NAMES[g_theme] : "") << "\n";
 			if ( g_slot.progressive_lantern ) { out << "lantern=" << std::min(3, countReceived(ap_ids::ITEM_LANTERN)) << "\n"; }
 		}
 		out << "secretexit=" << (g_floorHasSecretExit && !secretlevel ? 1 : 0) << "\n";
@@ -3771,6 +4011,7 @@ void tick()
 	updatePendingTraps();
 	updateBounty();
 	updateChampion();
+	updateTheme();
 	updateGrace();
 	updateGraves();
 	if ( stats[clientnum] && stats[clientnum]->GOLD > g_save.runGoldMax ) { g_save.runGoldMax = stats[clientnum]->GOLD; }
@@ -4075,6 +4316,7 @@ void onMonsterDeath(Entity* my, Stat* myStats)
 	++g_save.runKills;
 	if ( g_bountyUid && my->getUID() == g_bountyUid ) { claimBounty(my); }
 	if ( g_championUid && my->getUID() == g_championUid ) { claimChampion(my); }
+	themeOnKill(my);
 	if ( type != MINOTAUR && type != LICH && type != DEVIL && type != LICH_ICE && type != LICH_FIRE )
 	{
 		++g_floorKills;
@@ -4333,10 +4575,13 @@ bool isChampionEnemy(const Entity* entity)
 int lanternLightBonus(int player)
 {
 	// Progressive Lantern: from Lantern Darkness below normal up to one above, in three steps.
-	if ( !g_ready || !g_slot.progressive_lantern || player != clientnum ) { return 0; }
+	// A Dark floor (Floor Themes) takes two more away.
+	if ( !g_ready || player != clientnum ) { return 0; }
+	int bonus = g_theme == THEME_DARK ? -2 : 0;
+	if ( !g_slot.progressive_lantern ) { return bonus; }
 	int dark = std::max(1, std::min(3, g_slot.lantern_darkness));
 	int have = std::min(3, countReceived(ap_ids::ITEM_LANTERN));
-	return -dark + (int)std::lround(have * (dark + 1) / 3.0);
+	return bonus - dark + (int)std::lround(have * (dark + 1) / 3.0);
 }
 
 bool isBountyEnemy(const Entity* entity)
@@ -4932,6 +5177,13 @@ void drawHud()
 		else if ( g_minotaurSecs == -2 )
 		{
 			drawText("The Minotaur is hunting you!", BIG_FONT, makeColorRGB(255, 70, 60), 38, row);
+			row += 22;
+		}
+		if ( g_theme != THEME_NONE && g_themeLevel == currentlevel && !secretlevel )
+		{
+			char tb[64];
+			snprintf(tb, sizeof(tb), "Floor theme: %s", THEME_NAMES[g_theme]);
+			drawText(tb, BIG_FONT, makeColorRGB(190, 140, 255), 38, row);
 			row += 22;
 		}
 		if ( graceActive() )

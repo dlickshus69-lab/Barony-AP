@@ -296,6 +296,15 @@ class TestAllBossesShort(BaronyTestBase):
         self.assertEqual((sd["goal_floor"], sd["dungeon_floors"]), (15, 15))
 
 
+class TestFloorThemes(BaronyTestBase):
+    options = {"floor_themes": True, "floor_theme_chance": 60, "floor_theme_list": ["Dark", "Gold Rush"]}
+
+    def test_themes(self) -> None:
+        sd = self.world.fill_slot_data()
+        self.assertEqual((sd["floor_themes"], sd["floor_theme_chance"]), (1, 60))
+        self.assertEqual(sd["floor_theme_mask"], (1 << 0) | (1 << 10))  # Dark is bit 0, Gold Rush bit 10
+
+
 class TestShortHerx(BaronyTestBase):
     """Dungeon Floors with a normal goal: 8 floors, then Baron Herx."""
     options = {"goal": "herx", "custom_dungeon_length": True, "dungeon_floors": 12, "boss_checks": True}

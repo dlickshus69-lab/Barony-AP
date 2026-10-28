@@ -616,6 +616,44 @@ class CaravanHints(DefaultOnToggle):
     display_name = "Caravan Hints"
 
 
+class FloorThemes(Toggle):
+    """
+    Some floors get a theme: a twist for the whole floor, announced when you arrive and shown on the
+    tracker. Every theme pairs a downside with an upside.
+    Dark: hardly any light, but extra loot lies around.
+    Haunted: undead roam the floor (ghouls and skeletons, shadows deeper down), guarding extra loot.
+    Rich: extra gold and loot, and extra monsters after it.
+    Swarm: crawling with small monsters (rats, spiders, bats, slimes): lots of easy experience.
+    Elite: a third fewer monsters, but each is a few levels higher, tougher, and may drop loot.
+    Cursed: the weapons, armor and jewelry here are finer (excellent and enchanted), but many are cursed.
+    Peaceful: half the monsters are gone: a floor to catch your breath.
+    Famine: you arrive starving, but food lies all over the floor.
+    Arcane: spellbooks, scrolls and magic staffs lie around, and extra monsters guard them.
+    Frenzy: the monsters here are fast, but every kill gives bonus experience.
+    Gold Rush: every monster you kill drops gold, but they're all a couple of levels higher.
+    Floor Theme List picks which of these can show up.
+    Never on the starting floor, boss, town or Sanctum floors, or in secret areas, and never the same
+    theme twice in a row. A restarted floor keeps its theme.
+    """
+    display_name = "Floor Themes"
+
+
+class FloorThemeChance(Range):
+    """Floor Themes only: the chance, in percent, that a floor has a theme."""
+    display_name = "Floor Theme Chance"
+    range_start = 10
+    range_end = 100
+    default = 30
+
+
+class FloorThemeList(OptionSet):
+    """Floor Themes only: which themes can show up. Leave it empty for all of them."""
+    display_name = "Floor Theme List"
+    valid_keys = ["Dark", "Haunted", "Rich", "Swarm", "Elite", "Cursed", "Peaceful", "Famine", "Arcane", "Frenzy",
+                  "Gold Rush"]
+    default = frozenset(valid_keys)
+
+
 class RandomizeLoot(Choice):
     """
     Rerolls the ordinary loot: what's in chests, what shopkeepers sell, and items lying on the floor.
@@ -1164,6 +1202,9 @@ class BaronyOptions(PerGameCommonOptions):
     bounty_enemies: BountyEnemies
     bounty_chance: BountyChance
     bounty_checks: BountyChecks
+    floor_themes: FloorThemes
+    floor_theme_chance: FloorThemeChance
+    floor_theme_list: FloorThemeList
     death_markers: DeathMarkers
     death_marker_gold: DeathMarkerGold
     merchant_caravan: MerchantCaravan
@@ -1230,6 +1271,7 @@ option_groups = [
     OptionGroup("Extras", [ProgressiveLantern, LanternDarkness, BountyEnemies, BountyChance, BountyChecks,
                           MerchantCaravan, CaravanChance, CaravanChecks, CaravanHints]),
     OptionGroup("Challenges", [ChampionFloors, ChampionLocksStairs, ChampionChecks]),
+    OptionGroup("Floor Themes", [FloorThemes, FloorThemeChance, FloorThemeList]),
     OptionGroup("Music", [MusicShuffle, MusicSeed, MusicMods]),
     OptionGroup("Quality of Life", [FloorKeyOnTrackerMap]),
     OptionGroup("Players", [Players]),

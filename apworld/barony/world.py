@@ -380,6 +380,10 @@ class BaronyWorld(World):
             "champion_checks": len(self.champion_floors()),
             "progressive_lantern": int(bool(o.progressive_lantern)),
             "lantern_darkness": o.lantern_darkness.value,
+            "floor_themes": int(bool(o.floor_themes)),
+            "floor_theme_chance": o.floor_theme_chance.value,
+            "floor_theme_mask": sum(1 << i for i, k in enumerate(o.floor_theme_list.valid_keys)
+                                    if k in o.floor_theme_list.value),
             "death_markers": int(bool(o.death_markers)),
             "death_marker_gold": o.death_marker_gold.value,
             "merchant_caravan": int(bool(o.merchant_caravan)),

@@ -1029,6 +1029,11 @@ namespace
 					text(dc, 14, y, L"Champion: " + widen(g_state.values["champion"]) + L" guards the stairs", BAD, g_bodyFont);
 					y += 24;
 				}
+				if ( !g_state.values["theme"].empty() )
+				{
+					text(dc, 14, y, L"Floor theme: " + widen(g_state.values["theme"]), SECRET, g_bodyFont);
+					y += 24;
+				}
 				if ( num("caravan") )
 				{
 					text(dc, 14, y, L"A merchant caravan is on this floor", SECRET, g_bodyFont);

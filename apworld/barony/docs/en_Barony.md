@@ -47,6 +47,11 @@ shop (prices follow your Trading skill and Charisma), up to two Archipelago item
 Archipelago Hint that reveals what's at one of your unchecked locations, the ones that matter first. It
 doesn't use hint points. He's gone once you take the stairs. He shows as a purple coin on the tracker map.
 
+Floor Themes (their own section): some floors get a theme for the whole floor, each with a downside
+and an upside: Dark, Haunted, Rich, Swarm, Elite, Cursed, Peaceful, Famine, Arcane, Frenzy and Gold
+Rush. Floor Theme Chance sets how often, and Floor Theme List which themes can show up. The theme is
+announced when you arrive and shown on screen and on the tracker.
+
 The Hall of Fame (F5 in game, and shown by itself in the starting area) keeps every run on this seed:
 runs and wins, deepest floor, fastest win, fewest lives lost in a win, most kills and gold, and your
 last five runs.

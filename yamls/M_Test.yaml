@@ -113,6 +113,22 @@ Barony:
   champion_locks_stairs: true
   champion_checks: 5
 
+  # Floor Themes
+  floor_themes: false
+  floor_theme_chance: 30
+  floor_theme_list:
+  - Arcane
+  - Cursed
+  - Dark
+  - Elite
+  - Famine
+  - Frenzy
+  - Gold Rush
+  - Haunted
+  - Peaceful
+  - Rich
+  - Swarm
+
   # Music
   music_shuffle: off
   music_seed: locked
