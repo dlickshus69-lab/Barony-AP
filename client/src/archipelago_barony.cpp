@@ -2993,7 +2993,11 @@ namespace
 		{
 			Entity* e = (Entity*)node->element;
 			Stat* st = e ? e->getStats() : nullptr;
-			if ( st && st->type == SHOPKEEPER && (Uint32)e->monsterTarget == pl->getUID() ) { e->monsterReleaseAttackTarget(true); }
+			if ( st && st->type == SHOPKEEPER && (Uint32)e->monsterTarget == pl->getUID() )
+			{
+				e->monsterReleaseAttackTarget(true);
+				e->monsterState = MONSTER_STATE_WAIT; // back behind the counter: he'll trade with you again
+			}
 		}
 		say(COLOR_AP, "%s", why);
 	}

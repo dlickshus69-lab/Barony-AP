@@ -1,4 +1,4 @@
-From d9d7c00c91e19d12446fa4e8bab0379e3194cda3 Mon Sep 17 00:00:00 2001
+From c193cb49c579334466feb5ad80e7c20ca4f1eeea Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -12,7 +12,7 @@ Subject: [PATCH] Archipelago client hooks
  src/actladder.cpp                 |   25 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |   10 +-
- src/archipelago_barony.cpp        | 5601 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 5605 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |  129 +
  src/archipelago_ids.hpp           |  248 ++
  src/charclass.cpp                 |    4 +
@@ -31,7 +31,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   20 +
  src/ui/MainMenu.cpp               |    5 +-
- 27 files changed, 7894 insertions(+), 4 deletions(-)
+ 27 files changed, 7898 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -1910,10 +1910,10 @@ index 0872ea6..aee34f8 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..d9ebaee
+index 0000000..57c143f
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,5601 @@
+@@ -0,0 +1,5605 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -4909,7 +4909,11 @@ index 0000000..d9ebaee
 +		{
 +			Entity* e = (Entity*)node->element;
 +			Stat* st = e ? e->getStats() : nullptr;
-+			if ( st && st->type == SHOPKEEPER && (Uint32)e->monsterTarget == pl->getUID() ) { e->monsterReleaseAttackTarget(true); }
++			if ( st && st->type == SHOPKEEPER && (Uint32)e->monsterTarget == pl->getUID() )
++			{
++				e->monsterReleaseAttackTarget(true);
++				e->monsterState = MONSTER_STATE_WAIT; // back behind the counter: he'll trade with you again
++			}
 +		}
 +		say(COLOR_AP, "%s", why);
 +	}
