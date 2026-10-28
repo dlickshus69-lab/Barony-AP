@@ -136,6 +136,8 @@ Barony:
 
   # Quality of Life
   floor_key_on_tracker_map: false
+  wanted_time_limit: 5
+  wanted_clears_on_new_floor: false
 
   # Players
   players: 1

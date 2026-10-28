@@ -52,6 +52,11 @@ and an upside: Dark, Haunted, Rich, Swarm, Elite, Cursed, Peaceful, Famine, Arca
 Rush. Floor Theme Chance sets how often, and Floor Theme List which themes can show up. The theme is
 announced when you arrive and shown on screen and on the tracker.
 
+Wanted (Quality of Life): hitting a shopkeeper makes you Wanted (the red hand icon), and every
+shopkeeper is hostile. In normal Barony that lasts the whole run; Wanted Time Limit makes it wear off
+after a few minutes in the dungeon (5 by default, with a countdown on screen), and Wanted Clears on New
+Floor ends it when you reach the next floor.
+
 The Hall of Fame (F5 in game, and shown by itself in the starting area) keeps every run on this seed:
 runs and wins, deepest floor, fastest win, fewest lives lost in a win, most kills and gold, and your
 last five runs.

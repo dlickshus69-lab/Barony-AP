@@ -654,6 +654,24 @@ class FloorThemeList(OptionSet):
     default = frozenset(valid_keys)
 
 
+class WantedTimeLimit(Range):
+    """
+    Hitting or robbing a shopkeeper makes you Wanted (the red hand icon): every shopkeeper is hostile
+    to you. In normal Barony that lasts the whole run. This makes it wear off after this many minutes
+    in the dungeon (paused time doesn't count), with a countdown on screen.
+    0 = normal Barony: Wanted lasts the whole run.
+    """
+    display_name = "Wanted Time Limit"
+    range_start = 0
+    range_end = 30
+    default = 5
+
+
+class WantedClearsOnNewFloor(Toggle):
+    """Wanted (the red hand icon) also wears off as soon as you reach a new floor."""
+    display_name = "Wanted Clears on New Floor"
+
+
 class RandomizeLoot(Choice):
     """
     Rerolls the ordinary loot: what's in chests, what shopkeepers sell, and items lying on the floor.
@@ -1202,6 +1220,8 @@ class BaronyOptions(PerGameCommonOptions):
     bounty_enemies: BountyEnemies
     bounty_chance: BountyChance
     bounty_checks: BountyChecks
+    wanted_time_limit: WantedTimeLimit
+    wanted_clears_on_new_floor: WantedClearsOnNewFloor
     floor_themes: FloorThemes
     floor_theme_chance: FloorThemeChance
     floor_theme_list: FloorThemeList
@@ -1273,6 +1293,6 @@ option_groups = [
     OptionGroup("Challenges", [ChampionFloors, ChampionLocksStairs, ChampionChecks]),
     OptionGroup("Floor Themes", [FloorThemes, FloorThemeChance, FloorThemeList]),
     OptionGroup("Music", [MusicShuffle, MusicSeed, MusicMods]),
-    OptionGroup("Quality of Life", [FloorKeyOnTrackerMap]),
+    OptionGroup("Quality of Life", [FloorKeyOnTrackerMap, WantedTimeLimit, WantedClearsOnNewFloor]),
     OptionGroup("Players", [Players]),
 ]

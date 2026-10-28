@@ -99,6 +99,8 @@ namespace
 		int champion_checks = 0;
 		int progressive_lantern = 0;  // less light, three Progressive Lanterns bring it back and more
 		int lantern_darkness = 2;
+		int wanted_time_limit = 5;    // minutes until Wanted (shopkeepers hostile) wears off, 0 = never (5 for older seeds)
+		int wanted_clears_on_new_floor = 0;
 		int floor_themes = 0;         // some floors get a theme (a twist for the whole floor)
 		int floor_theme_chance = 30;
 		int floor_theme_mask = 0;     // which themes (bit per theme, 0 = all)
@@ -637,6 +639,8 @@ namespace
 		registerSlotInt("champion_checks", &SlotOptions::champion_checks);
 		registerSlotInt("progressive_lantern", &SlotOptions::progressive_lantern);
 		registerSlotInt("lantern_darkness", &SlotOptions::lantern_darkness);
+		registerSlotInt("wanted_time_limit", &SlotOptions::wanted_time_limit);
+		registerSlotInt("wanted_clears_on_new_floor", &SlotOptions::wanted_clears_on_new_floor);
 		registerSlotInt("floor_themes", &SlotOptions::floor_themes);
 		registerSlotInt("floor_theme_chance", &SlotOptions::floor_theme_chance);
 		registerSlotInt("floor_theme_mask", &SlotOptions::floor_theme_mask);
@@ -2968,6 +2972,50 @@ namespace
 		if ( made ) { printlog("[Archipelago] Extra Monsters: %d more on this floor.", made); }
 	}
 
+	// ------------------------------------------------------- Wanted wears off
+	// Hitting a shopkeeper makes you Wanted for the whole run in Barony. Wanted Time Limit makes it
+	// wear off after a while in the dungeon; Wanted Clears on New Floor on the next floor.
+	Uint32 g_wantedTicks = 0; // dungeon ticks spent Wanted (not paused)
+
+	bool isWanted()
+	{
+		auto w = ShopkeeperPlayerHostility.getWantedLevel(clientnum);
+		return w != ShopkeeperPlayerHostility_t::NO_WANTED_LEVEL && w != ShopkeeperPlayerHostility_t::FAILURE_TO_IDENTIFY;
+	}
+
+	void clearWanted(const char* why)
+	{
+		g_wantedTicks = 0;
+		if ( !isWanted() ) { return; }
+		ShopkeeperPlayerHostility.resetPlayerHostility(clientnum, true);
+		Entity* pl = players[clientnum] ? players[clientnum]->entity : nullptr;
+		for ( node_t* node = map.creatures ? map.creatures->first : nullptr; node && pl; node = node->next )
+		{
+			Entity* e = (Entity*)node->element;
+			Stat* st = e ? e->getStats() : nullptr;
+			if ( st && st->type == SHOPKEEPER && (Uint32)e->monsterTarget == pl->getUID() ) { e->monsterReleaseAttackTarget(true); }
+		}
+		say(COLOR_AP, "%s", why);
+	}
+
+	int wantedSecondsLeft()
+	{
+		if ( g_slot.wanted_time_limit <= 0 || !isWanted() ) { return -1; }
+		long total = (long)g_slot.wanted_time_limit * 60 * TICKS_PER_SECOND;
+		return (int)std::max(0L, (total - (long)g_wantedTicks) / TICKS_PER_SECOND);
+	}
+
+	void updateWanted()
+	{
+		if ( !isWanted() ) { g_wantedTicks = 0; return; }
+		if ( gamePaused || loading || g_slot.wanted_time_limit <= 0 ) { return; }
+		++g_wantedTicks;
+		if ( g_wantedTicks >= (Uint32)g_slot.wanted_time_limit * 60 * TICKS_PER_SECOND )
+		{
+			clearWanted("The shopkeepers have forgotten about you. You're no longer Wanted.");
+		}
+	}
+
 	// ------------------------------------------------------- Floor Themes
 	// Some floors get a theme: a downside and an upside for the whole floor.
 	enum Theme { THEME_NONE, THEME_DARK, THEME_HAUNTED, THEME_RICH, THEME_SWARM, THEME_ELITE, THEME_CURSED,
@@ -3220,6 +3268,7 @@ namespace
 		}
 		spawnExtraMonsters(); // before the kill removal, so extra monsters you killed stay dead too
 		applyTheme(restarted);
+		if ( !restarted && g_slot.wanted_clears_on_new_floor ) { clearWanted("A new floor, a clean slate: you're no longer Wanted."); }
 		if ( restarted ) { removeKilledEnemies(); }
 		else { g_floorKills = 0; }
 		if ( restarted && g_slot.death_items == 1 ) { removeTakenLoot(); }
@@ -4042,6 +4091,7 @@ void tick()
 	updateBounty();
 	updateChampion();
 	updateTheme();
+	updateWanted();
 	updateGrace();
 	updateGraves();
 	if ( stats[clientnum] && stats[clientnum]->GOLD > g_save.runGoldMax ) { g_save.runGoldMax = stats[clientnum]->GOLD; }
@@ -5214,6 +5264,14 @@ void drawHud()
 			char tb[64];
 			snprintf(tb, sizeof(tb), "Floor theme: %s", THEME_NAMES[g_theme]);
 			drawText(tb, BIG_FONT, makeColorRGB(190, 140, 255), 38, row);
+			row += 22;
+		}
+		if ( wantedSecondsLeft() >= 0 )
+		{
+			int left = wantedSecondsLeft();
+			char wb[64];
+			snprintf(wb, sizeof(wb), "Wanted: %d:%02d left", left / 60, left % 60);
+			drawText(wb, BIG_FONT, makeColorRGB(230, 80, 70), 38, row);
 			row += 22;
 		}
 		if ( graceActive() )
