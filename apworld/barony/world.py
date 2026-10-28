@@ -19,6 +19,7 @@ MAX_SENSIBLE_LEVEL = {
     data.GOAL_DEVIL: 22,
     data.GOAL_SANCTUM: 30,
     data.GOAL_BOSS_RUSH: 30,  # lowered below to fit Dungeon Floors
+    data.GOAL_ALL_BOSSES: 32,
 }
 
 CLASSIFICATION = {

@@ -1,4 +1,4 @@
-From 8793e1924ef00dcb158e171b359c8c6707161550 Mon Sep 17 00:00:00 2001
+From 5e245397e4fa21bdcbf20600028e807c4161b5bb Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -12,14 +12,14 @@ Subject: [PATCH] Archipelago client hooks
  src/actladder.cpp                 |   25 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |   10 +-
- src/archipelago_barony.cpp        | 5187 +++++++++++++++++++++++++++++
- src/archipelago_barony.hpp        |  128 +
+ src/archipelago_barony.cpp        | 5261 +++++++++++++++++++++++++++++
+ src/archipelago_barony.hpp        |  129 +
  src/archipelago_ids.hpp           |  248 ++
  src/charclass.cpp                 |    4 +
  src/engine/audio/music.cpp        |    4 +
  src/engine/audio/sound_game.cpp   |    2 +
  src/files.cpp                     |   53 +
- src/game.cpp                      |   12 +
+ src/game.cpp                      |   13 +
  src/init.cpp                      |    6 +
  src/init_game.cpp                 |    6 +
  src/interface/playerinventory.cpp |   13 +
@@ -31,7 +31,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   20 +
  src/ui/MainMenu.cpp               |    5 +-
- 27 files changed, 7417 insertions(+), 4 deletions(-)
+ 27 files changed, 7493 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -1849,10 +1849,10 @@ index 0872ea6..aee34f8 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..bb41b80
+index 0000000..5b7f2eb
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,5187 @@
+@@ -0,0 +1,5261 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -2141,6 +2141,7 @@ index 0000000..bb41b80
 +	void launchTracker();
 +	void startRunRecord();
 +	void buyHint();
++	std::string g_routeNote; // All Three Bosses: said when the next floor is ready
 +	void clearFloorUids();
 +	bool g_hofPanel = false;      // Hall of Fame panel (F5)
 +	Uint32 g_hofAutoUntil = 0;    // shown by itself for a while at the start of a run
@@ -2594,7 +2595,8 @@ index 0000000..bb41b80
 +		launchTracker();
 +		say(COLOR_AP, "Archipelago: connected. Goal: %s.",
 +			g_slot.goal == 0 ? "defeat Baron Herx" : g_slot.goal == 1 ? "defeat the Devil"
-+			: g_slot.goal == 3 ? "Boss Rush" : "defeat the twin liches");
++			: g_slot.goal == 3 ? "Boss Rush" : g_slot.goal == 4 ? "defeat Baron Herx, the Devil and the twin liches"
++			: "defeat the twin liches");
 +	}
 +
 +	// ----------------------------------------------------------- items
@@ -4420,49 +4422,80 @@ index 0000000..bb41b80
 +
 +	void actApGrave(Entity* my) { (void)my; } // just stands there; the client claims it
 +
-+	void recordGrave(Stat* s)
++	// Returns false when no grave was recorded. Graves standing on this floor keep pointing at theirs.
++	bool recordGrave(Stat* s)
 +	{
-+		if ( !g_slot.death_markers || !s || currentlevel < 1 || secretlevel || isSpecialMap() ) { return; }
++		if ( !g_slot.death_markers || !s || currentlevel < 1 || secretlevel || isSpecialMap() ) { return false; }
 +		long gold = std::max(10L, (long)s->GOLD * std::max(1, g_slot.death_marker_gold) / 100);
 +		if ( g_save.graves.size() >= MAX_GRAVES )
 +		{
 +			// Make room: the oldest claimed grave goes first, else the oldest.
 +			auto it = std::find_if(g_save.graves.begin(), g_save.graves.end(), [](const SaveData::Grave& g) { return g.claimed; });
-+			g_save.graves.erase(it != g_save.graves.end() ? it : g_save.graves.begin());
++			if ( it == g_save.graves.end() ) { it = g_save.graves.begin(); }
++			size_t gone = (size_t)(it - g_save.graves.begin());
++			g_save.graves.erase(it);
++			for ( auto m = g_graveEntities.begin(); m != g_graveEntities.end(); )
++			{
++				if ( m->second == gone ) { m = g_graveEntities.erase(m); continue; }
++				if ( m->second > gone ) { --m->second; }
++				++m;
++			}
 +		}
 +		g_save.graves.push_back({ currentlevel, gold, false });
++		return true;
 +	}
 +
-+	void spawnGraves()
++	// A grave stands somewhere in the far half of the floor you can walk to: never right next to you.
++	bool spawnGraveEntity(size_t i)
 +	{
-+		g_graveEntities.clear();
++		int x, y;
++		if ( !findReachableSpot(x, y) ) { return false; }
++		Entity* e = newEntity(GRAVE_SPRITE, 1, map.entities, nullptr);
++		if ( !e ) { return false; }
++		e->x = x * 16 + 8;
++		e->y = y * 16 + 8;
++		e->sizex = 4;
++		e->sizey = 4;
++		e->z = 8 - (models[GRAVE_SPRITE] ? models[GRAVE_SPRITE]->sizez / 4.0 : 2);
++		e->yaw = (local_rng.rand() % 4) * PI / 2;
++		e->flags[PASSABLE] = true; // never blocks a corridor
++		e->flags[NOUPDATE] = true;
++		e->behavior = &actApGrave;
++		g_graveEntities[e->getUID()] = i;
++		return true;
++	}
++
++	void spawnGravesHere()
++	{
 +		if ( !g_slot.death_markers || currentlevel < 1 || secretlevel || isSpecialMap() ) { return; }
 +		int placed = 0;
 +		for ( size_t i = g_save.graves.size(); i-- > 0 && placed < 3; )
 +		{
 +			SaveData::Grave& g = g_save.graves[i];
 +			if ( g.claimed || g.floor != currentlevel ) { continue; }
-+			int x, y;
-+			if ( !findReachableSpot(x, y) ) { break; } // the far half of the floor you can walk to
-+			Entity* e = newEntity(GRAVE_SPRITE, 1, map.entities, nullptr);
-+			if ( !e ) { break; }
-+			e->x = x * 16 + 8;
-+			e->y = y * 16 + 8;
-+			e->sizex = 4;
-+			e->sizey = 4;
-+			e->z = 8 - (models[GRAVE_SPRITE] ? models[GRAVE_SPRITE]->sizez / 4.0 : 2);
-+			e->yaw = (local_rng.rand() % 4) * PI / 2;
-+			e->flags[PASSABLE] = true; // never blocks a corridor
-+			e->flags[NOUPDATE] = true;
-+			e->behavior = &actApGrave;
-+			g_graveEntities[e->getUID()] = i;
++			if ( !spawnGraveEntity(i) ) { break; }
 +			++placed;
 +		}
-+		if ( placed > 0 )
++		if ( placed == 0 ) { return; }
++		say(COLOR_AP, placed == 1 ? "Your grave from an earlier death is somewhere on this floor."
++			: "Your graves from earlier deaths are somewhere on this floor.");
++	}
++
++	// Lost a life and kept playing (Death Link: Lose a Life): the grave appears now, elsewhere on the floor.
++	void graveInPlace(Stat* s)
++	{
++		if ( !recordGrave(s) ) { return; }
++		if ( spawnGraveEntity(g_save.graves.size() - 1) )
 +		{
-+			say(COLOR_AP, placed == 1 ? "Your grave from an earlier death is somewhere on this floor."
-+				: "Your graves from earlier deaths are somewhere on this floor.");
++			say(COLOR_AP, "Your gravestone rose somewhere else on this floor.");
 +		}
++		writeSave();
++	}
++
++	void spawnGraves()
++	{
++		g_graveEntities.clear();
++		spawnGravesHere();
 +	}
 +
 +	void updateGraves()
@@ -4838,6 +4871,7 @@ index 0000000..bb41b80
 +		pickBounty(restarted);
 +		pickChampion(restarted);
 +		if ( restarted ) { startGrace(); }
++		if ( !g_routeNote.empty() ) { say(COLOR_AP, "%s", g_routeNote.c_str()); g_routeNote.clear(); }
 +		spawnGraves();
 +		spawnCaravan(restarted);
 +		g_save.runDeepest = std::max(g_save.runDeepest, currentlevel);
@@ -4874,6 +4908,7 @@ index 0000000..bb41b80
 +			applyDeathPenalty(stats[p]);
 +			say(COLOR_TRAP, "You lose a life (%d left). Safe for %d seconds.", g_save.livesLeft, GRACE_SECONDS);
 +			startGrace();
++			graveInPlace(stats[p]);
 +			printlog("[Archipelago] Death Link: lost a life. Lives left: %d", g_save.livesLeft);
 +			writeSave();
 +			return;
@@ -5138,12 +5173,13 @@ index 0000000..bb41b80
 +		if ( g_slot.goal == 0 ) { return "boss,"; }
 +		if ( g_slot.goal == 1 ) { return "hellboss,"; }
 +		if ( g_slot.goal == 2 ) { return "sanctum,"; }
-+		int m = bossRushGoalMask(), killed = g_save.goalBossesKilled;
++		// All Three Bosses with Dungeon Floors: all three, in the game's order. Boss Rush: the ones you picked.
++		int m = g_slot.goal == 4 ? 15 : bossRushGoalMask(), killed = g_save.goalBossesKilled;
 +		std::vector<std::string> bosses;
 +		if ( (m & 1) && !(killed & 1) ) { bosses.push_back("boss"); }
 +		if ( (m & 2) && !(killed & 2) ) { bosses.push_back("hellboss"); }
 +		if ( (m & 12) && (killed & 12) != (m & 12) ) { bosses.push_back("sanctum"); }
-+		if ( g_slot.boss_rush_order != 0 && bosses.size() > 1 )
++		if ( g_slot.goal == 3 && g_slot.boss_rush_order != 0 && bosses.size() > 1 )
 +		{
 +			// Random order: the same for every run of this seed, or a new one each run.
 +			uint32_t seed = (uint32_t)g_slot.boss_rush_seed;
@@ -5186,6 +5222,33 @@ index 0000000..bb41b80
 +		const std::string& map = seq[g_save.rushPhase - 1];
 +		printlog("[Archipelago] Boss Rush: stop %d of %d (%s).", g_save.rushPhase, (int)seq.size(), map.c_str());
 +		return map;
++	}
++
++	// All Three Bosses (normal length): one route through all of them. Barony splits after the Ruins:
++	// Herx's portal skips Hell, and the Underworld's way into Hell skips Herx. Here Herx's portal leads
++	// into Hell, the Devil's portal on to Hamlet and the expansion, and Hell can't be entered from the
++	// Underworld until Herx is beaten.
++	bool allBossesRoute() { return g_ready && g_slot.goal == 4 && !bossRushOn() && multiplayer == SINGLE; }
++
++	void adjustNextLevelImpl(const std::string& prevMap)
++	{
++		if ( !allBossesRoute() || secretlevel ) { return; }
++		bool fromHerx = prevMap.compare(0, 4, "Boss") == 0;
++		bool fromHell = prevMap.compare(0, 4, "Hell") == 0;
++		if ( fromHerx && currentlevel > 21 )
++		{
++			currentlevel = 21;
++			g_routeNote = "Through Herx's portal and down into Hell. The Devil waits at the bottom.";
++		}
++		else if ( currentlevel >= 21 && currentlevel <= 24 && !fromHerx && !fromHell && !(g_save.goalBossesKilled & 1) )
++		{
++			currentlevel = 19;
++			g_routeNote = "Hell won't let you in yet: Baron Herx must fall first. Back to the Ruins.";
++		}
++		else if ( prevMap.compare(0, 9, "Hell Boss") == 0 && currentlevel >= 25 )
++		{
++			g_routeNote = "Out of Hell. The twin liches wait at the end of the dungeon.";
++		}
 +	}
 +
 +	bool bossRushMoreAfterThis()
@@ -5908,10 +5971,11 @@ index 0000000..bb41b80
 +	int goalMask = 0, goalBit = 0;
 +	if ( g_slot.goal == 0 ) { goalMask = 1; if ( type == LICH ) { goalBit = 1; } }
 +	else if ( g_slot.goal == 1 ) { goalMask = 1; if ( type == DEVIL ) { goalBit = 1; } }
-+	else if ( g_slot.goal == 3 )
++	else if ( g_slot.goal == 3 || g_slot.goal == 4 )
 +	{
-+		// Boss Rush: every boss you picked (bits: Herx 1, Devil 2, Ice Lich 4, Fire Lich 8).
-+		goalMask = bossRushGoalMask();
++		// Boss Rush: every boss you picked; All Three Bosses: all of them (bits: Herx 1, Devil 2,
++		// Ice Lich 4, Fire Lich 8). A boss beaten in any run stays beaten.
++		goalMask = g_slot.goal == 4 ? 15 : bossRushGoalMask();
 +		if ( type == LICH ) { goalBit = 1; }
 +		else if ( type == DEVIL ) { goalBit = 2; }
 +		else if ( type == LICH_ICE ) { goalBit = 4; }
@@ -6911,8 +6975,18 @@ index 0000000..bb41b80
 +	return g_save.rushPhase >= (int)splitCommas(g_save.rushSeq).size();
 +}
 +
++void adjustNextLevel(const std::string& prevMap)
++{
++	adjustNextLevelImpl(prevMap);
++}
++
 +bool bossRushSkipVictory()
 +{
++	// All Three Bosses: Herx's and the Devil's victory portals (classic mode) lead on instead of ending.
++	if ( allBossesRoute() && (!strncmp(map.name, "Boss", 4) || !strncmp(map.name, "Hell Boss", 9)) )
++	{
++		return true;
++	}
 +	// Not the last boss yet: the victory portal takes you on to the next stop instead of ending.
 +	if ( !bossRushMoreAfterThis() ) { return false; }
 +	say(COLOR_AP, "Boss Rush: on to the next one!");
@@ -7042,10 +7116,10 @@ index 0000000..bb41b80
 +} // namespace AP
 diff --git a/src/archipelago_barony.hpp b/src/archipelago_barony.hpp
 new file mode 100644
-index 0000000..75bd90e
+index 0000000..fd52f0b
 --- /dev/null
 +++ b/src/archipelago_barony.hpp
-@@ -0,0 +1,128 @@
+@@ -0,0 +1,129 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client.
@@ -7162,6 +7236,7 @@ index 0000000..75bd90e
 +	// engine/audio/music.cpp, playMusic(): Music Mods. Takes and returns an FMOD::Sound*: the track to
 +	// play, which may be a mod's version of the same track.
 +	void* pickMusicVersion(void* sound);
++	void adjustNextLevel(const std::string& prevMap); // All Three Bosses: Herx -> Hell -> Devil -> Sanctum
 +	const char* bossRushNextMap();  // Boss Rush: the map to load in place of this floor, or nullptr
 +	bool bossRushSkipVictory();
 +	bool bossRushHideMidPortal();   // Boss Rush: the last boss's arena only has the victory portal     // Boss Rush: true = this victory portal goes on to the next boss
@@ -7585,7 +7660,7 @@ index 12ae3dd..31c3dcc 100644
  		if ( levelToLoad > 0 ) // if level == 0, then load up the first map.
  		{
 diff --git a/src/game.cpp b/src/game.cpp
-index 7837966..2db6fb4 100644
+index 7837966..6a8fd18 100644
 --- a/src/game.cpp
 +++ b/src/game.cpp
 @@ -12,6 +12,7 @@
@@ -7605,7 +7680,15 @@ index 7837966..2db6fb4 100644
  #ifdef NINTENDO
  	(void)nxUpdateCrashMessage();
  #endif
-@@ -2106,11 +2109,17 @@ void gameLogic(void)
+@@ -2088,6 +2091,7 @@ void gameLogic(void)
+ 						++currentlevel;
+ 					}
+ 					skipLevelsOnLoad = 0;
++					AP::adjustNextLevel(prevmapname); // Archipelago: All Three Bosses route (Herx -> Hell -> Devil -> Sanctum)
+ 
+ 					// signal clients about level change
+ 					if ( gameModeManager.currentSession.seededRun.seed == 0 && !*cvar_map_sequence_rng )
+@@ -2106,11 +2110,17 @@ void gameLogic(void)
  						mapseed = map_sequence_rng.rand();
  					}
  					lastEntityUIDs = entity_uids;
@@ -7623,7 +7706,7 @@ index 7837966..2db6fb4 100644
  
  					if ( !secretlevel )
  					{
-@@ -7093,6 +7102,7 @@ int main(int argc, char** argv)
+@@ -7093,6 +7103,7 @@ int main(int argc, char** argv)
  {
  #ifdef WINDOWS
  	SetUnhandledExceptionFilter(unhandled_handler);
@@ -7631,7 +7714,7 @@ index 7837966..2db6fb4 100644
  #ifdef _DEBUG
  	//_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
  #endif
-@@ -7663,6 +7673,7 @@ int main(int argc, char** argv)
+@@ -7663,6 +7674,7 @@ int main(int argc, char** argv)
  						MainMenu::doMainMenu(!intro);
  						UIToastNotificationManager.drawNotifications(MainMenu::isCutsceneActive(), true); // draw this before the cursor
                          framesProcResult = doFrames();
@@ -7639,7 +7722,7 @@ index 7837966..2db6fb4 100644
  
  #ifdef USE_IMGUI
  						ImGui_t::render();
-@@ -7981,6 +7992,7 @@ int main(int argc, char** argv)
+@@ -7981,6 +7993,7 @@ int main(int argc, char** argv)
  				framesProcResult = doFrames();
  				DebugStats.t6Messages = std::chrono::high_resolution_clock::now();
  				ingameHud();

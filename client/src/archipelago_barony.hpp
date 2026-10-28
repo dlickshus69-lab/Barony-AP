@@ -114,6 +114,7 @@ namespace AP
 	// engine/audio/music.cpp, playMusic(): Music Mods. Takes and returns an FMOD::Sound*: the track to
 	// play, which may be a mod's version of the same track.
 	void* pickMusicVersion(void* sound);
+	void adjustNextLevel(const std::string& prevMap); // All Three Bosses: Herx -> Hell -> Devil -> Sanctum
 	const char* bossRushNextMap();  // Boss Rush: the map to load in place of this floor, or nullptr
 	bool bossRushSkipVictory();
 	bool bossRushHideMidPortal();   // Boss Rush: the last boss's arena only has the victory portal     // Boss Rush: true = this victory portal goes on to the next boss

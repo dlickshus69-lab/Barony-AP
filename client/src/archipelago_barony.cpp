@@ -286,6 +286,7 @@ namespace
 	void launchTracker();
 	void startRunRecord();
 	void buyHint();
+	std::string g_routeNote; // All Three Bosses: said when the next floor is ready
 	void clearFloorUids();
 	bool g_hofPanel = false;      // Hall of Fame panel (F5)
 	Uint32 g_hofAutoUntil = 0;    // shown by itself for a while at the start of a run
@@ -739,7 +740,8 @@ namespace
 		launchTracker();
 		say(COLOR_AP, "Archipelago: connected. Goal: %s.",
 			g_slot.goal == 0 ? "defeat Baron Herx" : g_slot.goal == 1 ? "defeat the Devil"
-			: g_slot.goal == 3 ? "Boss Rush" : "defeat the twin liches");
+			: g_slot.goal == 3 ? "Boss Rush" : g_slot.goal == 4 ? "defeat Baron Herx, the Devil and the twin liches"
+			: "defeat the twin liches");
 	}
 
 	// ----------------------------------------------------------- items
@@ -2565,49 +2567,80 @@ namespace
 
 	void actApGrave(Entity* my) { (void)my; } // just stands there; the client claims it
 
-	void recordGrave(Stat* s)
+	// Returns false when no grave was recorded. Graves standing on this floor keep pointing at theirs.
+	bool recordGrave(Stat* s)
 	{
-		if ( !g_slot.death_markers || !s || currentlevel < 1 || secretlevel || isSpecialMap() ) { return; }
+		if ( !g_slot.death_markers || !s || currentlevel < 1 || secretlevel || isSpecialMap() ) { return false; }
 		long gold = std::max(10L, (long)s->GOLD * std::max(1, g_slot.death_marker_gold) / 100);
 		if ( g_save.graves.size() >= MAX_GRAVES )
 		{
 			// Make room: the oldest claimed grave goes first, else the oldest.
 			auto it = std::find_if(g_save.graves.begin(), g_save.graves.end(), [](const SaveData::Grave& g) { return g.claimed; });
-			g_save.graves.erase(it != g_save.graves.end() ? it : g_save.graves.begin());
+			if ( it == g_save.graves.end() ) { it = g_save.graves.begin(); }
+			size_t gone = (size_t)(it - g_save.graves.begin());
+			g_save.graves.erase(it);
+			for ( auto m = g_graveEntities.begin(); m != g_graveEntities.end(); )
+			{
+				if ( m->second == gone ) { m = g_graveEntities.erase(m); continue; }
+				if ( m->second > gone ) { --m->second; }
+				++m;
+			}
 		}
 		g_save.graves.push_back({ currentlevel, gold, false });
+		return true;
 	}
 
-	void spawnGraves()
+	// A grave stands somewhere in the far half of the floor you can walk to: never right next to you.
+	bool spawnGraveEntity(size_t i)
 	{
-		g_graveEntities.clear();
+		int x, y;
+		if ( !findReachableSpot(x, y) ) { return false; }
+		Entity* e = newEntity(GRAVE_SPRITE, 1, map.entities, nullptr);
+		if ( !e ) { return false; }
+		e->x = x * 16 + 8;
+		e->y = y * 16 + 8;
+		e->sizex = 4;
+		e->sizey = 4;
+		e->z = 8 - (models[GRAVE_SPRITE] ? models[GRAVE_SPRITE]->sizez / 4.0 : 2);
+		e->yaw = (local_rng.rand() % 4) * PI / 2;
+		e->flags[PASSABLE] = true; // never blocks a corridor
+		e->flags[NOUPDATE] = true;
+		e->behavior = &actApGrave;
+		g_graveEntities[e->getUID()] = i;
+		return true;
+	}
+
+	void spawnGravesHere()
+	{
 		if ( !g_slot.death_markers || currentlevel < 1 || secretlevel || isSpecialMap() ) { return; }
 		int placed = 0;
 		for ( size_t i = g_save.graves.size(); i-- > 0 && placed < 3; )
 		{
 			SaveData::Grave& g = g_save.graves[i];
 			if ( g.claimed || g.floor != currentlevel ) { continue; }
-			int x, y;
-			if ( !findReachableSpot(x, y) ) { break; } // the far half of the floor you can walk to
-			Entity* e = newEntity(GRAVE_SPRITE, 1, map.entities, nullptr);
-			if ( !e ) { break; }
-			e->x = x * 16 + 8;
-			e->y = y * 16 + 8;
-			e->sizex = 4;
-			e->sizey = 4;
-			e->z = 8 - (models[GRAVE_SPRITE] ? models[GRAVE_SPRITE]->sizez / 4.0 : 2);
-			e->yaw = (local_rng.rand() % 4) * PI / 2;
-			e->flags[PASSABLE] = true; // never blocks a corridor
-			e->flags[NOUPDATE] = true;
-			e->behavior = &actApGrave;
-			g_graveEntities[e->getUID()] = i;
+			if ( !spawnGraveEntity(i) ) { break; }
 			++placed;
 		}
-		if ( placed > 0 )
+		if ( placed == 0 ) { return; }
+		say(COLOR_AP, placed == 1 ? "Your grave from an earlier death is somewhere on this floor."
+			: "Your graves from earlier deaths are somewhere on this floor.");
+	}
+
+	// Lost a life and kept playing (Death Link: Lose a Life): the grave appears now, elsewhere on the floor.
+	void graveInPlace(Stat* s)
+	{
+		if ( !recordGrave(s) ) { return; }
+		if ( spawnGraveEntity(g_save.graves.size() - 1) )
 		{
-			say(COLOR_AP, placed == 1 ? "Your grave from an earlier death is somewhere on this floor."
-				: "Your graves from earlier deaths are somewhere on this floor.");
+			say(COLOR_AP, "Your gravestone rose somewhere else on this floor.");
 		}
+		writeSave();
+	}
+
+	void spawnGraves()
+	{
+		g_graveEntities.clear();
+		spawnGravesHere();
 	}
 
 	void updateGraves()
@@ -2983,6 +3016,7 @@ namespace
 		pickBounty(restarted);
 		pickChampion(restarted);
 		if ( restarted ) { startGrace(); }
+		if ( !g_routeNote.empty() ) { say(COLOR_AP, "%s", g_routeNote.c_str()); g_routeNote.clear(); }
 		spawnGraves();
 		spawnCaravan(restarted);
 		g_save.runDeepest = std::max(g_save.runDeepest, currentlevel);
@@ -3019,6 +3053,7 @@ namespace
 			applyDeathPenalty(stats[p]);
 			say(COLOR_TRAP, "You lose a life (%d left). Safe for %d seconds.", g_save.livesLeft, GRACE_SECONDS);
 			startGrace();
+			graveInPlace(stats[p]);
 			printlog("[Archipelago] Death Link: lost a life. Lives left: %d", g_save.livesLeft);
 			writeSave();
 			return;
@@ -3283,12 +3318,13 @@ namespace
 		if ( g_slot.goal == 0 ) { return "boss,"; }
 		if ( g_slot.goal == 1 ) { return "hellboss,"; }
 		if ( g_slot.goal == 2 ) { return "sanctum,"; }
-		int m = bossRushGoalMask(), killed = g_save.goalBossesKilled;
+		// All Three Bosses with Dungeon Floors: all three, in the game's order. Boss Rush: the ones you picked.
+		int m = g_slot.goal == 4 ? 15 : bossRushGoalMask(), killed = g_save.goalBossesKilled;
 		std::vector<std::string> bosses;
 		if ( (m & 1) && !(killed & 1) ) { bosses.push_back("boss"); }
 		if ( (m & 2) && !(killed & 2) ) { bosses.push_back("hellboss"); }
 		if ( (m & 12) && (killed & 12) != (m & 12) ) { bosses.push_back("sanctum"); }
-		if ( g_slot.boss_rush_order != 0 && bosses.size() > 1 )
+		if ( g_slot.goal == 3 && g_slot.boss_rush_order != 0 && bosses.size() > 1 )
 		{
 			// Random order: the same for every run of this seed, or a new one each run.
 			uint32_t seed = (uint32_t)g_slot.boss_rush_seed;
@@ -3331,6 +3367,33 @@ namespace
 		const std::string& map = seq[g_save.rushPhase - 1];
 		printlog("[Archipelago] Boss Rush: stop %d of %d (%s).", g_save.rushPhase, (int)seq.size(), map.c_str());
 		return map;
+	}
+
+	// All Three Bosses (normal length): one route through all of them. Barony splits after the Ruins:
+	// Herx's portal skips Hell, and the Underworld's way into Hell skips Herx. Here Herx's portal leads
+	// into Hell, the Devil's portal on to Hamlet and the expansion, and Hell can't be entered from the
+	// Underworld until Herx is beaten.
+	bool allBossesRoute() { return g_ready && g_slot.goal == 4 && !bossRushOn() && multiplayer == SINGLE; }
+
+	void adjustNextLevelImpl(const std::string& prevMap)
+	{
+		if ( !allBossesRoute() || secretlevel ) { return; }
+		bool fromHerx = prevMap.compare(0, 4, "Boss") == 0;
+		bool fromHell = prevMap.compare(0, 4, "Hell") == 0;
+		if ( fromHerx && currentlevel > 21 )
+		{
+			currentlevel = 21;
+			g_routeNote = "Through Herx's portal and down into Hell. The Devil waits at the bottom.";
+		}
+		else if ( currentlevel >= 21 && currentlevel <= 24 && !fromHerx && !fromHell && !(g_save.goalBossesKilled & 1) )
+		{
+			currentlevel = 19;
+			g_routeNote = "Hell won't let you in yet: Baron Herx must fall first. Back to the Ruins.";
+		}
+		else if ( prevMap.compare(0, 9, "Hell Boss") == 0 && currentlevel >= 25 )
+		{
+			g_routeNote = "Out of Hell. The twin liches wait at the end of the dungeon.";
+		}
 	}
 
 	bool bossRushMoreAfterThis()
@@ -4053,10 +4116,11 @@ void onMonsterDeath(Entity* my, Stat* myStats)
 	int goalMask = 0, goalBit = 0;
 	if ( g_slot.goal == 0 ) { goalMask = 1; if ( type == LICH ) { goalBit = 1; } }
 	else if ( g_slot.goal == 1 ) { goalMask = 1; if ( type == DEVIL ) { goalBit = 1; } }
-	else if ( g_slot.goal == 3 )
+	else if ( g_slot.goal == 3 || g_slot.goal == 4 )
 	{
-		// Boss Rush: every boss you picked (bits: Herx 1, Devil 2, Ice Lich 4, Fire Lich 8).
-		goalMask = bossRushGoalMask();
+		// Boss Rush: every boss you picked; All Three Bosses: all of them (bits: Herx 1, Devil 2,
+		// Ice Lich 4, Fire Lich 8). A boss beaten in any run stays beaten.
+		goalMask = g_slot.goal == 4 ? 15 : bossRushGoalMask();
 		if ( type == LICH ) { goalBit = 1; }
 		else if ( type == DEVIL ) { goalBit = 2; }
 		else if ( type == LICH_ICE ) { goalBit = 4; }
@@ -5056,8 +5120,18 @@ bool bossRushHideMidPortal()
 	return g_save.rushPhase >= (int)splitCommas(g_save.rushSeq).size();
 }
 
+void adjustNextLevel(const std::string& prevMap)
+{
+	adjustNextLevelImpl(prevMap);
+}
+
 bool bossRushSkipVictory()
 {
+	// All Three Bosses: Herx's and the Devil's victory portals (classic mode) lead on instead of ending.
+	if ( allBossesRoute() && (!strncmp(map.name, "Boss", 4) || !strncmp(map.name, "Hell Boss", 9)) )
+	{
+		return true;
+	}
 	// Not the last boss yet: the victory portal takes you on to the next stop instead of ending.
 	if ( !bossRushMoreAfterThis() ) { return false; }
 	say(COLOR_AP, "Boss Rush: on to the next one!");

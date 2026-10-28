@@ -39,16 +39,18 @@ Barony:
   minotaur_time: 100
   floor_shuffle: full
   layout_seed: locked
+  floor_size:
+  - Normal
+  extra_monsters: 0
   enemy_randomizer: off
   enemy_seed: locked
   enemy_randomizer_secret_areas: false
   enemy_pool: near_depth
-  music_shuffle: off
-  music_seed: locked
   enemy_level_scaling: off
   boss_level_scaling: off
   difficulty_scaling: true
   difficulty: normal
+  randomize_loot: same_kind
 
   # Class, Skills & Spells
   skill_checks: off
@@ -63,6 +65,10 @@ Barony:
   lives: 5
   extra_lives_in_pool: 2
   checkpoint_interval: every_5_floors
+  death_penalty: none
+  death_items: floor_start
+  floor_restart: new_layout
+  boss_death: keep_damage
   death_markers: true
   death_marker_gold: 20
 
@@ -90,15 +96,8 @@ Barony:
   # Death Link
   death_link: true
   death_link_mode: restart_floor
-  death_penalty: none
-  death_items: floor_start
-  floor_restart: new_layout
-  boss_death: keep_damage
 
   # Extras
-  floor_size:
-  - Normal
-  extra_monsters: 0
   progressive_lantern: false
   lantern_darkness: 2
   bounty_enemies: false
@@ -108,13 +107,16 @@ Barony:
   caravan_chance: 25
   caravan_checks: 5
   caravan_hints: true
-  randomize_loot: same_kind
-  music_mods: mixed
 
   # Challenges
   champion_floors: 0
   champion_locks_stairs: true
   champion_checks: 5
+
+  # Music
+  music_shuffle: off
+  music_seed: locked
+  music_mods: mixed
 
   # Quality of Life
   floor_key_on_tracker_map: false

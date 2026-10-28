@@ -16,12 +16,18 @@ class Goal(Choice):
     Sanctum: both of the twin liches at the very end of the game (needs the expansion floors).
     Boss Rush: play the dungeon (Dungeon Floors, 10 by default), then fight the bosses you pick in Boss
     Rush Bosses back to back. Beat them all to win.
+    All Three Bosses: one long run through the whole dungeon that fights all of them: Baron Herx on
+    floor 20, then his portal takes you down into Hell to the Devil (in normal Barony it skips Hell),
+    then the Devil's portal leads on to the expansion and the twin liches on floor 35. Hell can't be
+    entered through the Underworld until Herx is beaten. A boss you've beaten in any run stays beaten.
+    With Custom Dungeon Length: Dungeon Floors floors, then all three back to back, like a Boss Rush.
     """
     display_name = "Goal"
     option_herx = 0
     option_devil = 1
     option_sanctum = 2
     option_boss_rush = 3
+    option_all_bosses = 4
     default = option_herx
 
 
@@ -75,8 +81,8 @@ class BossRushOrder(Choice):
 
 class BossRushRestTown(DefaultOnToggle):
     """
-    Boss Rush only: after each boss (but the last), you rest in the town, with its shops. The way
-    down to the next boss is in the middle of town.
+    Boss Rush (and All Three Bosses with Custom Dungeon Length): after each boss (but the last), you
+    rest in the town, with its shops. The way down to the next boss is in the middle of town.
     Off: straight from one boss to the next.
     """
     display_name = "Rest Town Between Bosses"
@@ -454,7 +460,7 @@ class LayoutSeed(Choice):
     Whether each floor's map is part of the seed.
     Locked: floor 7 is always the same map whenever you play this seed, run after run.
     New Each Run: every run builds new maps.
-    Floor Restart still decides what you get after losing a life.
+    Restarted Floor Layout still decides what you get after losing a life.
     """
     display_name = "Layout Seed"
     option_locked = 0
@@ -710,7 +716,7 @@ class Difficulty(Choice):
 class Lives(Range):
     """
     Extra lives at the start of every run. When you die with a life left, you lose the life,
-    see a death screen, and press confirm to restart the floor (see Floor Restart). You keep your
+    see a death screen, and press confirm to restart the floor (see Restarted Floor Layout). You keep your
     character, and your inventory goes back to what you carried when you entered that floor.
     0 = normal permadeath.
     """
@@ -766,11 +772,13 @@ class BossDeath(Choice):
 
 class FloorRestart(Choice):
     """
-    When you lose a life, you see a death screen, then press confirm to restart the floor.
+    What the floor looks like when it restarts after you lose a life (you see a death screen, then
+    press confirm to start the floor again).
     New Layout: the floor is generated fresh, with a different layout.
     Same Layout: you get the exact same floor again.
+    This isn't about Death Link: Death Link Effect decides what someone else's death does to you.
     """
-    display_name = "Floor Restart"
+    display_name = "Restarted Floor Layout"
     option_new_layout = 0
     option_same_layout = 1
     default = option_new_layout
@@ -795,21 +803,23 @@ class DeathItems(Choice):
 class BaronyDeathLink(DeathLink):
     """
     When you die, everyone else with Death Link dies too, and the other way around.
-    What a Death Link does to you is set by Death Link Mode.
+    What a Death Link does to you is set by Death Link Effect.
     """
 
 
 class DeathLinkMode(Choice):
     """
-    What happens when someone else's death reaches you through Death Link (with a life left).
+    What happens to you when someone else's death reaches you through Death Link (with a life left).
+    Your own deaths always restart the floor; this is only about other players' deaths.
     Restart Floor: you die, see the death screen, and restart the floor, like any other death.
-    Lose a Life: you just lose a life (and pay the Death Penalty) and keep playing where you are.
+    Lose a Life: you just lose a life (and pay the Death Penalty) and keep playing where you are; with
+    Death Markers, your gravestone appears somewhere else on the floor, never right next to you.
     After losing a life you're safe for 5 seconds (shown on screen): no damage, enemies lose track of
     you, and you're moved out from under a boulder or off a wall.
     Either way the death counter counts it for the player who died, and with no lives left it's a real
     death.
     """
-    display_name = "Death Link Mode"
+    display_name = "Death Link Effect"
     option_restart_floor = 0
     option_lose_a_life = 1
     default = option_restart_floor
@@ -1199,21 +1209,28 @@ class BaronyOptions(PerGameCommonOptions):
 
 option_groups = [
     OptionGroup("Goal & Checks", [
-        Goal, CustomDungeonLength, DungeonFloors, BossRushBosses, BossRushOrder, BossRushRestTown, FloorCheckInterval, LevelChecks, EnemySanity, EnemySanityChecks, EnemySanityKillsPerCheck,
-        EnemySanityPerFloor, BestiaryChecks,
-        ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
+        Goal, CustomDungeonLength, DungeonFloors, BossRushBosses, BossRushOrder, BossRushRestTown,
+        FloorCheckInterval, LevelChecks, EnemySanity, EnemySanityChecks, EnemySanityKillsPerCheck, EnemySanityPerFloor,
+        BestiaryChecks, ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),
-    OptionGroup("Dungeon", [FloorKeys, FloorKeyRequirement, Compass, CompassMode, CompassPingTime, CompassRecharge, KeyCompassTime, MinotaurTime, FloorShuffle, LayoutSeed, EnemyRandomizer, EnemySeed, EnemyRandomizerSecretAreas, EnemyPool, MusicShuffle, MusicSeed, EnemyLevelScaling, BossLevelScaling, DifficultyScaling, Difficulty]),
+    OptionGroup("Dungeon", [
+        FloorKeys, FloorKeyRequirement, Compass, CompassMode, CompassPingTime, CompassRecharge, KeyCompassTime,
+        MinotaurTime, FloorShuffle, LayoutSeed, FloorSize, ExtraMonsters, EnemyRandomizer, EnemySeed,
+        EnemyRandomizerSecretAreas, EnemyPool, EnemyLevelScaling, BossLevelScaling, DifficultyScaling, Difficulty,
+        RandomizeLoot,
+    ]),
     OptionGroup("Class, Skills & Spells", [SkillChecks, SkillCheckMaxRank, LockClass, SpellSanity, SpellUpgrades,
                                            SpellSanityDLCSpells, SpellbookChecks]),
-    OptionGroup("Lives & Checkpoints", [Lives, ExtraLivesInPool, CheckpointInterval, DeathMarkers, DeathMarkerGold]),
+    OptionGroup("Lives & Checkpoints", [Lives, ExtraLivesInPool, CheckpointInterval, DeathPenalty, DeathItems,
+                                        FloorRestart, BossDeath, DeathMarkers, DeathMarkerGold]),
     OptionGroup("Filler", [XPBoostWeight, GoldPouchWeight, HealingPotionWeight, FoodRationWeight, RandomItemWeight]),
     OptionGroup("Traps", [TrapChance, MinotaurTrapWeight, AmbushTrapWeight, PolymorphTrapWeight, FumbleTrapWeight, BlindnessTrapWeight, TeleportTrapWeight, HungerTrapWeight, DarknessTrapWeight, CurseTrapWeight,
                           PolymorphTrapDuration, BlindnessTrapDuration]),
-    OptionGroup("Death Link", [BaronyDeathLink, DeathLinkMode, DeathPenalty, DeathItems, FloorRestart, BossDeath]),
-    OptionGroup("Extras", [FloorSize, ExtraMonsters, ProgressiveLantern, LanternDarkness, BountyEnemies, BountyChance, BountyChecks,
-                          MerchantCaravan, CaravanChance, CaravanChecks, CaravanHints, RandomizeLoot, MusicMods]),
+    OptionGroup("Death Link", [BaronyDeathLink, DeathLinkMode]),
+    OptionGroup("Extras", [ProgressiveLantern, LanternDarkness, BountyEnemies, BountyChance, BountyChecks,
+                          MerchantCaravan, CaravanChance, CaravanChecks, CaravanHints]),
     OptionGroup("Challenges", [ChampionFloors, ChampionLocksStairs, ChampionChecks]),
+    OptionGroup("Music", [MusicShuffle, MusicSeed, MusicMods]),
     OptionGroup("Quality of Life", [FloorKeyOnTrackerMap]),
     OptionGroup("Players", [Players]),
 ]

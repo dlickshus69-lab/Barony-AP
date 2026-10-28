@@ -273,6 +273,29 @@ class TestDeathMarkers(BaronyTestBase):
         self.assertEqual((sd["death_markers"], sd["death_marker_gold"]), (1, 35))
 
 
+class TestAllBosses(BaronyTestBase):
+    """All Three Bosses: the whole dungeon to floor 35; every boss is part of the goal."""
+    options = {"goal": "all_bosses", "boss_checks": True}
+
+    def test_all_bosses(self) -> None:
+        sd = self.world.fill_slot_data()
+        self.assertEqual((sd["goal"], sd["goal_floor"], sd["dungeon_floors"]), (4, 35, 0))
+        names = {loc.name for loc in self.multiworld.get_locations(self.player)}
+        self.assertIn("Reach Floor 35", names)
+        self.assertIn("Reach Floor 22", names)  # Hell is on the route
+        for boss in ("Defeat Baron Herx", "Defeat the Devil", "Defeat the Ice Lich"):
+            self.assertNotIn(boss, names)  # goal bosses aren't checks
+        self.assertIn("Defeat a Minotaur", names)
+
+
+class TestAllBossesShort(BaronyTestBase):
+    options = {"goal": "all_bosses", "custom_dungeon_length": True, "dungeon_floors": 15}
+
+    def test_short(self) -> None:
+        sd = self.world.fill_slot_data()
+        self.assertEqual((sd["goal_floor"], sd["dungeon_floors"]), (15, 15))
+
+
 class TestShortHerx(BaronyTestBase):
     """Dungeon Floors with a normal goal: 8 floors, then Baron Herx."""
     options = {"goal": "herx", "custom_dungeon_length": True, "dungeon_floors": 12, "boss_checks": True}

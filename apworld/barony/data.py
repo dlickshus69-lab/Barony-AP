@@ -23,6 +23,7 @@ GOAL_HERX = 0
 GOAL_DEVIL = 1
 GOAL_SANCTUM = 2
 GOAL_BOSS_RUSH = 3
+GOAL_ALL_BOSSES = 4
 
 # The floor each goal boss lives on.
 GOAL_FLOOR = {
@@ -30,6 +31,7 @@ GOAL_FLOOR = {
     GOAL_DEVIL: 24,
     GOAL_SANCTUM: 35,
     GOAL_BOSS_RUSH: 10,  # the default; Dungeon Floors changes it
+    GOAL_ALL_BOSSES: 35,
 }
 
 MAX_FLOOR = 45  # Barony's 35, plus up to 10 bonus floors with Custom Dungeon Length
@@ -103,6 +105,7 @@ GOAL_BOSSES = {
     GOAL_DEVIL: ["DEVIL"],
     GOAL_SANCTUM: ["LICH_ICE", "LICH_FIRE"],
     GOAL_BOSS_RUSH: ["LICH", "DEVIL", "LICH_ICE", "LICH_FIRE"],
+    GOAL_ALL_BOSSES: ["LICH", "DEVIL", "LICH_ICE", "LICH_FIRE"],
 }
 
 

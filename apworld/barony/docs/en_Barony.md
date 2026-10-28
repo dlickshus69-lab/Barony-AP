@@ -56,7 +56,11 @@ each item's kind (a potion becomes a different potion), Anything lets it become 
 
 ## What is the goal?
 
-Defeat Baron Herx, the Devil, or the twin liches of the Sanctum, depending on your options.
+Defeat Baron Herx, the Devil, or the twin liches of the Sanctum, depending on your options. All Three
+Bosses needs all of them in one route: Herx on floor 20, then his portal leads down into Hell (in normal
+Barony it skips Hell) to the Devil on floor 24, whose portal leads on to the expansion and the twin
+liches on floor 35. Hell can't be entered through the Underworld until Herx is beaten, and a boss you've
+beaten in any run stays beaten.
 
 Custom Dungeon Length lets any goal have a set number of floors (Dungeon Floors: 10 for a short run,
 20 for a medium one, 34 for all of Barony's floors, and up to 44 with bonus Caves and Citadel floors
@@ -103,7 +107,7 @@ next normal floor instead.
 ## How do lives work?
 
 With lives left, dying costs a life and shows a death screen. Press confirm to restart the floor
-you were on, with a new layout or the same one (the Floor Restart option). Your inventory goes back
+you were on, with a new layout or the same one (the Restarted Floor Layout option). Your inventory goes back
 to what you had when you entered that floor: potions you drank and gear that broke come back, and
 items you found on that floor are lost. With Death Items set to Keep Everything, you keep everything
 you carry instead, and items you already picked up (and chests you emptied) on that floor stay gone.
@@ -112,7 +116,7 @@ Each floor has a fixed number of Archipelago items, decided on your first try. A
 the ones you haven't found yet come back. A game over resets everything.
 
 Death Link deaths also cost a life, with the same Death Penalty (none, gold, XP, or gold and XP).
-With Death Link Mode set to Lose a Life, a Death Link only takes the life and the penalty; you keep
+With Death Link Effect set to Lose a Life, a Death Link only takes the life and the penalty; you keep
 playing where you are instead of restarting the floor.
 
 After you lose a life (in place, or when the floor restarts) you're safe for 5 seconds, with a
