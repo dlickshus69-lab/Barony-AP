@@ -291,7 +291,8 @@ namespace
 	void launchTracker();
 	void startRunRecord();
 	void buyHint();
-	std::string g_routeNote; // All Three Bosses: said when the next floor is ready
+	std::string g_routeNote; // Chosen Bosses: said when the next floor is ready
+	int g_lastFloorLevel = 0;  // the floor number of the last floor that finished loading
 	void clearFloorUids();
 	bool g_hofPanel = false;      // Hall of Fame panel (F5)
 	Uint32 g_hofAutoUntil = 0;    // shown by itself for a while at the start of a run
@@ -750,7 +751,7 @@ namespace
 		launchTracker();
 		say(COLOR_AP, "Archipelago: connected. Goal: %s.",
 			g_slot.goal == 0 ? "defeat Baron Herx" : g_slot.goal == 1 ? "defeat the Devil"
-			: g_slot.goal == 3 ? "Boss Rush" : g_slot.goal == 4 ? "defeat Baron Herx, the Devil and the twin liches"
+			: g_slot.goal == 3 ? "Boss Rush" : g_slot.goal == 4 ? "defeat your chosen bosses"
 			: "defeat the twin liches");
 	}
 
@@ -3255,6 +3256,7 @@ namespace
 	void onNewFloor()
 	{
 		bool restarted = g_restartPending;
+		if ( !secretlevel ) { g_lastFloorLevel = currentlevel; }
 		endDeathScreen();
 		if ( g_floorReady ) { g_attemptApMade = 0; } // no chest started the count this time
 		g_floorIsRestart = restarted;
@@ -3612,7 +3614,7 @@ namespace
 		if ( g_slot.goal == 1 ) { return "hellboss,"; }
 		if ( g_slot.goal == 2 ) { return "sanctum,"; }
 		// All Three Bosses with Dungeon Floors: all three, in the game's order. Boss Rush: the ones you picked.
-		int m = g_slot.goal == 4 ? 15 : bossRushGoalMask(), killed = g_save.goalBossesKilled;
+		int m = bossRushGoalMask(), killed = g_save.goalBossesKilled;
 		std::vector<std::string> bosses;
 		if ( (m & 1) && !(killed & 1) ) { bosses.push_back("boss"); }
 		if ( (m & 2) && !(killed & 2) ) { bosses.push_back("hellboss"); }
@@ -3635,9 +3637,75 @@ namespace
 	}
 
 	// Called as a floor starts loading: in the rush, which map to load instead ("" = the usual one).
+	// Chosen Bosses with Custom Dungeon Length: every chosen boss (beaten ones too, so the arenas keep
+	// their places), in Boss Order, each at its own floor number spread evenly through the floors.
+	bool spreadOn() { return bossRushOn() && g_slot.goal == 4; }
+
+	std::string makeSpreadSeq()
+	{
+		int m = bossRushGoalMask();
+		std::vector<std::string> bosses;
+		if ( m & 1 ) { bosses.push_back("boss"); }
+		if ( m & 2 ) { bosses.push_back("hellboss"); }
+		if ( m & 12 ) { bosses.push_back("sanctum"); }
+		if ( g_slot.boss_rush_order != 0 && bosses.size() > 1 )
+		{
+			uint32_t seed = (uint32_t)g_slot.boss_rush_seed;
+			if ( g_slot.boss_rush_order == 2 ) { seed ^= uniqueGameKey * 2654435761u; }
+			std::mt19937 rng(seed ? seed : 1);
+			std::shuffle(bosses.begin(), bosses.end(), rng);
+		}
+		std::string seq;
+		for ( auto& b : bosses ) { seq += b + ","; }
+		return seq;
+	}
+
+	int spreadBossCount()
+	{
+		int m = bossRushGoalMask();
+		return ((m & 1) ? 1 : 0) + ((m & 2) ? 1 : 0) + ((m & 12) ? 1 : 0);
+	}
+
+	// The floor number of the i-th boss (1-based): Dungeon Floors split evenly, plus the arenas before it.
+	int spreadBossLevel(int i)
+	{
+		int n = std::max(1, g_slot.dungeon_floors), k = std::max(1, spreadBossCount());
+		return n * i / k + i;
+	}
+
+	int bossBit(const std::string& map)
+	{
+		return map == "boss" ? 1 : map == "hellboss" ? 2 : map == "sanctum" ? 12 : 0;
+	}
+
+	std::string spreadMapFor(int level)
+	{
+		if ( g_save.rushRunKey != uniqueGameKey || g_save.rushSeq.empty() )
+		{
+			g_save.rushRunKey = uniqueGameKey;
+			g_save.rushSeq = makeSpreadSeq();
+			g_save.rushPhase = 0;
+			g_save.rushLevel = 0;
+		}
+		auto seq = splitCommas(g_save.rushSeq);
+		for ( size_t i = 0; i < seq.size(); ++i )
+		{
+			if ( level != spreadBossLevel((int)i + 1) ) { continue; }
+			int bit = bossBit(seq[i]);
+			if ( bit && (g_save.goalBossesKilled & bit) == bit ) { return ""; } // already beaten: a normal floor here
+			g_save.rushPhase = (int)i + 1;
+			g_save.rushLevel = level;
+			g_rushSaveDirty = true;
+			printlog("[Archipelago] Chosen Bosses: boss %d of %d (%s) on floor %d.", (int)i + 1, (int)seq.size(), seq[i].c_str(), level);
+			return seq[i];
+		}
+		return "";
+	}
+
 	std::string bossRushMapFor(int level)
 	{
 		if ( !bossRushOn() || secretlevel ) { return ""; }
+		if ( spreadOn() ) { return spreadMapFor(level); }
 		int start = std::max(1, g_slot.dungeon_floors > 0 ? g_slot.dungeon_floors : 10);
 		if ( level <= start ) { return ""; }
 		if ( g_save.rushRunKey != uniqueGameKey || g_save.rushSeq.empty() )
@@ -3670,20 +3738,29 @@ namespace
 
 	void adjustNextLevelImpl(const std::string& prevMap)
 	{
-		if ( !allBossesRoute() || secretlevel ) { return; }
+		if ( secretlevel ) { return; }
 		bool fromHerx = prevMap.compare(0, 4, "Boss") == 0;
 		bool fromHell = prevMap.compare(0, 4, "Hell") == 0;
-		if ( fromHerx && currentlevel > 21 )
+		bool fromArena = fromHerx || prevMap.compare(0, 9, "Hell Boss") == 0;
+		if ( spreadOn() && fromArena && currentlevel > g_lastFloorLevel + 1 )
+		{
+			currentlevel = g_lastFloorLevel + 1; // a boss's portal skips ahead; here the floors just go on
+			return;
+		}
+		if ( !allBossesRoute() ) { return; }
+		int m = bossRushGoalMask(), killed = g_save.goalBossesKilled;
+		bool wantDevil = (m & 2) && !(killed & 2), wantHerxFirst = (m & 1) && !(killed & 1);
+		if ( fromHerx && currentlevel > 21 && wantDevil )
 		{
 			currentlevel = 21;
 			g_routeNote = "Through Herx's portal and down into Hell. The Devil waits at the bottom.";
 		}
-		else if ( currentlevel >= 21 && currentlevel <= 24 && !fromHerx && !fromHell && !(g_save.goalBossesKilled & 1) )
+		else if ( currentlevel >= 21 && currentlevel <= 24 && !fromHerx && !fromHell && wantHerxFirst )
 		{
 			currentlevel = 19;
 			g_routeNote = "Hell won't let you in yet: Baron Herx must fall first. Back to the Ruins.";
 		}
-		else if ( prevMap.compare(0, 9, "Hell Boss") == 0 && currentlevel >= 25 )
+		else if ( prevMap.compare(0, 9, "Hell Boss") == 0 && currentlevel >= 25 && (m & 12) )
 		{
 			g_routeNote = "Out of Hell. The twin liches wait at the end of the dungeon.";
 		}
@@ -4159,7 +4236,9 @@ int remapShuffledLine(int levelToLoad, const std::vector<std::string>& levelsLis
 static int bonusFloorLine(int level, const std::vector<std::string>& levelsList)
 {
 	int last = (int)levelsList.size() - 1;
-	if ( !bossRushOn() || secretlevel || level < last || level > g_slot.dungeon_floors ) { return -1; }
+	// Chosen Bosses spread the arenas through the floors, so its floor numbers run past Dungeon Floors.
+	int limit = spreadOn() ? 1000 : g_slot.dungeon_floors;
+	if ( !bossRushOn() || secretlevel || level < last || level > limit ) { return -1; }
 	std::vector<int> late;
 	for ( int i = std::max(1, last - 10); i < last; ++i )
 	{
@@ -4446,7 +4525,7 @@ void onMonsterDeath(Entity* my, Stat* myStats)
 	{
 		// Boss Rush: every boss you picked; All Three Bosses: all of them (bits: Herx 1, Devil 2,
 		// Ice Lich 4, Fire Lich 8). A boss beaten in any run stays beaten.
-		goalMask = g_slot.goal == 4 ? 15 : bossRushGoalMask();
+		goalMask = bossRushGoalMask();
 		if ( type == LICH ) { goalBit = 1; }
 		else if ( type == DEVIL ) { goalBit = 2; }
 		else if ( type == LICH_ICE ) { goalBit = 4; }

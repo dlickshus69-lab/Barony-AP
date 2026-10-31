@@ -305,6 +305,40 @@ class TestFloorThemes(BaronyTestBase):
         self.assertEqual(sd["floor_theme_mask"], (1 << 0) | (1 << 10))  # Dark is bit 0, Gold Rush bit 10
 
 
+class TestChosenTwo(BaronyTestBase):
+    """Chosen Bosses, Herx and the Devil, normal length: the run ends at the Devil (floor 24)."""
+    options = {"goal": "chosen_bosses", "boss_rush_bosses": ["Herx", "Devil"], "boss_checks": True}
+
+    def test_two(self) -> None:
+        self.assertEqual(self.world.fill_slot_data()["goal_floor"], 24)
+        names = {loc.name for loc in self.multiworld.get_locations(self.player)}
+        self.assertNotIn("Defeat Baron Herx", names)
+        self.assertNotIn("Reach Floor 25", names)
+
+
+class TestChosenLichesOnly(BaronyTestBase):
+    """Only the Twin Liches: Herx and the Devil are ordinary boss checks on the way."""
+    options = {"goal": "chosen_bosses", "boss_rush_bosses": ["Twin Liches"], "boss_checks": True}
+
+    def test_liches(self) -> None:
+        self.assertEqual(self.world.fill_slot_data()["goal_floor"], 35)
+        names = {loc.name for loc in self.multiworld.get_locations(self.player)}
+        self.assertIn("Defeat Baron Herx", names)
+        self.assertIn("Defeat the Devil", names)
+
+
+class TestChosenSpread(BaronyTestBase):
+    """Custom length 15 with all three: arenas on floors 6, 12 and 18; no Champion on an arena floor."""
+    options = {"goal": "chosen_bosses", "custom_dungeon_length": True, "dungeon_floors": 15,
+               "champion_floors": 2, "champion_checks": 20, "boss_checks": True}
+
+    def test_spread(self) -> None:
+        self.assertEqual(self.world.spread_boss_levels(), [6, 12, 18])
+        self.assertEqual(self.world.champion_floors(), [2, 4, 8, 10, 14])
+        names = {loc.name for loc in self.multiworld.get_locations(self.player)}
+        self.assertNotIn("Defeat Baron Herx", names)
+
+
 class TestShortHerx(BaronyTestBase):
     """Dungeon Floors with a normal goal: 8 floors, then Baron Herx."""
     options = {"goal": "herx", "custom_dungeon_length": True, "dungeon_floors": 12, "boss_checks": True}

@@ -10,43 +10,57 @@ from .data import MAX_KILL_CHECKS, MAX_LEVEL_CHECK, MAX_PICKUPS, MAX_SHOP_CHECKS
 # ---------------------------------------------------------------- goal & checks
 class Goal(Choice):
     """
-    Which boss you need to defeat to finish.
-    Herx: Baron Herx on floor 20.
-    Devil: the Devil at the bottom of Hell.
-    Sanctum: both of the twin liches at the very end of the game (needs the expansion floors).
-    Boss Rush: play the dungeon (Dungeon Floors, 10 by default), then fight the bosses you pick in Boss
-    Rush Bosses back to back. Beat them all to win.
-    All Three Bosses: one long run through the whole dungeon that fights all of them: Baron Herx on
-    floor 20, then his portal takes you down into Hell to the Devil (in normal Barony it skips Hell),
-    then the Devil's portal leads on to the expansion and the twin liches on floor 35. Hell can't be
-    entered through the Underworld until Herx is beaten. A boss you've beaten in any run stays beaten.
-    With Custom Dungeon Length: Dungeon Floors floors, then all three back to back, like a Boss Rush.
+    What you need to do to finish.
+    Herx / Devil / Sanctum: beat that one boss (Baron Herx on floor 20, the Devil at the bottom of Hell
+    on floor 24, or both twin liches of the Sanctum on floor 35). With Custom Dungeon Length the run is
+    Dungeon Floors floors and then that boss; every other boss is skipped.
+    Chosen Bosses: beat every boss you tick in Goal Bosses, spread through the run. At normal length
+    they're where Barony keeps them: Herx on floor 20, then (if the Devil is chosen) his portal leads
+    down into Hell to the Devil on 24, whose portal leads on to the expansion and the twin liches on 35.
+    Hell can't be entered through the Underworld until Herx is beaten (when Herx is chosen). With
+    Custom Dungeon Length, Dungeon Floors is split evenly between them: 15 floors and 3 bosses means a
+    boss after every 5 floors.
+    Boss Rush: Dungeon Floors floors, then every boss in Goal Bosses back to back at the end.
+    A boss you've beaten in any run stays beaten.
     """
     display_name = "Goal"
     option_herx = 0
     option_devil = 1
     option_sanctum = 2
     option_boss_rush = 3
-    option_all_bosses = 4
+    option_chosen_bosses = 4
+    alias_all_bosses = 4
     default = option_herx
+
+
+class BossRushBosses(OptionSet):
+    """
+    Chosen Bosses and Boss Rush goals: which bosses you need to beat (the Twin Liches count as one:
+    beat both). Untick a boss to leave it out of the run. Leave it empty to get all three.
+    """
+    display_name = "Goal Bosses"
+    valid_keys = ["Herx", "Devil", "Twin Liches"]
+    default = frozenset({"Herx", "Devil", "Twin Liches"})
 
 
 class CustomDungeonLength(Toggle):
     """
-    Pick how many floors the run has before your goal boss (Dungeon Floors), instead of the goal's
-    usual depth (Baron Herx on floor 20, the Devil on 24, the Twin Liches on 35). Taking the stairs off
-    the last floor takes you straight to the goal boss's arena. Boss Rush always uses Dungeon Floors.
+    Pick how many floors the run has (Dungeon Floors) instead of the goal's usual depth (Baron Herx on
+    floor 20, the Devil on 24, the Twin Liches on 35). Boss floors on the way are skipped (you play a
+    normal floor there instead), so you only meet your goal's bosses:
+    Herx / Devil / Sanctum: the stairs off the last floor lead straight to that boss.
+    Chosen Bosses: the bosses come at even steps through the floors.
+    Boss Rush always uses Dungeon Floors.
     """
     display_name = "Custom Dungeon Length"
 
 
 class DungeonFloors(Range):
     """
-    With Custom Dungeon Length (or the Boss Rush goal): how many dungeon floors the run has before the
-    goal boss. 10 is a short run, 20 a medium one, 34 is all of Barony's floors. 35 to 44 adds up to 10
-    bonus floors past the end of the normal dungeon (more Caves and Citadel floors, as hard as the
-    deepest ones). Boss floors on the way down are skipped (you play a normal floor there instead),
-    so bosses only come at the end.
+    With Custom Dungeon Length (or the Boss Rush goal): how many dungeon floors the run has, not
+    counting boss arenas. 10 is a short run, 20 a medium one, 34 is all of Barony's floors. 35 to 44
+    adds up to 10 bonus floors past the end of the normal dungeon (more Caves and Citadel floors, as
+    hard as the deepest ones).
     """
     display_name = "Dungeon Floors"
     range_start = 10
@@ -54,25 +68,15 @@ class DungeonFloors(Range):
     default = 10
 
 
-class BossRushBosses(OptionSet):
-    """
-    Boss Rush only: which bosses are in the rush (the Twin Liches count as one stop: beat both).
-    Boss Rush Order sets the order. A boss you've already beaten, in any run, stays beaten.
-    Leave it empty to get all three.
-    """
-    display_name = "Boss Rush Bosses"
-    valid_keys = ["Herx", "Devil", "Twin Liches"]
-    default = frozenset({"Herx", "Devil", "Twin Liches"})
-
-
 class BossRushOrder(Choice):
     """
-    Boss Rush only: the order you fight the bosses in.
+    The order you fight the bosses in, for Boss Rush and for Chosen Bosses with Custom Dungeon Length
+    (at normal length they come in the dungeon's own order).
     Game Order: Baron Herx, then the Devil, then the Twin Liches.
     Shuffled: shuffled once for this seed, the same every run.
     Shuffled Each Run: shuffled again every time you start a new run.
     """
-    display_name = "Boss Rush Order"
+    display_name = "Boss Order"
     option_game_order = 0
     option_shuffled = 1
     option_shuffled_each_run = 2
@@ -81,8 +85,8 @@ class BossRushOrder(Choice):
 
 class BossRushRestTown(DefaultOnToggle):
     """
-    Boss Rush (and All Three Bosses with Custom Dungeon Length): after each boss (but the last), you
-    rest in the town, with its shops. The way down to the next boss is in the middle of town.
+    Boss Rush only: after each boss (but the last), you rest in the town, with its shops. The way
+    down to the next boss is in the middle of town.
     Off: straight from one boss to the next.
     """
     display_name = "Rest Town Between Bosses"
@@ -1269,8 +1273,8 @@ class BaronyOptions(PerGameCommonOptions):
 
 
 option_groups = [
-    OptionGroup("Goal & Checks", [
-        Goal, CustomDungeonLength, DungeonFloors, BossRushBosses, BossRushOrder, BossRushRestTown,
+    OptionGroup("Goal", [Goal, BossRushBosses, CustomDungeonLength, DungeonFloors, BossRushOrder, BossRushRestTown]),
+    OptionGroup("Checks", [
         FloorCheckInterval, LevelChecks, EnemySanity, EnemySanityChecks, EnemySanityKillsPerCheck, EnemySanityPerFloor,
         BestiaryChecks, ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
     ]),

@@ -23,7 +23,15 @@ GOAL_HERX = 0
 GOAL_DEVIL = 1
 GOAL_SANCTUM = 2
 GOAL_BOSS_RUSH = 3
-GOAL_ALL_BOSSES = 4
+GOAL_ALL_BOSSES = 4  # "Chosen Bosses"
+GOAL_CHOSEN_BOSSES = GOAL_ALL_BOSSES
+
+# Goal Bosses option names -> (boss enum names, the floor that boss is on at normal length)
+CHOSEN_BOSS_INFO = {
+    "Herx": (["LICH"], 20),
+    "Devil": (["DEVIL"], 24),
+    "Twin Liches": (["LICH_ICE", "LICH_FIRE"], 35),
+}
 
 # The floor each goal boss lives on.
 GOAL_FLOOR = {

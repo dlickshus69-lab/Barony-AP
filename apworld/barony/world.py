@@ -87,6 +87,9 @@ class BaronyWorld(World):
     def generate_early(self) -> None:
         goal = self.options.goal.value
         self.goal_floor = data.GOAL_FLOOR[goal]
+        if goal == data.GOAL_CHOSEN_BOSSES:
+            # At normal length: down to the deepest chosen boss.
+            self.goal_floor = max(data.CHOSEN_BOSS_INFO[b][1] for b in self.chosen_bosses())
         # Custom Dungeon Length / Boss Rush: Dungeon Floors floors, then the goal boss.
         self.short_dungeon = bool(self.options.custom_dungeon_length) or goal == data.GOAL_BOSS_RUSH
         if self.short_dungeon:
@@ -97,6 +100,8 @@ class BaronyWorld(World):
 
         self.level_check_max = self.options.level_checks.value
         cap = MAX_SENSIBLE_LEVEL[goal]
+        if goal == data.GOAL_CHOSEN_BOSSES and not self.short_dungeon:
+            cap = {20: 18, 24: 22, 35: 30}[self.goal_floor]
         if self.short_dungeon:
             cap = min(cap, max(5, self.goal_floor + 3))
         if self.level_check_max > cap:
@@ -114,13 +119,28 @@ class BaronyWorld(World):
         self.shop_count = min(self.options.shop_checks.value, (self.goal_floor - 1) // 2)
 
     # ------------------------------------------------------------------ helpers
+    def chosen_bosses(self) -> list:
+        """Goal Bosses, in the game's order (empty means all three)."""
+        picked = self.options.boss_rush_bosses.value
+        return [b for b in data.CHOSEN_BOSS_INFO if b in picked] or list(data.CHOSEN_BOSS_INFO)
+
+    def spread_boss_levels(self) -> list:
+        """Chosen Bosses with Custom Dungeon Length: the floor numbers the boss arenas take, spread
+        evenly through Dungeon Floors (the client works them out the same way)."""
+        if self.options.goal.value != data.GOAL_CHOSEN_BOSSES or not self.short_dungeon:
+            return []
+        n, k = self.goal_floor, len(self.chosen_bosses())
+        return [n * i // k + i for i in range(1, k + 1)]
+
     def champion_floors(self) -> list:
         """The floors the Champion checks come from: every Champion Floors floors before the goal,
         skipping boss, town and Sanctum floors (no Champion there)."""
         every, wanted = self.options.champion_floors.value, self.options.champion_checks.value
         if every <= 0 or wanted <= 0:
             return []
-        floors = [f for f in range(every, self.goal_floor, every) if f not in data.NO_CHAMPION_FLOORS]
+        arenas = set(self.spread_boss_levels())
+        floors = [f for f in range(every, self.goal_floor, every)
+                  if f not in data.NO_CHAMPION_FLOORS and f not in arenas]
         return floors[:wanted]
 
     def _floor_needed(self, floor: int) -> int:
@@ -178,6 +198,9 @@ class BaronyWorld(World):
 
         if o.boss_checks:
             goal_bosses = data.GOAL_BOSSES[o.goal.value]
+            if o.goal.value == data.GOAL_CHOSEN_BOSSES and not self.short_dungeon:
+                # Normal length: only the chosen ones are the goal; the others are ordinary boss checks.
+                goal_bosses = [m for b in self.chosen_bosses() for m in data.CHOSEN_BOSS_INFO[b][0]]
             for boss in data.BOSSES:
                 if boss.enum_name in goal_bosses or boss.floor > self.goal_floor:
                     continue

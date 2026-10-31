@@ -5,16 +5,18 @@ Barony:
   progression_balancing: normal
   accessibility: full
 
-  # Goal & Checks
+  # Goal
   goal: devil
-  custom_dungeon_length: false
-  dungeon_floors: 10
   boss_rush_bosses:
   - Devil
   - Herx
   - Twin Liches
+  custom_dungeon_length: false
+  dungeon_floors: 10
   boss_rush_order: game_order
   boss_rush_rest_town: true
+
+  # Checks
   floor_check_interval: 1
   level_checks: 15
   enemy_sanity: marked_enemies
