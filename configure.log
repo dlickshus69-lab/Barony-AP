@@ -1,0 +1,111 @@
+-- Building for: Visual Studio 18 2026
+CMake Warning (deprecated) at CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+This warning is for project developers.  Use -Wno-author or -Wno-deprecated
+to suppress it.
+
+-- The C compiler identification is MSVC 19.51.36260.0
+-- The CXX compiler identification is MSVC 19.51.36260.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/cl.exe - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/cl.exe - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+Building without steamworks
+Building without EOS
+Building without PlayFab
+Building without TheoraPlayer
+Building without CURL
+Building without OPUS
+-- Found OpenGL: opengl32
+-- Looking for include file pthread.h
+-- Looking for include file pthread.h - not found
+-- Found SDL2: C:/vcpkg/installed/x64-windows/lib/manual-link/SDL2main.lib;C:/vcpkg/installed/x64-windows/lib/SDL2.lib
+-- Found SDL2_image: C:/vcpkg/installed/x64-windows/lib/SDL2_image.lib (found version "..")
+-- Found SDL2_net: C:/vcpkg/installed/x64-windows/include/SDL2 (found version "2.2.0")
+-- Found SDL2_ttf: C:/vcpkg/installed/x64-windows/lib/SDL2_ttf.lib (found version "2.24.0")
+-- Found PhysFS: optimized;C:/vcpkg/installed/x64-windows/lib/physfs.lib;debug;C:/vcpkg/installed/x64-windows/debug/lib/physfs.lib
+-- Found RapidJson: C:/vcpkg/installed/x64-windows/include
+-- Found FMOD_LIBRARY: D:/a/Barony-AP/Barony-AP/deps/fmod/lib/fmod_vc.lib
+-- Found FMOD_INCLUDE_DIR: D:/a/Barony-AP/Barony-AP/deps/fmod/inc
+CMake Warning (author) at C:/Program Files/CMake/share/cmake-4.4/Modules/FindPackageHandleStandardArgs.cmake:493 (message):
+  The package name passed to find_package_handle_standard_args() (ZLIB) does
+  not match the name of the calling package (PNG).  This can lead to problems
+  in calling code that expects find_package() result variables (e.g.,
+  `_FOUND`) to follow a certain pattern.
+Call Stack (most recent call first):
+  C:/Program Files/CMake/share/cmake-4.4/Modules/FindZLIB.cmake:242 (find_package_handle_standard_args)
+  cmake/Modules/FindPNG.cmake:12 (INCLUDE)
+  C:/vcpkg/installed/x64-windows/share/png/vcpkg-cmake-wrapper.cmake:3 (_find_package)
+  C:/vcpkg/scripts/buildsystems/vcpkg.cmake:893 (include)
+  CMakeLists.txt:409 (find_package)
+This warning is for project developers.  Use -Wno-author to suppress it.
+
+-- Found ZLIB: optimized;C:/vcpkg/installed/x64-windows/lib/z.lib;debug;C:/vcpkg/installed/x64-windows/debug/lib/zd.lib (found version "1.3.2")
+-- Found PNG: C:/vcpkg/installed/x64-windows/lib/libpng16.lib
+***************************
+Debug flags: 
+/MDd /Zi /Ob0 /Od /RTC1 -pg -O3 -ffast-math -funroll-loops -malign-double -fstrict-aliasing -mwindows
+/MDd /Zi /Ob0 /Od /RTC1 /MP
+Release flags: 
+/MD /O2 /Ob2 /DNDEBUG -O3 -ffast-math -funroll-loops -malign-double -fstrict-aliasing -mwindows
+/MD /O2 /Ob2 /DNDEBUG /MP 
+***************************
+-- Found OpenSSL: optimized;C:/Program Files/OpenSSL/lib/VC/x64/MD/libcrypto.lib;debug;C:/Program Files/OpenSSL/lib/VC/x64/MDd/libcrypto.lib (found version "3.6.5")
+CMake Warning (deprecated) at D:/a/Barony-AP/Barony-AP/build/APCpp/mbedtls-3.6.4/CMakeLists.txt:21 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+This warning is for project developers.  Use -Wno-author or -Wno-deprecated
+to suppress it.
+
+-- Found Python3: C:/hostedtoolcache/windows/Python/3.15.1/x64/python3.exe (found version "3.15.1") found components: Interpreter
+Using system zlib installation.
+-- TLS configured to use mbedtls
+-- Found MbedTLS: D:/a/Barony-AP/Barony-AP/build/mbedtls-3.6.4/include
+-- Could NOT find PkgConfig (missing: PKG_CONFIG_EXECUTABLE) 
+CMake Warning (deprecated) at extern/APCpp/jsoncpp/CMakeLists.txt:17 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+This warning is for project developers.  Use -Wno-author or -Wno-deprecated
+to suppress it.
+
+-- JsonCpp Version: 1.9.6
+-- Looking for C++ include clocale
+-- Looking for C++ include clocale - not found
+-- Looking for localeconv
+-- Looking for localeconv - not found
+-- Looking for C++ include sys/types.h
+-- Looking for C++ include sys/types.h - not found
+-- Looking for C++ include stdint.h
+-- Looking for C++ include stdint.h - not found
+-- Looking for C++ include stddef.h
+-- Looking for C++ include stddef.h - not found
+-- Check size of lconv
+-- Check size of lconv - failed
+-- Performing Test HAVE_DECIMAL_POINT
+-- Performing Test HAVE_DECIMAL_POINT - Failed
+CMake Warning at extern/APCpp/jsoncpp/src/lib_json/CMakeLists.txt:20 (message):
+  Locale functionality is not supported
+
+
+-- Configuring done (37.9s)
+-- Generating done (0.3s)
+-- Build files have been written to: D:/a/Barony-AP/Barony-AP/build
