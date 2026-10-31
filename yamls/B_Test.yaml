@@ -11,26 +11,19 @@ Barony:
   - Devil
   - Herx
   - Twin Liches
-  custom_dungeon_length: false
-  dungeon_floors: 10
   boss_rush_order: game_order
   boss_rush_rest_town: true
 
-  # Checks
-  floor_check_interval: 1
-  level_checks: 15
-  enemy_sanity: marked_enemies
-  enemy_sanity_checks: 10
-  enemy_sanity_kills_per_check: 3
-  enemy_sanity_per_floor: 2
-  bestiary_checks: early
-  archipelago_pickups: 20
-  pickups_per_floor: 2
-  shop_checks: 5
-  boss_checks: true
-  special_area_checks: false
-
   # Dungeon
+  custom_dungeon_length: false
+  dungeon_floors: 10
+  floor_shuffle: full
+  layout_seed: locked
+  floor_size:
+  - Normal
+  randomize_loot: same_kind
+
+  # Floor Keys & Compass
   floor_keys: true
   floor_key_requirement: key_only
   compass: off
@@ -39,20 +32,33 @@ Barony:
   compass_recharge: 90
   key_compass_time: 30
   minotaur_time: 100
-  floor_shuffle: full
-  layout_seed: locked
-  floor_size:
-  - Normal
-  extra_monsters: 0
+
+  # Monsters
   enemy_randomizer: off
   enemy_seed: locked
-  enemy_randomizer_secret_areas: false
   enemy_pool: near_depth
+  enemy_randomizer_secret_areas: false
+  extra_monsters: 0
   enemy_level_scaling: off
   boss_level_scaling: off
   difficulty_scaling: true
   difficulty: normal
-  randomize_loot: same_kind
+
+  # Checks
+  floor_check_interval: 1
+  level_checks: 15
+  archipelago_pickups: 20
+  pickups_per_floor: 2
+  shop_checks: 5
+  boss_checks: true
+  special_area_checks: false
+
+  # Enemy Checks
+  enemy_sanity: marked_enemies
+  enemy_sanity_checks: 10
+  enemy_sanity_kills_per_check: 3
+  enemy_sanity_per_floor: 2
+  bestiary_checks: early
 
   # Class, Skills & Spells
   skill_checks: off

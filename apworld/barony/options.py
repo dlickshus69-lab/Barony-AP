@@ -35,7 +35,8 @@ class Goal(Choice):
 
 class BossRushBosses(OptionSet):
     """
-    Chosen Bosses and Boss Rush goals: which bosses you need to beat (the Twin Liches count as one:
+    Only used with Goal: Chosen Bosses or Boss Rush.
+    Which bosses you need to beat (the Twin Liches count as one:
     beat both). Untick a boss to leave it out of the run. Leave it empty to get all three.
     """
     display_name = "Goal Bosses"
@@ -57,7 +58,8 @@ class CustomDungeonLength(Toggle):
 
 class DungeonFloors(Range):
     """
-    With Custom Dungeon Length (or the Boss Rush goal): how many dungeon floors the run has, not
+    Only used with Custom Dungeon Length on (the Boss Rush goal always uses it).
+    How many dungeon floors the run has, not
     counting boss arenas. 10 is a short run, 20 a medium one, 34 is all of Barony's floors. 35 to 44
     adds up to 10 bonus floors past the end of the normal dungeon (more Caves and Citadel floors, as
     hard as the deepest ones).
@@ -70,8 +72,8 @@ class DungeonFloors(Range):
 
 class BossRushOrder(Choice):
     """
-    The order you fight the bosses in, for Boss Rush and for Chosen Bosses with Custom Dungeon Length
-    (at normal length they come in the dungeon's own order).
+    Only used with Goal: Boss Rush, or Chosen Bosses with Custom Dungeon Length.
+    The order you fight the bosses in (at normal length, Chosen Bosses come in the dungeon's own order).
     Game Order: Baron Herx, then the Devil, then the Twin Liches.
     Shuffled: shuffled once for this seed, the same every run.
     Shuffled Each Run: shuffled again every time you start a new run.
@@ -85,7 +87,8 @@ class BossRushOrder(Choice):
 
 class BossRushRestTown(DefaultOnToggle):
     """
-    Boss Rush only: after each boss (but the last), you rest in the town, with its shops. The way
+    Only used with Goal: Boss Rush.
+    After each boss (but the last), you rest in the town, with its shops. The way
     down to the next boss is in the middle of town.
     Off: straight from one boss to the next.
     """
@@ -133,7 +136,8 @@ class EnemySanity(Choice):
 
 class EnemySanityChecks(Range):
     """
-    How many Enemy Sanity checks there are in total (ignored when Enemy Sanity is Off).
+    Only used with Enemy Sanity on.
+    How many Enemy Sanity checks there are in total.
     Kill Count: a check is sent every Kills Per Check green kills, so 10 checks with 3 kills per check
     means 30 green kills for all of them.
     Marked Enemies: each green kill sends the next check until all of them are found; after that no
@@ -147,7 +151,8 @@ class EnemySanityChecks(Range):
 
 class EnemySanityKillsPerCheck(Range):
     """
-    For Kill Count: how many green (marked) enemies you kill for each check. Green kills add up across
+    Only used with Enemy Sanity: Kill Count.
+    How many green (marked) enemies you kill for each check. Green kills add up across
     all your runs, so dying doesn't lose progress. With 2 green enemies per floor, 3 kills per check is
     a check about every one and a half floors. Ignored for Marked Enemies.
     """
@@ -159,6 +164,7 @@ class EnemySanityKillsPerCheck(Range):
 
 class EnemySanityPerFloor(Range):
     """
+    Only used with Enemy Sanity on.
     How many random enemies on each floor are marked green. A normal floor starts with
     about 5 to 8 enemies, so higher numbers mark most of them.
     """
@@ -170,9 +176,13 @@ class EnemySanityPerFloor(Range):
 
 class BestiaryChecks(Choice):
     """
-    Killing each type of monster for the first time is a check.
-    Early: only monsters from the Mines and the Swamp.
-    All: every monster you can meet before your goal.
+    A bestiary check is for killing a kind of monster for the first time: your first rat, your first
+    goblin, your first troll, and so on. Each kind counts once for the whole seed, in whichever run you
+    kill it.
+    Off: no bestiary checks.
+    Early: only the 7 kinds of monster from the first two areas (the Mines and the Swamp), so they all
+    come early in a run.
+    All: every kind of monster you can meet before your goal (up to 23), so some are deep in the dungeon.
     """
     display_name = "Bestiary Checks"
     option_off = 0
@@ -195,6 +205,7 @@ class ArchipelagoPickups(Range):
 
 class PickupsPerFloor(Range):
     """
+    Only used with Archipelago Pickups above 0.
     How many Archipelago pickups appear on each normal floor (while there are still some left to find).
     """
     display_name = "Pickups Per Floor"
@@ -264,7 +275,8 @@ class FloorSize(OptionSet):
 
 class FloorKeyRequirement(Choice):
     """
-    What opens the stairs on each floor (with Floor Keys on).
+    Only used with Floor Keys on.
+    What opens the stairs on each floor.
     Key Only: only the Floor Key opens them.
     Enemies Only: no key; defeat every enemy on the floor.
     Key or Enemies: either one opens them: pick up the Floor Key, or defeat every enemy on the floor.
@@ -297,6 +309,7 @@ class Compass(Choice):
 
 class CompassMode(Choice):
     """
+    Only used with Compass on.
     How the compass works once you have it.
     Ping and Recharge: use it from your hotbar; while it's the selected item it points at the key for
     a while (Compass Ping Time), then needs to recharge (Compass Recharge).
@@ -309,7 +322,10 @@ class CompassMode(Choice):
 
 
 class CompassPingTime(Range):
-    """With Ping and Recharge: how many seconds the compass points at the key after you use it."""
+    """
+    Only used with Compass Mode: Ping and Recharge.
+    How many seconds the compass points at the key after you use it.
+    """
     display_name = "Compass Ping Time"
     range_start = 5
     range_end = 60
@@ -317,7 +333,10 @@ class CompassPingTime(Range):
 
 
 class CompassRecharge(Range):
-    """With Ping and Recharge: how many seconds the compass needs before you can use it again."""
+    """
+    Only used with Compass Mode: Ping and Recharge.
+    How many seconds the compass needs before you can use it again.
+    """
     display_name = "Compass Recharge"
     range_start = 10
     range_end = 300
@@ -335,7 +354,8 @@ class FloorKeyOnTrackerMap(Toggle):
 
 class KeyCompassTime(Range):
     """
-    On Minotaur floors (with Floor Keys on), how many seconds before the Minotaur arrives the screen starts
+    Only used with Floor Keys on.
+    On Minotaur floors, how many seconds before the Minotaur arrives the screen starts
     pointing you at the Floor Key ("Floor Key: 18 tiles NE"). 30 is the least help. Higher numbers turn
     it on sooner, but never in the first 30 seconds after his timer starts. The normal wait is 150 to
     210 seconds (changed by Minotaur Time and hard mode), so 180 or more means "30 seconds in" on most
@@ -384,6 +404,7 @@ class EnemyRandomizer(Choice):
 
 class EnemyRandomizerSecretAreas(Toggle):
     """
+    Only used with Enemy Randomizer on.
     Also randomize the monsters in secret areas (the Gnomish Mines, Sokoban, the Mystic Library and so
     on). Minetown, the secret shopkeeper town, is never changed.
     """
@@ -392,6 +413,7 @@ class EnemyRandomizerSecretAreas(Toggle):
 
 class EnemyPool(Choice):
     """
+    Only used with Enemy Randomizer on.
     Which monsters the Enemy Randomizer can pick from.
     Near Depth: monsters from up to two biomes deeper than where you are.
     Anywhere: any monster from the whole dungeon, even on floor 1.
@@ -404,7 +426,8 @@ class EnemyPool(Choice):
 
 class EnemySeed(Choice):
     """
-    For the Enemy Randomizer: are a floor's enemies the same every time?
+    Only used with Enemy Randomizer on.
+    Are a floor's enemies the same every time?
     Locked: each floor's enemies are set by the seed, so dying, restarting the floor or starting a
     new run gives you the same enemies on that floor again.
     Reroll: every time a floor loads, including after you lose a life, its enemies are rolled again.
@@ -432,7 +455,7 @@ class MusicShuffle(Choice):
 
 class MusicSeed(Choice):
     """
-    For Music Shuffle.
+    Only used with Music Shuffle on.
     Locked: each floor always plays the same music, set by the seed.
     Always Random: every time a song starts, it's a random one.
     """
@@ -500,14 +523,16 @@ class ChampionFloors(Range):
 
 class ChampionLocksStairs(DefaultOnToggle):
     """
-    Champion Floors only: the stairs stay locked until the Champion is dead (on top of the Floor Key).
+    Only used with Champion Floors on.
+    The stairs stay locked until the Champion is dead (on top of the Floor Key).
     """
     display_name = "Champion Locks the Stairs"
 
 
 class ChampionChecks(Range):
     """
-    Champion Floors only: the first this many Champions you defeat (counted across runs) are checks.
+    Only used with Champion Floors on.
+    The first this many Champions you defeat (counted across runs) are checks.
     """
     display_name = "Champion Checks"
     range_start = 0
@@ -527,7 +552,8 @@ class ProgressiveLantern(Toggle):
 
 class LanternDarkness(Range):
     """
-    Progressive Lantern only: how much darker than normal you start (1 = a little, 3 = very dark).
+    Only used with Progressive Lantern on.
+    How much darker than normal you start (1 = a little, 3 = very dark).
     """
     display_name = "Lantern Darkness"
     range_start = 1
@@ -545,7 +571,8 @@ class BountyEnemies(Toggle):
 
 class BountyChance(Range):
     """
-    Bounty Enemies only: the chance (in percent) that a floor has a bounty.
+    Only used with Bounty Enemies on.
+    The chance (in percent) that a floor has a bounty.
     """
     display_name = "Bounty Chance"
     range_start = 10
@@ -555,7 +582,8 @@ class BountyChance(Range):
 
 class BountyChecks(Range):
     """
-    Bounty Enemies only: the first this many bounties you defeat (counted across runs) are checks.
+    Only used with Bounty Enemies on.
+    The first this many bounties you defeat (counted across runs) are checks.
     0 = bounties give their reward but no checks.
     """
     display_name = "Bounty Checks"
@@ -575,7 +603,10 @@ class DeathMarkers(DefaultOnToggle):
 
 
 class DeathMarkerGold(Range):
-    """Death Markers only: how much of the gold you had when you died a grave gives back, in percent."""
+    """
+    Only used with Death Markers on.
+    How much of the gold you had when you died a grave gives back, in percent.
+    """
     display_name = "Death Marker Gold"
     range_start = 5
     range_end = 50
@@ -593,7 +624,10 @@ class MerchantCaravan(Toggle):
 
 
 class CaravanChance(Range):
-    """Merchant Caravan only: the chance, in percent, that a caravan stops on a floor."""
+    """
+    Only used with Merchant Caravan on.
+    The chance, in percent, that a caravan stops on a floor.
+    """
     display_name = "Caravan Chance"
     range_start = 5
     range_end = 100
@@ -602,7 +636,8 @@ class CaravanChance(Range):
 
 class CaravanChecks(Range):
     """
-    Merchant Caravan only: how many Archipelago items caravans sell in all (up to two per caravan,
+    Only used with Merchant Caravan on.
+    How many Archipelago items caravans sell in all (up to two per caravan,
     counted across runs). Each one bought is a check. 0 = caravans only sell normal items and hints.
     """
     display_name = "Caravan Checks"
@@ -613,7 +648,8 @@ class CaravanChecks(Range):
 
 class CaravanHints(DefaultOnToggle):
     """
-    Merchant Caravan only: each caravan also sells an Archipelago Hint. Buying it reveals what's at one
+    Only used with Merchant Caravan on.
+    Each caravan also sells an Archipelago Hint. Buying it reveals what's at one
     of your unchecked locations (items that matter come first), for you and the player it belongs to.
     It doesn't use your hint points.
     """
@@ -643,7 +679,10 @@ class FloorThemes(Toggle):
 
 
 class FloorThemeChance(Range):
-    """Floor Themes only: the chance, in percent, that a floor has a theme."""
+    """
+    Only used with Floor Themes on.
+    The chance, in percent, that a floor has a theme.
+    """
     display_name = "Floor Theme Chance"
     range_start = 10
     range_end = 100
@@ -651,7 +690,10 @@ class FloorThemeChance(Range):
 
 
 class FloorThemeList(OptionSet):
-    """Floor Themes only: which themes can show up. Leave it empty for all of them."""
+    """
+    Only used with Floor Themes on.
+    Which themes can show up. Leave it empty for all of them.
+    """
     display_name = "Floor Theme List"
     valid_keys = ["Dark", "Haunted", "Rich", "Swarm", "Elite", "Cursed", "Peaceful", "Famine", "Arcane", "Frenzy",
                   "Gold Rush"]
@@ -672,7 +714,9 @@ class WantedTimeLimit(Range):
 
 
 class WantedClearsOnNewFloor(Toggle):
-    """Wanted (the red hand icon) also wears off as soon as you reach a new floor."""
+    """
+    Wanted (the red hand icon) also wears off as soon as you reach a new floor.
+    """
     display_name = "Wanted Clears on New Floor"
 
 
@@ -788,8 +832,9 @@ class Lives(Range):
 
 class ExtraLivesInPool(Range):
     """
-    How many "Extra Life" items are in the item pool. Each one adds a life to your current run when
-    you receive it (they don't carry over to a new run after a game over). Only matters with Lives on.
+    Only matters with Starting Lives above 0.
+    How many "Extra Life" items are in the item pool. Each one adds a life to your current run when you
+    receive it (they don't carry over to a new run after a game over).
     """
     display_name = "Extra Lives In Pool"
     range_start = 0
@@ -799,6 +844,7 @@ class ExtraLivesInPool(Range):
 
 class DeathPenalty(Choice):
     """
+    Only matters with Starting Lives above 0 (or Extra Lives in the pool).
     What losing a life costs you.
     None: you only lose the life.
     Gold: lose a quarter of your gold.
@@ -820,6 +866,7 @@ class DeathPenalty(Choice):
 
 class BossDeath(Choice):
     """
+    Only matters with Starting Lives above 0 (or Extra Lives in the pool).
     What happens to a boss when you lose a life fighting it.
     Reset: the boss comes back at full health.
     Keep Damage: the boss keeps the damage you already did.
@@ -832,6 +879,7 @@ class BossDeath(Choice):
 
 class FloorRestart(Choice):
     """
+    Only matters with Starting Lives above 0 (or Extra Lives in the pool).
     What the floor looks like when it restarts after you lose a life (you see a death screen, then
     press confirm to start the floor again).
     New Layout: the floor is generated fresh, with a different layout.
@@ -846,6 +894,7 @@ class FloorRestart(Choice):
 
 class DeathItems(Choice):
     """
+    Only matters with Starting Lives above 0 (or Extra Lives in the pool).
     What you keep when you lose a life and the floor restarts.
     Floor Start: you go back to the items you had when you entered the floor. Anything you found on
     that floor is lost (and can be found again).
@@ -869,6 +918,7 @@ class BaronyDeathLink(DeathLink):
 
 class DeathLinkMode(Choice):
     """
+    Only used with Death Link on.
     What happens to you when someone else's death reaches you through Death Link (with a life left).
     Your own deaths always restart the floor; this is only about other players' deaths.
     Restart Floor: you die, see the death screen, and restart the floor, like any other death.
@@ -888,16 +938,16 @@ class DeathLinkMode(Choice):
 # ---------------------------------------------------------------- skills
 class SkillChecks(Choice):
     """
-    Raising your skills to Basic (20), Skilled (40), Expert (60), Master (80) and Legendary (100) sends
-    checks. Barony classes start with different skills, so pick the class you'll play: its checks are
-    its main skills (the ones it starts with at 20 or more), plus Lore, Trading and Stealth (every class
-    can raise those). Ranks you already start at or above aren't checks.
-    Any Class: only Lore, Trading and Stealth, so it works whichever class you pick in game.
+    Raising a skill to Basic (20), Skilled (40), Expert (60), Master (80) or Legendary (100) sends a check.
+    You still pick your class in the game, when you make your character. Pick the same class here, so the
+    checks are that class's main skills (the ones it starts with at 20 or more), plus Lore, Trading and
+    Stealth, which every class can raise. Turn on Lock Class and the game makes every new character that
+    class for you, so the two can't end up different. Ranks your class already starts at aren't checks.
+    Off: no skill checks.
+    Any Class: only Lore, Trading and Stealth, so it works with any class you pick in the game.
     The DLC classes need their DLC pack on Steam: Conjurer, Accursed, Mesmer and Brewer (Myths and
     Outcasts); Machinist, Punisher, Shaman and Hunter (Legends and Pariahs); Bard, Sapper, Scion,
     Hermit and Paladin (Deserters and Disciples).
-    Playing a different class than the one chosen still counts any skill you raise, but some checks
-    may be much harder to get; the game warns you when your run starts.
     """
     display_name = "Skill Checks"
     option_off = 0
@@ -933,7 +983,8 @@ class SkillChecks(Choice):
 
 class LockClass(DefaultOnToggle):
     """
-    With Skill Checks set to a class, every new character you make is that class. You still choose your
+    Only used with Skill Checks set to a class.
+    Every new character you make is that class, so your skill checks always match. You still choose your
     race, looks and name. (A DLC class you don't own on Steam isn't forced.)
     """
     display_name = "Lock Class"
@@ -950,7 +1001,8 @@ class SpellSanity(Toggle):
 
 class SpellUpgrades(Range):
     """
-    Spell Sanity only: extra copies of each spell in the item pool. The first copy teaches the spell,
+    Only used with Spell Sanity on.
+    Extra copies of each spell in the item pool. The first copy teaches the spell,
     each extra one makes it permanently stronger (+10% power each, like a blessed +1 spellbook).
     """
     display_name = "Spell Upgrades"
@@ -969,7 +1021,8 @@ class SpellbookChecks(Toggle):
 
 class SpellSanityDLCSpells(Toggle):
     """
-    Spell Sanity only: also adds the DLC classes' spells (Conjure Skeleton, Vampiric Aura, the
+    Only used with Spell Sanity on.
+    Also adds the DLC classes' spells (Conjure Skeleton, Vampiric Aura, the
     shapeshift forms, Inner Demon and more) as items. They're taught only if you own a Barony DLC on
     Steam.
     """
@@ -978,6 +1031,7 @@ class SpellSanityDLCSpells(Toggle):
 
 class SkillCheckMaxRank(Choice):
     """
+    Only used with Skill Checks on.
     The highest skill rank that's a check. Higher ranks take a long time: Master and Legendary usually
     need most of a run spent using that skill.
     """
@@ -1143,6 +1197,7 @@ class RandomItemWeight(FillerWeight):
 
 class PolymorphTrapDuration(Range):
     """
+    Only used when Polymorph Traps can show up (Trap Chance and its weight above 0).
     How many seconds a Polymorph Trap lasts before you change back.
     """
     display_name = "Polymorph Trap Duration"
@@ -1153,6 +1208,7 @@ class PolymorphTrapDuration(Range):
 
 class BlindnessTrapDuration(Range):
     """
+    Only used when Blindness Traps can show up (Trap Chance and its weight above 0).
     How many seconds a Blindness Trap lasts.
     """
     display_name = "Blindness Trap Duration"
@@ -1273,27 +1329,32 @@ class BaronyOptions(PerGameCommonOptions):
 
 
 option_groups = [
-    OptionGroup("Goal", [Goal, BossRushBosses, CustomDungeonLength, DungeonFloors, BossRushOrder, BossRushRestTown]),
-    OptionGroup("Checks", [
-        FloorCheckInterval, LevelChecks, EnemySanity, EnemySanityChecks, EnemySanityKillsPerCheck, EnemySanityPerFloor,
-        BestiaryChecks, ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks, SpecialAreaChecks,
-    ]),
-    OptionGroup("Dungeon", [
-        FloorKeys, FloorKeyRequirement, Compass, CompassMode, CompassPingTime, CompassRecharge, KeyCompassTime,
-        MinotaurTime, FloorShuffle, LayoutSeed, FloorSize, ExtraMonsters, EnemyRandomizer, EnemySeed,
-        EnemyRandomizerSecretAreas, EnemyPool, EnemyLevelScaling, BossLevelScaling, DifficultyScaling, Difficulty,
-        RandomizeLoot,
-    ]),
+    # What you're playing for, then how long the run is.
+    OptionGroup("Goal", [Goal, BossRushBosses, BossRushOrder, BossRushRestTown]),
+    OptionGroup("Dungeon", [CustomDungeonLength, DungeonFloors, FloorShuffle, LayoutSeed, FloorSize, RandomizeLoot]),
+    OptionGroup("Floor Keys & Compass", [FloorKeys, FloorKeyRequirement, Compass, CompassMode, CompassPingTime,
+                                         CompassRecharge, KeyCompassTime, MinotaurTime]),
+    OptionGroup("Monsters", [EnemyRandomizer, EnemySeed, EnemyPool, EnemyRandomizerSecretAreas, ExtraMonsters,
+                             EnemyLevelScaling, BossLevelScaling, DifficultyScaling, Difficulty]),
+    # What sends checks.
+    OptionGroup("Checks", [FloorCheckInterval, LevelChecks, ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks,
+                           SpecialAreaChecks]),
+    OptionGroup("Enemy Checks", [EnemySanity, EnemySanityChecks, EnemySanityKillsPerCheck, EnemySanityPerFloor,
+                                 BestiaryChecks]),
     OptionGroup("Class, Skills & Spells", [SkillChecks, SkillCheckMaxRank, LockClass, SpellSanity, SpellUpgrades,
                                            SpellSanityDLCSpells, SpellbookChecks]),
+    # Dying.
     OptionGroup("Lives & Checkpoints", [Lives, ExtraLivesInPool, CheckpointInterval, DeathPenalty, DeathItems,
                                         FloorRestart, BossDeath, DeathMarkers, DeathMarkerGold]),
+    # The item pool.
     OptionGroup("Filler", [XPBoostWeight, GoldPouchWeight, HealingPotionWeight, FoodRationWeight, RandomItemWeight]),
-    OptionGroup("Traps", [TrapChance, MinotaurTrapWeight, AmbushTrapWeight, PolymorphTrapWeight, FumbleTrapWeight, BlindnessTrapWeight, TeleportTrapWeight, HungerTrapWeight, DarknessTrapWeight, CurseTrapWeight,
+    OptionGroup("Traps", [TrapChance, MinotaurTrapWeight, AmbushTrapWeight, PolymorphTrapWeight, FumbleTrapWeight,
+                          BlindnessTrapWeight, TeleportTrapWeight, HungerTrapWeight, DarknessTrapWeight, CurseTrapWeight,
                           PolymorphTrapDuration, BlindnessTrapDuration]),
     OptionGroup("Death Link", [BaronyDeathLink, DeathLinkMode]),
+    # Optional twists.
     OptionGroup("Extras", [ProgressiveLantern, LanternDarkness, BountyEnemies, BountyChance, BountyChecks,
-                          MerchantCaravan, CaravanChance, CaravanChecks, CaravanHints]),
+                           MerchantCaravan, CaravanChance, CaravanChecks, CaravanHints]),
     OptionGroup("Challenges", [ChampionFloors, ChampionLocksStairs, ChampionChecks]),
     OptionGroup("Floor Themes", [FloorThemes, FloorThemeChance, FloorThemeList]),
     OptionGroup("Music", [MusicShuffle, MusicSeed, MusicMods]),
