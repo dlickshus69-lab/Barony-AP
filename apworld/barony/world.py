@@ -206,6 +206,8 @@ class BaronyWorld(World):
                     planned.append((data.bestiary_location(m), self._monster_floor_needed(m.depth)))
 
         ppf = o.pickups_per_floor.value
+        if o.random_pickups_per_floor:
+            ppf = 1  # a floor may roll as few as one: expect them at that pace
         for i in range(1, self.pickup_count + 1):
             planned.append((data.pickup_location(i), self._floor_needed((i + ppf - 1) // ppf)))
 
@@ -469,6 +471,7 @@ class BaronyWorld(World):
             "layout_seed": o.layout_seed.value,
             "enemy_level_scaling": o.enemy_level_scaling.value,
             "enemy_level_bonus": o.enemy_level_bonus.value,
+            "random_pickups_per_floor": int(bool(o.random_pickups_per_floor)),
             "boss_level_bonus": o.boss_level_bonus.value,
             "death_link": int(bool(o.death_link)),
             "players": o.players.value,

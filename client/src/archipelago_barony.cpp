@@ -101,6 +101,7 @@ namespace
 		int lantern_darkness = 2;
 		int wanted_time_limit = 5;    // minutes until Wanted (shopkeepers hostile) wears off, 0 = never (5 for older seeds)
 		int wanted_clears_on_new_floor = 0;
+		int random_pickups_per_floor = 0; // each floor gets 1 up to pickups_per_floor
 		int enemy_level_bonus = 0;    // Level Scaling: this many levels above yours
 		int boss_level_bonus = 0;
 		int floor_themes = 0;         // some floors get a theme (a twist for the whole floor)
@@ -644,6 +645,7 @@ namespace
 		registerSlotInt("lantern_darkness", &SlotOptions::lantern_darkness);
 		registerSlotInt("wanted_time_limit", &SlotOptions::wanted_time_limit);
 		registerSlotInt("wanted_clears_on_new_floor", &SlotOptions::wanted_clears_on_new_floor);
+		registerSlotInt("random_pickups_per_floor", &SlotOptions::random_pickups_per_floor);
 		registerSlotInt("enemy_level_bonus", &SlotOptions::enemy_level_bonus);
 		registerSlotInt("boss_level_bonus", &SlotOptions::boss_level_bonus);
 		registerSlotInt("floor_themes", &SlotOptions::floor_themes);
@@ -1992,6 +1994,10 @@ namespace
 		int carry = g_floorIsRestart ? 0 : g_carryPickups;
 		if ( arena && carry <= 0 && !g_floorIsRestart ) { return; }
 		int ownShare = arena ? 0 : g_slot.pickups_per_floor;
+		if ( !arena && g_slot.random_pickups_per_floor && ownShare > 1 )
+		{
+			ownShare = 1 + (int)(local_rng.rand() % ownShare); // Random Pickups Per Floor: 1 up to the setting
+		}
 		// A restarted floor gets back exactly what was still unfound on it (carried ones included).
 		int toPlace = std::min(g_floorIsRestart ? g_restartApBudget : ownShare + carry,
 			uncheckedCount(ap_ids::PICKUP_OFFSET, g_slot.archipelago_pickups) - apItemsLyingAround());

@@ -235,6 +235,15 @@ class PickupsPerFloor(Range):
     default = 2
 
 
+class RandomPickupsPerFloor(Toggle):
+    """
+    Only used with Archipelago Pickups above 0.
+    Each floor gets a random number of Archipelago pickups, from 1 up to Pickups Per Floor (so Pickups
+    Per Floor becomes the most a floor can have). Off: every floor gets exactly Pickups Per Floor.
+    """
+    display_name = "Random Pickups Per Floor"
+
+
 class ShopChecks(Range):
     """
     How many Archipelago items shopkeepers sell in total. Every shopkeeper you find stocks one (shown
@@ -1311,6 +1320,7 @@ class BaronyOptions(PerGameCommonOptions):
     bestiary_checks: BestiaryChecks
     archipelago_pickups: ArchipelagoPickups
     pickups_per_floor: PickupsPerFloor
+    random_pickups_per_floor: RandomPickupsPerFloor
     shop_checks: ShopChecks
     boss_checks: BossChecks
     special_area_checks: SpecialAreaChecks
@@ -1405,7 +1415,7 @@ option_groups = [
     OptionGroup("Monsters", [EnemyRandomizer, EnemySeed, EnemyPool, EnemyRandomizerSecretAreas, ExtraMonsters,
                              EnemyLevelScaling, EnemyLevelBonus, BossLevelScaling, BossLevelBonus, DifficultyScaling, Difficulty]),
     # What sends checks.
-    OptionGroup("Checks", [FloorCheckInterval, LevelChecks, ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks,
+    OptionGroup("Checks", [FloorCheckInterval, LevelChecks, ArchipelagoPickups, PickupsPerFloor, RandomPickupsPerFloor, ShopChecks, BossChecks,
                            SpecialAreaChecks]),
     OptionGroup("Enemy Checks", [EnemySanity, EnemySanityChecks, EnemySanityKillsPerCheck, EnemySanityPerFloor,
                                  BestiaryChecks]),

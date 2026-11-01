@@ -1,4 +1,4 @@
-From 6f98c55c55d9f484e35c7886d294aebfee7c783f Mon Sep 17 00:00:00 2001
+From 3587b55f40f6ba57665a412ef54458dab8f87132 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -12,7 +12,7 @@ Subject: [PATCH] Archipelago client hooks
  src/actladder.cpp                 |   25 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |   10 +-
- src/archipelago_barony.cpp        | 5734 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 5740 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |  129 +
  src/archipelago_ids.hpp           |  248 ++
  src/charclass.cpp                 |    4 +
@@ -31,7 +31,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   20 +
  src/ui/MainMenu.cpp               |    5 +-
- 27 files changed, 8071 insertions(+), 4 deletions(-)
+ 27 files changed, 8077 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -1954,10 +1954,10 @@ index 0872ea6..aee34f8 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..e8854a1
+index 0000000..737df5c
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,5734 @@
+@@ -0,0 +1,5740 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -2061,6 +2061,7 @@ index 0000000..e8854a1
 +		int lantern_darkness = 2;
 +		int wanted_time_limit = 5;    // minutes until Wanted (shopkeepers hostile) wears off, 0 = never (5 for older seeds)
 +		int wanted_clears_on_new_floor = 0;
++		int random_pickups_per_floor = 0; // each floor gets 1 up to pickups_per_floor
 +		int enemy_level_bonus = 0;    // Level Scaling: this many levels above yours
 +		int boss_level_bonus = 0;
 +		int floor_themes = 0;         // some floors get a theme (a twist for the whole floor)
@@ -2604,6 +2605,7 @@ index 0000000..e8854a1
 +		registerSlotInt("lantern_darkness", &SlotOptions::lantern_darkness);
 +		registerSlotInt("wanted_time_limit", &SlotOptions::wanted_time_limit);
 +		registerSlotInt("wanted_clears_on_new_floor", &SlotOptions::wanted_clears_on_new_floor);
++		registerSlotInt("random_pickups_per_floor", &SlotOptions::random_pickups_per_floor);
 +		registerSlotInt("enemy_level_bonus", &SlotOptions::enemy_level_bonus);
 +		registerSlotInt("boss_level_bonus", &SlotOptions::boss_level_bonus);
 +		registerSlotInt("floor_themes", &SlotOptions::floor_themes);
@@ -3952,6 +3954,10 @@ index 0000000..e8854a1
 +		int carry = g_floorIsRestart ? 0 : g_carryPickups;
 +		if ( arena && carry <= 0 && !g_floorIsRestart ) { return; }
 +		int ownShare = arena ? 0 : g_slot.pickups_per_floor;
++		if ( !arena && g_slot.random_pickups_per_floor && ownShare > 1 )
++		{
++			ownShare = 1 + (int)(local_rng.rand() % ownShare); // Random Pickups Per Floor: 1 up to the setting
++		}
 +		// A restarted floor gets back exactly what was still unfound on it (carried ones included).
 +		int toPlace = std::min(g_floorIsRestart ? g_restartApBudget : ownShare + carry,
 +			uncheckedCount(ap_ids::PICKUP_OFFSET, g_slot.archipelago_pickups) - apItemsLyingAround());

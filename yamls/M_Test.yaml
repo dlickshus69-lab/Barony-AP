@@ -51,6 +51,7 @@ Barony:
   level_checks: 15
   archipelago_pickups: 20
   pickups_per_floor: 2
+  random_pickups_per_floor: false
   shop_checks: 5
   boss_checks: true
   special_area_checks: false
