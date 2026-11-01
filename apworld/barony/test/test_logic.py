@@ -361,12 +361,12 @@ class TestShortRunSkipsOtherBosses(BaronyTestBase):
 
 
 class TestSkillRankFitsRun(BaronyTestBase):
-    """A 12-floor run lowers Legendary to Expert."""
+    """A 12-floor run lowers Legendary to Skilled."""
     options = {"goal": "floors_only", "dungeon_floors": 12, "skill_checks": "ninja",
                "skill_check_max_rank": "legendary"}
 
     def test_cap(self) -> None:
-        self.assertEqual(self.world.fill_slot_data()["skill_check_max_rank"], 3)
+        self.assertEqual(self.world.fill_slot_data()["skill_check_max_rank"], 2)
 
 
 class TestShortHerx(BaronyTestBase):

@@ -171,7 +171,9 @@ SKILLS = ["Tinkering", "Stealth", "Trading", "Lore", "Thaumaturgy", "Leadership"
           "Ranged", "Sword", "Mace", "Axe", "Polearm", "Shield", "Unarmed", "Alchemy"]
 SKILL_RANKS = [(1, "Basic", 20), (2, "Skilled", 40), (3, "Expert", 60), (4, "Master", 80), (5, "Legendary", 100)]
 # Floor a rank is reasonable to expect by (for logic).
-SKILL_RANK_FLOOR = {1: 1, 2: 4, 3: 10, 4: 16, 5: 22}  # also the shortest run each rank is allowed in
+# The floor by which a fresh character can be expected to reach each rank from nothing (skills start
+# over with every new character), and so also the shortest run each rank is allowed in.
+SKILL_RANK_FLOOR = {1: 1, 2: 8, 3: 16, 4: 24, 5: 32}
 # Skills every class can raise from nothing: identifying items, buying and selling, sneaking.
 UNIVERSAL_SKILLS = [3, 2, 1]
 # Every class (Barony's PlayerClasses order) and the skills it starts with, with starting values.

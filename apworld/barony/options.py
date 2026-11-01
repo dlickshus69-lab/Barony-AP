@@ -49,7 +49,8 @@ class BossRushBosses(OptionSet):
 
 class CustomDungeonLength(Toggle):
     """
-    Pick how many floors the run has (Dungeon Floors) instead of the goal's usual depth (Baron Herx on
+    Pick how many floors the run has (Dungeon Floors, 10 at the least; see it for recommended settings
+    by run length) instead of the goal's usual depth (Baron Herx on
     floor 20, the Devil on 24, the Twin Liches on 35). Boss floors on the way are skipped (you play a
     normal floor there instead), so you only meet your goal's bosses:
     Herx / Devil / Sanctum: the stairs off the last floor lead straight to that boss.
@@ -62,10 +63,20 @@ class CustomDungeonLength(Toggle):
 class DungeonFloors(Range):
     """
     Only used with Custom Dungeon Length on (the Boss Rush and Floors Only goals always use it).
-    How many dungeon floors the run has, not
-    counting boss arenas. 10 is a short run, 20 a medium one, 34 is all of Barony's floors. 35 to 44
-    adds up to 10 bonus floors past the end of the normal dungeon (more Caves and Citadel floors, as
-    hard as the deepest ones).
+    How many dungeon floors the run has, not counting boss arenas. 10 is the shortest, 34 is all of
+    Barony's floors, and 35 to 44 adds up to 10 bonus floors past the end of the normal dungeon (more
+    Caves and Citadel floors, as hard as the deepest ones).
+    Recommended settings by run length:
+    Short (10 to 12): Character Level Checks 8, Archipelago Pickups 15, Shop Checks 3, Enemy Sanity
+    Checks 6, Bestiary Early, Skill Check Max Rank Basic, Checkpoints every 5 floors, Starting Lives 2.
+    Medium (15 to 20): Level Checks 12, Pickups 25, Shop Checks 5, Enemy Sanity Checks 10, Bestiary
+    Early, Skill Check Max Rank Skilled, Checkpoints every 5 floors, Starting Lives 3.
+    Normal length (Custom Dungeon Length off; Herx 20 or the Devil 24): Level Checks 15, Pickups 30,
+    Shop Checks 6, Enemy Sanity Checks 12, Bestiary All, Skill Check Max Rank Expert, Checkpoints
+    every 5 floors, Starting Lives 3.
+    Long (30 to 44, or the Sanctum): Level Checks 22, Pickups 45, Shop Checks 10, Enemy Sanity Checks
+    20, Bestiary All, Special Area Checks on, Skill Check Max Rank Expert, Checkpoints every 10 floors,
+    Starting Lives 3.
     """
     display_name = "Dungeon Floors"
     range_start = 10
@@ -111,9 +122,16 @@ class FloorCheckInterval(Range):
 
 class LevelChecks(Range):
     """
-    Reaching each character level from 2 up to this number is a check (a new character counts its
-    levels again, but each level only sends its check once). 0 turns them off. Higher levels take much
-    longer to reach, so very high numbers put checks late in the game.
+    Every character level from 2 up to this number is a check: 15 means 14 checks (levels 2, 3, 4 ...
+    up to 15), 2 means one check at level 2, and 0 turns them off.
+    Each level sends its check the first time any of your characters reaches it, and it stays sent: if
+    you die, your next character only sends something new once it passes your best level so far.
+    A new character starts at level 1 again (unless a checkpoint brings your old one back), so the
+    highest levels need one good run. This number is lowered to what a run can reach: with Custom
+    Dungeon Length, at most one level per floor (10 floors: up to level 10); Herx 18, the Devil 22,
+    the Sanctum 30. With no Starting Lives and no checkpoints, every death starts over at level 1,
+    so it's lowered by a quarter more.
+    Recommended: short run (10 to 12 floors) 8, medium 12, normal length 15, long 22.
     """
     display_name = "Character Level Checks"
     range_start = 0
@@ -1038,10 +1056,14 @@ class SkillCheckMaxRank(Choice):
     How high the skill checks go. A rank is the skill's level, the number shown next to it in the game,
     not points on top of what you have: Basic means the skill is at 20 or more, Skilled 40, Expert 60,
     Master 80, Legendary 100. Ranks your class already starts at aren't checks: a Ninja starts with
-    Stealth 60, so Stealth has no Basic, Skilled or Expert check; his first Stealth check is Master (80).
-    Run length: high ranks take long to reach, so the highest rank is lowered to fit your run (its
-    goal, or Dungeon Floors): up to 15 floors, at most Expert; 16 to 21 floors, at most Master;
-    22 or more, Legendary is allowed.
+    Stealth 60, so his first Stealth check is Master (80).
+    Skills start over with every new character, so every rank has to be reached in a single run. The
+    highest rank is lowered to fit your run: up to 15 floors, at most Skilled; 16 to 23 floors, Expert;
+    24 to 31, Master; 32 or more, Legendary. With no Starting Lives and no checkpoints, one step lower.
+    Recommended: short run (10 to 12 floors): Basic. Medium (15 to 20): Skilled. Normal length (Herx or
+    the Devil): Expert. Long (30 or more, or the Sanctum): Expert, or Master if you'll train skills on
+    purpose. Lore, Trading and Stealth start at 0 for most classes and rise slowly, so they're the
+    checks that take longest.
     How many checks each class gets (Basic / Skilled / Expert / Master / Legendary):
     Barbarian 3/9/16/23/30, Warrior 3/9/17/25/33, Healer 3/9/16/23/30, Rogue 1/6/13/20/27, Wanderer
     1/7/13/19/25, Cleric 3/9/16/23/30, Merchant 1/4/9/14/19, Wizard 3/7/12/17/22, Arcanist 2/8/14/20/26,

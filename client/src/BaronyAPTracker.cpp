@@ -1077,6 +1077,41 @@ namespace
 					text(dc, 14, y, L"Champion: " + widen(g_state.values["champion"]) + L" guards the stairs", BAD, g_bodyFont);
 					y += 24;
 				}
+				if ( g_state.values.count("lvlchecks") )
+				{
+					// Level checks: done / total, and the next level that sends one.
+					int done = 0, total = 0, next = 0;
+					sscanf(g_state.values["lvlchecks"].c_str(), "%d\t%d\t%d", &done, &total, &next);
+					if ( total > 0 )
+					{
+						std::wstring t = L"Level " + widen(g_state.values["charlvl"]) + L":  level checks " + std::to_wstring(done)
+							+ L" / " + std::to_wstring(total);
+						t += next ? L"  (next at level " + std::to_wstring(next) + L")" : L"  (all done)";
+						text(dc, 14, y, t, next ? TEXT : GOOD, g_bodyFont);
+						y += 24;
+					}
+				}
+				if ( !g_state.values["skillnext"].empty() )
+				{
+					// Skill checks: each skill's level now -> the value that sends its next check.
+					text(dc, 14, y, L"Next skill checks:", DIM, g_bodyFont);
+					y += 24;
+					std::string all = g_state.values["skillnext"];
+					size_t pos = 0;
+					while ( pos < all.size() )
+					{
+						size_t end = all.find(';', pos);
+						if ( end == std::string::npos ) { end = all.size(); }
+						std::string item = all.substr(pos, end - pos);
+						pos = end + 1;
+						size_t a1 = item.find('|'), a2 = item.find('|', a1 + 1), a3 = item.find('|', a2 + 1);
+						if ( a1 == std::string::npos || a2 == std::string::npos || a3 == std::string::npos ) { continue; }
+						std::wstring line = L"   " + widen(item.substr(0, a1)) + L"  " + widen(item.substr(a1 + 1, a2 - a1 - 1))
+							+ L" \u2192 " + widen(item.substr(a2 + 1, a3 - a2 - 1)) + L"  (" + widen(item.substr(a3 + 1)) + L")";
+						text(dc, 14, y, line, TEXT, g_bodyFont);
+						y += 22;
+					}
+				}
 				if ( !g_state.values["theme"].empty() )
 				{
 					text(dc, 14, y, L"Floor theme: " + widen(g_state.values["theme"]), SECRET, g_bodyFont);

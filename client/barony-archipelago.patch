@@ -1,18 +1,18 @@
-From afae391694feccb897a02f351a1d8f64aa487f6a Mon Sep 17 00:00:00 2001
+From 1cdd96db9d050d5132147e0532e349513394b10e Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
 
 ---
  CMakeLists.txt                    |   32 +
- src/BaronyAPTracker.cpp           | 1623 ++++++++
+ src/BaronyAPTracker.cpp           | 1658 +++++++++
  src/CMakeLists.txt                |    1 +
  src/actchest.cpp                  |    7 +
  src/actgeneral.cpp                |    2 +
  src/actladder.cpp                 |   25 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |   10 +-
- src/archipelago_barony.cpp        | 5694 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 5723 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |  129 +
  src/archipelago_ids.hpp           |  248 ++
  src/charclass.cpp                 |    4 +
@@ -31,7 +31,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   20 +
  src/ui/MainMenu.cpp               |    5 +-
- 27 files changed, 7987 insertions(+), 4 deletions(-)
+ 27 files changed, 8051 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -82,10 +82,10 @@ index 4e9ed8f..b417834 100644
      # Only for MinGW...
 diff --git a/src/BaronyAPTracker.cpp b/src/BaronyAPTracker.cpp
 new file mode 100644
-index 0000000..01de19b
+index 0000000..a40a01e
 --- /dev/null
 +++ b/src/BaronyAPTracker.cpp
-@@ -0,0 +1,1623 @@
+@@ -0,0 +1,1658 @@
 +// Barony Archipelago tracker window.
 +//
 +// Barony (the Archipelago build) starts this with the game, and writes
@@ -1165,6 +1165,41 @@ index 0000000..01de19b
 +					text(dc, 14, y, L"Champion: " + widen(g_state.values["champion"]) + L" guards the stairs", BAD, g_bodyFont);
 +					y += 24;
 +				}
++				if ( g_state.values.count("lvlchecks") )
++				{
++					// Level checks: done / total, and the next level that sends one.
++					int done = 0, total = 0, next = 0;
++					sscanf(g_state.values["lvlchecks"].c_str(), "%d\t%d\t%d", &done, &total, &next);
++					if ( total > 0 )
++					{
++						std::wstring t = L"Level " + widen(g_state.values["charlvl"]) + L":  level checks " + std::to_wstring(done)
++							+ L" / " + std::to_wstring(total);
++						t += next ? L"  (next at level " + std::to_wstring(next) + L")" : L"  (all done)";
++						text(dc, 14, y, t, next ? TEXT : GOOD, g_bodyFont);
++						y += 24;
++					}
++				}
++				if ( !g_state.values["skillnext"].empty() )
++				{
++					// Skill checks: each skill's level now -> the value that sends its next check.
++					text(dc, 14, y, L"Next skill checks:", DIM, g_bodyFont);
++					y += 24;
++					std::string all = g_state.values["skillnext"];
++					size_t pos = 0;
++					while ( pos < all.size() )
++					{
++						size_t end = all.find(';', pos);
++						if ( end == std::string::npos ) { end = all.size(); }
++						std::string item = all.substr(pos, end - pos);
++						pos = end + 1;
++						size_t a1 = item.find('|'), a2 = item.find('|', a1 + 1), a3 = item.find('|', a2 + 1);
++						if ( a1 == std::string::npos || a2 == std::string::npos || a3 == std::string::npos ) { continue; }
++						std::wstring line = L"   " + widen(item.substr(0, a1)) + L"  " + widen(item.substr(a1 + 1, a2 - a1 - 1))
++							+ L" \u2192 " + widen(item.substr(a2 + 1, a3 - a2 - 1)) + L"  (" + widen(item.substr(a3 + 1)) + L")";
++						text(dc, 14, y, line, TEXT, g_bodyFont);
++						y += 22;
++					}
++				}
 +				if ( !g_state.values["theme"].empty() )
 +				{
 +					text(dc, 14, y, L"Floor theme: " + widen(g_state.values["theme"]), SECRET, g_bodyFont);
@@ -1910,10 +1945,10 @@ index 0872ea6..aee34f8 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..ce0c43d
+index 0000000..cdd439d
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,5694 @@
+@@ -0,0 +1,5723 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -5445,6 +5480,35 @@ index 0000000..ce0c43d
 +		out << "slot=" << g_slotName << "\n";
 +		out << "ingame=" << (inGame() ? 1 : 0) << "\n";
 +		out << "floor=" << currentlevel << "\n";
++		if ( stats[clientnum] && g_ready )
++		{
++			// Level checks: how many are done and the next level that sends one.
++			int done = 0, next = 0, total = std::max(0, g_slot.level_checks - 1);
++			for ( int lv = 2; lv <= g_slot.level_checks; ++lv )
++			{
++				if ( isChecked(ap_ids::BASE_ID + ap_ids::LEVEL_OFFSET + lv) ) { ++done; }
++				else if ( !next ) { next = lv; }
++			}
++			out << "charlvl=" << (int)stats[clientnum]->LVL << "\nlvlchecks=" << done << "\t" << total << "\t" << next << "\n";
++			// Skill checks: each skill's level now and the next value that sends a check.
++			std::string skills;
++			for ( int skill = 0; skill < ap_ids::NUM_SKILLS && g_slot.skill_checks > 0; ++skill )
++			{
++				int start = skillStart(skill);
++				if ( start < 0 ) { continue; }
++				for ( int rank = 1; rank <= std::min(5, g_slot.skill_check_max_rank); ++rank )
++				{
++					int value = ap_ids::SKILL_RANK_VALUES[rank];
++					if ( value <= start || isChecked(ap_ids::BASE_ID + ap_ids::SKILL_OFFSET + skill * 5 + rank) ) { continue; }
++					char buf[96];
++					snprintf(buf, sizeof(buf), "%s|%d|%d|%s;", ap_ids::SKILL_NAMES[skill],
++						(int)stats[clientnum]->getProficiency(skill), value, ap_ids::SKILL_RANK_NAMES[rank]);
++					skills += buf;
++					break;
++				}
++			}
++			out << "skillnext=" << skills << "\n";
++		}
 +		out << "ground=" << g_floorCounts.ground << "\nchests=" << g_floorCounts.chests << "\nshop=" << g_floorCounts.shop
 +			<< "\nmarked=" << g_floorCounts.marked << "\n";
 +		out << "lives=" << g_save.livesLeft << "\n";

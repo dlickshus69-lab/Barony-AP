@@ -105,7 +105,11 @@ class BaronyWorld(World):
         if goal == data.GOAL_CHOSEN_BOSSES and not self.short_dungeon:
             cap = {20: 18, 24: 22, 35: 30}[self.goal_floor]
         if self.short_dungeon:
-            cap = min(cap, max(5, self.goal_floor + 3))
+            cap = min(cap, max(5, self.goal_floor))
+        hardcore = self.options.lives.value == 0 and self.options.checkpoint_interval.value == 0
+        if hardcore:
+            # Every death starts over at level 1: only what one run reaches is safe to expect.
+            cap = max(5, cap * 3 // 4)
         if self.level_check_max > cap:
             logger.warning(
                 f"Barony ({self.player_name}): level_checks {self.level_check_max} is higher than a run "
@@ -116,6 +120,8 @@ class BaronyWorld(World):
         # Skill ranks: the highest one has to fit the run's length (Master needs about 16 floors of play).
         self.skill_max_rank = self.options.skill_check_max_rank.value
         fits = max(r for r, floor in data.SKILL_RANK_FLOOR.items() if floor <= self.goal_floor)
+        if self.options.lives.value == 0 and self.options.checkpoint_interval.value == 0:
+            fits = max(1, fits - 1)  # no lives and no checkpoints: one step lower
         if self.skill_max_rank > fits:
             logger.warning(f"Barony ({self.player_name}): skill_check_max_rank lowered to fit a "
                            f"{self.goal_floor}-floor run.")

@@ -3529,6 +3529,35 @@ namespace
 		out << "slot=" << g_slotName << "\n";
 		out << "ingame=" << (inGame() ? 1 : 0) << "\n";
 		out << "floor=" << currentlevel << "\n";
+		if ( stats[clientnum] && g_ready )
+		{
+			// Level checks: how many are done and the next level that sends one.
+			int done = 0, next = 0, total = std::max(0, g_slot.level_checks - 1);
+			for ( int lv = 2; lv <= g_slot.level_checks; ++lv )
+			{
+				if ( isChecked(ap_ids::BASE_ID + ap_ids::LEVEL_OFFSET + lv) ) { ++done; }
+				else if ( !next ) { next = lv; }
+			}
+			out << "charlvl=" << (int)stats[clientnum]->LVL << "\nlvlchecks=" << done << "\t" << total << "\t" << next << "\n";
+			// Skill checks: each skill's level now and the next value that sends a check.
+			std::string skills;
+			for ( int skill = 0; skill < ap_ids::NUM_SKILLS && g_slot.skill_checks > 0; ++skill )
+			{
+				int start = skillStart(skill);
+				if ( start < 0 ) { continue; }
+				for ( int rank = 1; rank <= std::min(5, g_slot.skill_check_max_rank); ++rank )
+				{
+					int value = ap_ids::SKILL_RANK_VALUES[rank];
+					if ( value <= start || isChecked(ap_ids::BASE_ID + ap_ids::SKILL_OFFSET + skill * 5 + rank) ) { continue; }
+					char buf[96];
+					snprintf(buf, sizeof(buf), "%s|%d|%d|%s;", ap_ids::SKILL_NAMES[skill],
+						(int)stats[clientnum]->getProficiency(skill), value, ap_ids::SKILL_RANK_NAMES[rank]);
+					skills += buf;
+					break;
+				}
+			}
+			out << "skillnext=" << skills << "\n";
+		}
 		out << "ground=" << g_floorCounts.ground << "\nchests=" << g_floorCounts.chests << "\nshop=" << g_floorCounts.shop
 			<< "\nmarked=" << g_floorCounts.marked << "\n";
 		out << "lives=" << g_save.livesLeft << "\n";
