@@ -20,6 +20,7 @@ MAX_SENSIBLE_LEVEL = {
     data.GOAL_SANCTUM: 30,
     data.GOAL_BOSS_RUSH: 30,  # lowered below to fit Dungeon Floors
     data.GOAL_ALL_BOSSES: 32,
+    data.GOAL_FLOORS_ONLY: 30,  # lowered below to fit Dungeon Floors
 }
 
 CLASSIFICATION = {
@@ -91,7 +92,8 @@ class BaronyWorld(World):
             # At normal length: down to the deepest chosen boss.
             self.goal_floor = max(data.CHOSEN_BOSS_INFO[b][1] for b in self.chosen_bosses())
         # Custom Dungeon Length / Boss Rush: Dungeon Floors floors, then the goal boss.
-        self.short_dungeon = bool(self.options.custom_dungeon_length) or goal == data.GOAL_BOSS_RUSH
+        self.short_dungeon = (bool(self.options.custom_dungeon_length)
+                              or goal in (data.GOAL_BOSS_RUSH, data.GOAL_FLOORS_ONLY))
         if self.short_dungeon:
             self.goal_floor = self.options.dungeon_floors.value
         self.num_sections = data.section_of_floor(self.goal_floor)
@@ -110,6 +112,14 @@ class BaronyWorld(World):
                 f"usually reaches before this goal; lowering to {cap}."
             )
             self.level_check_max = cap
+
+        # Skill ranks: the highest one has to fit the run's length (Master needs about 16 floors of play).
+        self.skill_max_rank = self.options.skill_check_max_rank.value
+        fits = max(r for r, floor in data.SKILL_RANK_FLOOR.items() if floor <= self.goal_floor)
+        if self.skill_max_rank > fits:
+            logger.warning(f"Barony ({self.player_name}): skill_check_max_rank lowered to fit a "
+                           f"{self.goal_floor}-floor run.")
+            self.skill_max_rank = fits
 
         ppf = self.options.pickups_per_floor.value
         max_pickups = ppf * (self.goal_floor - 1)
@@ -204,6 +214,8 @@ class BaronyWorld(World):
             for boss in data.BOSSES:
                 if boss.enum_name in goal_bosses or boss.floor > self.goal_floor:
                     continue
+                if self.short_dungeon and boss.enum_name != "MINOTAUR":
+                    continue  # a custom-length run skips boss floors on the way: only your goal's bosses come
                 planned.append((boss.location_name, self._floor_needed(boss.floor)))
 
         if o.special_area_checks:
@@ -214,7 +226,7 @@ class BaronyWorld(World):
         sc = o.skill_checks.value
         if sc != o.skill_checks.option_off:
             class_name = None if sc == o.skill_checks.option_any_class else data.CLASSES[sc - 2]
-            for skill, rank in data.skill_checks_for(class_name, o.skill_check_max_rank.value):
+            for skill, rank in data.skill_checks_for(class_name, self.skill_max_rank):
                 planned.append((data.skill_location(skill, rank),
                                 self._floor_needed(min(data.SKILL_RANK_FLOOR[rank], self.goal_floor))))
 
@@ -396,7 +408,7 @@ class BaronyWorld(World):
             "compass_recharge": o.compass_recharge.value,
             "skill_checks": o.skill_checks.value,
             "enemy_randomizer_secret": int(bool(o.enemy_randomizer_secret_areas)),
-            "skill_check_max_rank": o.skill_check_max_rank.value,
+            "skill_check_max_rank": self.skill_max_rank,
             "lock_class": int(bool(o.lock_class)),
             "champion_floors": o.champion_floors.value,
             "champion_locks_stairs": int(bool(o.champion_locks_stairs)),

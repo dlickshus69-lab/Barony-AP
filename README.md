@@ -26,7 +26,8 @@ start Barony from Steam: the Barony Archipelago window opens first to connect.
 
 Baron Herx, the Devil, the Twin Liches of the Sanctum, Chosen Bosses (the ones you pick, spread through
 the run), or Boss Rush (a dungeon of 10 to 44 floors, then the bosses you
-pick back to back, with an optional rest town between them).
+pick back to back, with an optional rest town between them), or Floors Only (no bosses: just get through
+your floors).
 
 ## Checks
 

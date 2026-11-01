@@ -752,6 +752,7 @@ namespace
 		say(COLOR_AP, "Archipelago: connected. Goal: %s.",
 			g_slot.goal == 0 ? "defeat Baron Herx" : g_slot.goal == 1 ? "defeat the Devil"
 			: g_slot.goal == 3 ? "Boss Rush" : g_slot.goal == 4 ? "defeat your chosen bosses"
+			: g_slot.goal == 5 ? "get through every floor"
 			: "defeat the twin liches");
 	}
 
@@ -2922,6 +2923,17 @@ namespace
 		writeSave();
 	}
 
+	void completeGoal()
+	{
+		if ( g_save.goalSent ) { return; }
+		g_save.goalSent = true;
+		if ( g_save.finishSeconds < 0 ) { g_save.finishSeconds = g_save.playSeconds; }
+		endRunRecord(RUN_WON);
+		AP_StoryComplete();
+		say(COLOR_AP, "Goal complete! Your world is done.");
+		writeSave();
+	}
+
 	void startRunRecord()
 	{
 		endRunRecord(RUN_LEFT); // the last run never ended (you started over or quit)
@@ -3257,6 +3269,10 @@ namespace
 	{
 		bool restarted = g_restartPending;
 		if ( !secretlevel ) { g_lastFloorLevel = currentlevel; }
+		if ( g_slot.goal == 5 && !secretlevel && g_slot.dungeon_floors > 0 && currentlevel > g_slot.dungeon_floors )
+		{
+			completeGoal(); // Floors Only: down the stairs off the last floor
+		}
 		endDeathScreen();
 		if ( g_floorReady ) { g_attemptApMade = 0; } // no chest started the count this time
 		g_floorIsRestart = restarted;
@@ -3613,6 +3629,7 @@ namespace
 		if ( g_slot.goal == 0 ) { return "boss,"; }
 		if ( g_slot.goal == 1 ) { return "hellboss,"; }
 		if ( g_slot.goal == 2 ) { return "sanctum,"; }
+		if ( g_slot.goal == 5 ) { return ""; } // Floors Only: no bosses at all
 		// All Three Bosses with Dungeon Floors: all three, in the game's order. Boss Rush: the ones you picked.
 		int m = bossRushGoalMask(), killed = g_save.goalBossesKilled;
 		std::vector<std::string> bosses;
@@ -4237,7 +4254,7 @@ static int bonusFloorLine(int level, const std::vector<std::string>& levelsList)
 {
 	int last = (int)levelsList.size() - 1;
 	// Chosen Bosses spread the arenas through the floors, so its floor numbers run past Dungeon Floors.
-	int limit = spreadOn() ? 1000 : g_slot.dungeon_floors;
+	int limit = (spreadOn() || g_slot.goal == 5) ? 1000 : g_slot.dungeon_floors;
 	if ( !bossRushOn() || secretlevel || level < last || level > limit ) { return -1; }
 	std::vector<int> late;
 	for ( int i = std::max(1, last - 10); i < last; ++i )
@@ -4537,14 +4554,7 @@ void onMonsterDeath(Entity* my, Stat* myStats)
 	if ( goalBit )
 	{
 		g_save.goalBossesKilled |= goalBit;
-		if ( (g_save.goalBossesKilled & goalMask) == goalMask && !g_save.goalSent )
-		{
-			g_save.goalSent = true;
-			if ( g_save.finishSeconds < 0 ) { g_save.finishSeconds = g_save.playSeconds; }
-			endRunRecord(RUN_WON);
-			AP_StoryComplete();
-			say(COLOR_AP, "Goal complete! Your world is done.");
-		}
+		if ( (g_save.goalBossesKilled & goalMask) == goalMask ) { completeGoal(); }
 	}
 	else if ( g_slot.boss_checks )
 	{

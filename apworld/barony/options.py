@@ -13,7 +13,8 @@ class Goal(Choice):
     What you need to do to finish.
     Herx / Devil / Sanctum: beat that one boss (Baron Herx on floor 20, the Devil at the bottom of Hell
     on floor 24, or both twin liches of the Sanctum on floor 35). With Custom Dungeon Length the run is
-    Dungeon Floors floors and then that boss; every other boss is skipped.
+    Dungeon Floors normal floors, and the stairs off the last one lead to that boss's arena (Devil with
+    15 floors: floors 1 to 15, then the Devil). Every other boss is skipped.
     Chosen Bosses: beat every boss you tick in Goal Bosses, spread through the run. At normal length
     they're where Barony keeps them: Herx on floor 20, then (if the Devil is chosen) his portal leads
     down into Hell to the Devil on 24, whose portal leads on to the expansion and the twin liches on 35.
@@ -21,6 +22,7 @@ class Goal(Choice):
     Custom Dungeon Length, Dungeon Floors is split evenly between them: 15 floors and 3 bosses means a
     boss after every 5 floors.
     Boss Rush: Dungeon Floors floors, then every boss in Goal Bosses back to back at the end.
+    Floors Only: no bosses at all. Play Dungeon Floors floors; taking the stairs off the last one wins.
     A boss you've beaten in any run stays beaten.
     """
     display_name = "Goal"
@@ -29,6 +31,7 @@ class Goal(Choice):
     option_sanctum = 2
     option_boss_rush = 3
     option_chosen_bosses = 4
+    option_floors_only = 5
     alias_all_bosses = 4
     default = option_herx
 
@@ -51,14 +54,14 @@ class CustomDungeonLength(Toggle):
     normal floor there instead), so you only meet your goal's bosses:
     Herx / Devil / Sanctum: the stairs off the last floor lead straight to that boss.
     Chosen Bosses: the bosses come at even steps through the floors.
-    Boss Rush always uses Dungeon Floors.
+    Boss Rush and Floors Only always use Dungeon Floors.
     """
     display_name = "Custom Dungeon Length"
 
 
 class DungeonFloors(Range):
     """
-    Only used with Custom Dungeon Length on (the Boss Rush goal always uses it).
+    Only used with Custom Dungeon Length on (the Boss Rush and Floors Only goals always use it).
     How many dungeon floors the run has, not
     counting boss arenas. 10 is a short run, 20 a medium one, 34 is all of Barony's floors. 35 to 44
     adds up to 10 bonus floors past the end of the normal dungeon (more Caves and Citadel floors, as
@@ -938,11 +941,11 @@ class DeathLinkMode(Choice):
 # ---------------------------------------------------------------- skills
 class SkillChecks(Choice):
     """
-    Raising a skill to Basic (20), Skilled (40), Expert (60), Master (80) or Legendary (100) sends a check.
+    Raising a skill to a new rank sends a check (see Skill Check Max Rank for how ranks work).
     You still pick your class in the game, when you make your character. Pick the same class here, so the
     checks are that class's main skills (the ones it starts with at 20 or more), plus Lore, Trading and
     Stealth, which every class can raise. Turn on Lock Class and the game makes every new character that
-    class for you, so the two can't end up different. Ranks your class already starts at aren't checks.
+    class for you, so the two can't end up different.
     Off: no skill checks.
     Any Class: only Lore, Trading and Stealth, so it works with any class you pick in the game.
     The DLC classes need their DLC pack on Steam: Conjurer, Accursed, Mesmer and Brewer (Myths and
@@ -1032,8 +1035,21 @@ class SpellSanityDLCSpells(Toggle):
 class SkillCheckMaxRank(Choice):
     """
     Only used with Skill Checks on.
-    The highest skill rank that's a check. Higher ranks take a long time: Master and Legendary usually
-    need most of a run spent using that skill.
+    How high the skill checks go. A rank is the skill's level, the number shown next to it in the game,
+    not points on top of what you have: Basic means the skill is at 20 or more, Skilled 40, Expert 60,
+    Master 80, Legendary 100. Ranks your class already starts at aren't checks: a Ninja starts with
+    Stealth 60, so Stealth has no Basic, Skilled or Expert check; his first Stealth check is Master (80).
+    Run length: high ranks take long to reach, so the highest rank is lowered to fit your run (its
+    goal, or Dungeon Floors): up to 15 floors, at most Expert; 16 to 21 floors, at most Master;
+    22 or more, Legendary is allowed.
+    How many checks each class gets (Basic / Skilled / Expert / Master / Legendary):
+    Barbarian 3/9/16/23/30, Warrior 3/9/17/25/33, Healer 3/9/16/23/30, Rogue 1/6/13/20/27, Wanderer
+    1/7/13/19/25, Cleric 3/9/16/23/30, Merchant 1/4/9/14/19, Wizard 3/7/12/17/22, Arcanist 2/8/14/20/26,
+    Joker 2/9/16/23/30, Sexton 2/6/12/18/24, Ninja 2/4/7/12/17, Monk 3/8/15/22/29, Conjurer
+    2/7/14/21/28, Accursed 1/4/9/15/21, Mesmer 3/8/13/20/27, Brewer 3/8/14/20/26, Machinist
+    3/6/10/14/18, Punisher 3/10/17/24/31, Shaman 3/6/10/14/18, Hunter 1/4/8/12/16, Bard 2/5/9/13/17,
+    Sapper 2/6/11/16/21, Scion 3/6/12/18/24, Hermit 2/6/11/16/21, Paladin 2/6/11/16/21, Any Class
+    3/6/9/12/15
     """
     display_name = "Skill Check Max Rank"
     option_basic = 1

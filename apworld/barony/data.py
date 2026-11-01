@@ -25,6 +25,7 @@ GOAL_SANCTUM = 2
 GOAL_BOSS_RUSH = 3
 GOAL_ALL_BOSSES = 4  # "Chosen Bosses"
 GOAL_CHOSEN_BOSSES = GOAL_ALL_BOSSES
+GOAL_FLOORS_ONLY = 5
 
 # Goal Bosses option names -> (boss enum names, the floor that boss is on at normal length)
 CHOSEN_BOSS_INFO = {
@@ -40,6 +41,7 @@ GOAL_FLOOR = {
     GOAL_SANCTUM: 35,
     GOAL_BOSS_RUSH: 10,  # the default; Dungeon Floors changes it
     GOAL_ALL_BOSSES: 35,
+    GOAL_FLOORS_ONLY: 10,  # the default; Dungeon Floors changes it
 }
 
 MAX_FLOOR = 45  # Barony's 35, plus up to 10 bonus floors with Custom Dungeon Length
@@ -114,6 +116,7 @@ GOAL_BOSSES = {
     GOAL_SANCTUM: ["LICH_ICE", "LICH_FIRE"],
     GOAL_BOSS_RUSH: ["LICH", "DEVIL", "LICH_ICE", "LICH_FIRE"],
     GOAL_ALL_BOSSES: ["LICH", "DEVIL", "LICH_ICE", "LICH_FIRE"],
+    GOAL_FLOORS_ONLY: [],
 }
 
 
@@ -168,7 +171,7 @@ SKILLS = ["Tinkering", "Stealth", "Trading", "Lore", "Thaumaturgy", "Leadership"
           "Ranged", "Sword", "Mace", "Axe", "Polearm", "Shield", "Unarmed", "Alchemy"]
 SKILL_RANKS = [(1, "Basic", 20), (2, "Skilled", 40), (3, "Expert", 60), (4, "Master", 80), (5, "Legendary", 100)]
 # Floor a rank is reasonable to expect by (for logic).
-SKILL_RANK_FLOOR = {1: 1, 2: 4, 3: 10, 4: 16, 5: 22}
+SKILL_RANK_FLOOR = {1: 1, 2: 4, 3: 10, 4: 16, 5: 22}  # also the shortest run each rank is allowed in
 # Skills every class can raise from nothing: identifying items, buying and selling, sneaking.
 UNIVERSAL_SKILLS = [3, 2, 1]
 # Every class (Barony's PlayerClasses order) and the skills it starts with, with starting values.

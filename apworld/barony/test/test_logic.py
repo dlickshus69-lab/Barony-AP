@@ -95,7 +95,7 @@ class TestSkillChecksWarrior(BaronyTestBase):
 
 
 class TestSkillChecksAnyClass(BaronyTestBase):
-    options = {"skill_checks": "any_class", "skill_check_max_rank": "legendary"}
+    options = {"skill_checks": "any_class", "skill_check_max_rank": "legendary", "goal": "sanctum"}
 
     def test_universal_only(self) -> None:
         skills = [loc.name for loc in self.multiworld.get_locations(self.player) if loc.name.startswith("Skill: ")]
@@ -337,6 +337,36 @@ class TestChosenSpread(BaronyTestBase):
         self.assertEqual(self.world.champion_floors(), [2, 4, 8, 10, 14])
         names = {loc.name for loc in self.multiworld.get_locations(self.player)}
         self.assertNotIn("Defeat Baron Herx", names)
+
+
+class TestFloorsOnly(BaronyTestBase):
+    """Floors Only: no bosses, Dungeon Floors long, no boss checks but the Minotaur."""
+    options = {"goal": "floors_only", "dungeon_floors": 18, "boss_checks": True}
+
+    def test_floors(self) -> None:
+        sd = self.world.fill_slot_data()
+        self.assertEqual((sd["goal"], sd["goal_floor"], sd["dungeon_floors"]), (5, 18, 18))
+        names = {loc.name for loc in self.multiworld.get_locations(self.player)}
+        self.assertIn("Defeat a Minotaur", names)
+        self.assertNotIn("Defeat Baron Herx", names)
+
+
+class TestShortRunSkipsOtherBosses(BaronyTestBase):
+    """Herx goal at 30 floors: the Devil's floor is skipped on the way, so no Devil check."""
+    options = {"goal": "herx", "custom_dungeon_length": True, "dungeon_floors": 30, "boss_checks": True}
+
+    def test_no_devil(self) -> None:
+        names = {loc.name for loc in self.multiworld.get_locations(self.player)}
+        self.assertNotIn("Defeat the Devil", names)
+
+
+class TestSkillRankFitsRun(BaronyTestBase):
+    """A 12-floor run lowers Legendary to Expert."""
+    options = {"goal": "floors_only", "dungeon_floors": 12, "skill_checks": "ninja",
+               "skill_check_max_rank": "legendary"}
+
+    def test_cap(self) -> None:
+        self.assertEqual(self.world.fill_slot_data()["skill_check_max_rank"], 3)
 
 
 class TestShortHerx(BaronyTestBase):

@@ -72,7 +72,8 @@ floors and then that boss, and every other boss is skipped. Chosen Bosses needs 
 Goal Bosses: at normal length they're where Barony keeps them (Herx's portal leads down into Hell when
 the Devil is chosen, and the Devil's portal on to the Sanctum); with Custom Dungeon Length the floors
 are split evenly between them, so 15 floors and three bosses is a boss after every five floors. Boss
-Rush puts them all back to back at the end. A boss you've beaten in any run stays beaten.
+Rush puts them all back to back at the end. Floors Only has no bosses at all: get down the stairs off
+the last of your Dungeon Floors to win. A boss you've beaten in any run stays beaten.
 
 Custom Dungeon Length lets any goal have a set number of floors (Dungeon Floors: 10 for a short run,
 20 for a medium one, 34 for all of Barony's floors, and up to 44 with bonus Caves and Citadel floors

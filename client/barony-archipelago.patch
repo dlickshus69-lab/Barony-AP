@@ -1,4 +1,4 @@
-From 7eff8da10f2b1ed78ef64d655e3e042ffe7f2744 Mon Sep 17 00:00:00 2001
+From afae391694feccb897a02f351a1d8f64aa487f6a Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -12,7 +12,7 @@ Subject: [PATCH] Archipelago client hooks
  src/actladder.cpp                 |   25 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |   10 +-
- src/archipelago_barony.cpp        | 5684 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 5694 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |  129 +
  src/archipelago_ids.hpp           |  248 ++
  src/charclass.cpp                 |    4 +
@@ -31,7 +31,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   20 +
  src/ui/MainMenu.cpp               |    5 +-
- 27 files changed, 7977 insertions(+), 4 deletions(-)
+ 27 files changed, 7987 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -1910,10 +1910,10 @@ index 0872ea6..aee34f8 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..25c957b
+index 0000000..ce0c43d
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,5684 @@
+@@ -0,0 +1,5694 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -2668,6 +2668,7 @@ index 0000000..25c957b
 +		say(COLOR_AP, "Archipelago: connected. Goal: %s.",
 +			g_slot.goal == 0 ? "defeat Baron Herx" : g_slot.goal == 1 ? "defeat the Devil"
 +			: g_slot.goal == 3 ? "Boss Rush" : g_slot.goal == 4 ? "defeat your chosen bosses"
++			: g_slot.goal == 5 ? "get through every floor"
 +			: "defeat the twin liches");
 +	}
 +
@@ -4838,6 +4839,17 @@ index 0000000..25c957b
 +		writeSave();
 +	}
 +
++	void completeGoal()
++	{
++		if ( g_save.goalSent ) { return; }
++		g_save.goalSent = true;
++		if ( g_save.finishSeconds < 0 ) { g_save.finishSeconds = g_save.playSeconds; }
++		endRunRecord(RUN_WON);
++		AP_StoryComplete();
++		say(COLOR_AP, "Goal complete! Your world is done.");
++		writeSave();
++	}
++
 +	void startRunRecord()
 +	{
 +		endRunRecord(RUN_LEFT); // the last run never ended (you started over or quit)
@@ -5173,6 +5185,10 @@ index 0000000..25c957b
 +	{
 +		bool restarted = g_restartPending;
 +		if ( !secretlevel ) { g_lastFloorLevel = currentlevel; }
++		if ( g_slot.goal == 5 && !secretlevel && g_slot.dungeon_floors > 0 && currentlevel > g_slot.dungeon_floors )
++		{
++			completeGoal(); // Floors Only: down the stairs off the last floor
++		}
 +		endDeathScreen();
 +		if ( g_floorReady ) { g_attemptApMade = 0; } // no chest started the count this time
 +		g_floorIsRestart = restarted;
@@ -5529,6 +5545,7 @@ index 0000000..25c957b
 +		if ( g_slot.goal == 0 ) { return "boss,"; }
 +		if ( g_slot.goal == 1 ) { return "hellboss,"; }
 +		if ( g_slot.goal == 2 ) { return "sanctum,"; }
++		if ( g_slot.goal == 5 ) { return ""; } // Floors Only: no bosses at all
 +		// All Three Bosses with Dungeon Floors: all three, in the game's order. Boss Rush: the ones you picked.
 +		int m = bossRushGoalMask(), killed = g_save.goalBossesKilled;
 +		std::vector<std::string> bosses;
@@ -6153,7 +6170,7 @@ index 0000000..25c957b
 +{
 +	int last = (int)levelsList.size() - 1;
 +	// Chosen Bosses spread the arenas through the floors, so its floor numbers run past Dungeon Floors.
-+	int limit = spreadOn() ? 1000 : g_slot.dungeon_floors;
++	int limit = (spreadOn() || g_slot.goal == 5) ? 1000 : g_slot.dungeon_floors;
 +	if ( !bossRushOn() || secretlevel || level < last || level > limit ) { return -1; }
 +	std::vector<int> late;
 +	for ( int i = std::max(1, last - 10); i < last; ++i )
@@ -6453,14 +6470,7 @@ index 0000000..25c957b
 +	if ( goalBit )
 +	{
 +		g_save.goalBossesKilled |= goalBit;
-+		if ( (g_save.goalBossesKilled & goalMask) == goalMask && !g_save.goalSent )
-+		{
-+			g_save.goalSent = true;
-+			if ( g_save.finishSeconds < 0 ) { g_save.finishSeconds = g_save.playSeconds; }
-+			endRunRecord(RUN_WON);
-+			AP_StoryComplete();
-+			say(COLOR_AP, "Goal complete! Your world is done.");
-+		}
++		if ( (g_save.goalBossesKilled & goalMask) == goalMask ) { completeGoal(); }
 +	}
 +	else if ( g_slot.boss_checks )
 +	{
