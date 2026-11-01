@@ -777,31 +777,59 @@ class MusicMods(Choice):
 
 class EnemyLevelScaling(Choice):
     """
-    Enemies scale to your character level.
+    Enemies scale to your character level (plus Enemy Level Bonus), when they first appear.
     Off: enemies keep their normal strength.
-    Stronger Only: enemies below your level are made stronger to match you; tougher ones stay as they are.
-    Match Level: every enemy is set to your level, stronger or weaker.
-    Bosses, shopkeepers and the Minotaur aren't changed.
+    Raise Weaker: enemies below your level are raised to it; enemies already at or above it are left
+    as they are. Weak enemies stop being a pushover, tough ones stay tough.
+    Match Level: every enemy is set to your level: weaker ones are raised, stronger ones lowered.
+    Each level of difference changes an enemy's health and damage by about 8%.
+    Bosses, shopkeepers and the Minotaur aren't changed (see Boss Level Scaling).
     """
     display_name = "Enemy Level Scaling"
     option_off = 0
-    option_stronger_only = 1
+    option_raise_weaker = 1
     option_match_level = 2
+    alias_stronger_only = 1
     default = option_off
+
+
+class EnemyLevelBonus(Range):
+    """
+    Only used with Enemy Level Scaling on.
+    Scales enemies to this many levels above yours instead of to your level, so they're always a
+    little stronger than you. 0 = your level. Each level is about 8% more health and damage.
+    """
+    display_name = "Enemy Level Bonus"
+    range_start = 0
+    range_end = 5
+    default = 0
 
 
 class BossLevelScaling(Choice):
     """
-    Bosses scale to your character level, the same way Enemy Level Scaling does for enemies.
+    Bosses scale to your character level (plus Boss Level Bonus), the same way Enemy Level Scaling
+    does for enemies.
     Off: bosses keep their normal strength.
-    Stronger Only: bosses below your level are made stronger to match you.
+    Raise Weaker: a boss below your level is raised to it; a stronger one is left as it is.
     Match Level: bosses are set to your level, stronger or weaker.
     """
     display_name = "Boss Level Scaling"
     option_off = 0
-    option_stronger_only = 1
+    option_raise_weaker = 1
     option_match_level = 2
+    alias_stronger_only = 1
     default = option_off
+
+
+class BossLevelBonus(Range):
+    """
+    Only used with Boss Level Scaling on.
+    Scales bosses to this many levels above yours instead of to your level. 0 = your level.
+    """
+    display_name = "Boss Level Bonus"
+    range_start = 0
+    range_end = 5
+    default = 0
 
 
 class MinotaurTime(Range):
@@ -1333,7 +1361,9 @@ class BaronyOptions(PerGameCommonOptions):
     music_mods: MusicMods
     extra_monsters: ExtraMonsters
     enemy_level_scaling: EnemyLevelScaling
+    enemy_level_bonus: EnemyLevelBonus
     boss_level_scaling: BossLevelScaling
+    boss_level_bonus: BossLevelBonus
     minotaur_time: MinotaurTime
     difficulty_scaling: DifficultyScaling
     difficulty: Difficulty
@@ -1373,7 +1403,7 @@ option_groups = [
     OptionGroup("Floor Keys & Compass", [FloorKeys, FloorKeyRequirement, Compass, CompassMode, CompassPingTime,
                                          CompassRecharge, KeyCompassTime, MinotaurTime]),
     OptionGroup("Monsters", [EnemyRandomizer, EnemySeed, EnemyPool, EnemyRandomizerSecretAreas, ExtraMonsters,
-                             EnemyLevelScaling, BossLevelScaling, DifficultyScaling, Difficulty]),
+                             EnemyLevelScaling, EnemyLevelBonus, BossLevelScaling, BossLevelBonus, DifficultyScaling, Difficulty]),
     # What sends checks.
     OptionGroup("Checks", [FloorCheckInterval, LevelChecks, ArchipelagoPickups, PickupsPerFloor, ShopChecks, BossChecks,
                            SpecialAreaChecks]),

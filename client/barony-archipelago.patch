@@ -1,18 +1,18 @@
-From 1cdd96db9d050d5132147e0532e349513394b10e Mon Sep 17 00:00:00 2001
+From 6f98c55c55d9f484e35c7886d294aebfee7c783f Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
 
 ---
  CMakeLists.txt                    |   32 +
- src/BaronyAPTracker.cpp           | 1658 +++++++++
+ src/BaronyAPTracker.cpp           | 1667 +++++++++
  src/CMakeLists.txt                |    1 +
  src/actchest.cpp                  |    7 +
  src/actgeneral.cpp                |    2 +
  src/actladder.cpp                 |   25 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |   10 +-
- src/archipelago_barony.cpp        | 5723 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 5734 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |  129 +
  src/archipelago_ids.hpp           |  248 ++
  src/charclass.cpp                 |    4 +
@@ -31,7 +31,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   20 +
  src/ui/MainMenu.cpp               |    5 +-
- 27 files changed, 8051 insertions(+), 4 deletions(-)
+ 27 files changed, 8071 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -82,10 +82,10 @@ index 4e9ed8f..b417834 100644
      # Only for MinGW...
 diff --git a/src/BaronyAPTracker.cpp b/src/BaronyAPTracker.cpp
 new file mode 100644
-index 0000000..a40a01e
+index 0000000..982ee36
 --- /dev/null
 +++ b/src/BaronyAPTracker.cpp
-@@ -0,0 +1,1658 @@
+@@ -0,0 +1,1667 @@
 +// Barony Archipelago tracker window.
 +//
 +// Barony (the Archipelago build) starts this with the game, and writes
@@ -1165,6 +1165,15 @@ index 0000000..a40a01e
 +					text(dc, 14, y, L"Champion: " + widen(g_state.values["champion"]) + L" guards the stairs", BAD, g_bodyFont);
 +					y += 24;
 +				}
++				if ( g_state.values.count("enemyscale") )
++				{
++					int mode = 0, lvl = 0, bonus = 0;
++					sscanf(g_state.values["enemyscale"].c_str(), "%d\t%d\t%d", &mode, &lvl, &bonus);
++					std::wstring t = (mode == 2 ? L"Enemies matched to level " : L"Weaker enemies raised to level ") + std::to_wstring(lvl);
++					if ( bonus > 0 ) { t += L"  (your level +" + std::to_wstring(bonus) + L")"; }
++					text(dc, 14, y, t, BAD, g_bodyFont);
++					y += 24;
++				}
 +				if ( g_state.values.count("lvlchecks") )
 +				{
 +					// Level checks: done / total, and the next level that sends one.
@@ -1945,10 +1954,10 @@ index 0872ea6..aee34f8 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..cdd439d
+index 0000000..e8854a1
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,5723 @@
+@@ -0,0 +1,5734 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -2052,6 +2061,8 @@ index 0000000..cdd439d
 +		int lantern_darkness = 2;
 +		int wanted_time_limit = 5;    // minutes until Wanted (shopkeepers hostile) wears off, 0 = never (5 for older seeds)
 +		int wanted_clears_on_new_floor = 0;
++		int enemy_level_bonus = 0;    // Level Scaling: this many levels above yours
++		int boss_level_bonus = 0;
 +		int floor_themes = 0;         // some floors get a theme (a twist for the whole floor)
 +		int floor_theme_chance = 30;
 +		int floor_theme_mask = 0;     // which themes (bit per theme, 0 = all)
@@ -2593,6 +2604,8 @@ index 0000000..cdd439d
 +		registerSlotInt("lantern_darkness", &SlotOptions::lantern_darkness);
 +		registerSlotInt("wanted_time_limit", &SlotOptions::wanted_time_limit);
 +		registerSlotInt("wanted_clears_on_new_floor", &SlotOptions::wanted_clears_on_new_floor);
++		registerSlotInt("enemy_level_bonus", &SlotOptions::enemy_level_bonus);
++		registerSlotInt("boss_level_bonus", &SlotOptions::boss_level_bonus);
 +		registerSlotInt("floor_themes", &SlotOptions::floor_themes);
 +		registerSlotInt("floor_theme_chance", &SlotOptions::floor_theme_chance);
 +		registerSlotInt("floor_theme_mask", &SlotOptions::floor_theme_mask);
@@ -5489,6 +5502,12 @@ index 0000000..cdd439d
 +				if ( isChecked(ap_ids::BASE_ID + ap_ids::LEVEL_OFFSET + lv) ) { ++done; }
 +				else if ( !next ) { next = lv; }
 +			}
++			if ( g_slot.enemy_level_scaling > 0 )
++			{
++				// Enemy Level Scaling: the level enemies are scaled to (yours plus Enemy Level Bonus).
++				out << "enemyscale=" << g_slot.enemy_level_scaling << "\t" << (int)stats[clientnum]->LVL + g_slot.enemy_level_bonus
++					<< "\t" << g_slot.enemy_level_bonus << "\n";
++			}
 +			out << "charlvl=" << (int)stats[clientnum]->LVL << "\nlvlchecks=" << done << "\t" << total << "\t" << next << "\n";
 +			// Skill checks: each skill's level now and the next value that sends a check.
 +			std::string skills;
@@ -6414,6 +6433,7 @@ index 0000000..cdd439d
 +	{
 +		int playerLevel = 1;
 +		for ( int p : activePlayers() ) { playerLevel = std::max<int>(playerLevel, stats[p]->LVL); }
++		playerLevel += std::max(0, std::min(5, isBoss ? g_slot.boss_level_bonus : g_slot.enemy_level_bonus));
 +		int monsterLevel = std::max<int>(1, myStats->LVL);
 +		if ( playerLevel > monsterLevel || scaling == 2 )
 +		{

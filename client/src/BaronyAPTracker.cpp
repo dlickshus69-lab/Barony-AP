@@ -1077,6 +1077,15 @@ namespace
 					text(dc, 14, y, L"Champion: " + widen(g_state.values["champion"]) + L" guards the stairs", BAD, g_bodyFont);
 					y += 24;
 				}
+				if ( g_state.values.count("enemyscale") )
+				{
+					int mode = 0, lvl = 0, bonus = 0;
+					sscanf(g_state.values["enemyscale"].c_str(), "%d\t%d\t%d", &mode, &lvl, &bonus);
+					std::wstring t = (mode == 2 ? L"Enemies matched to level " : L"Weaker enemies raised to level ") + std::to_wstring(lvl);
+					if ( bonus > 0 ) { t += L"  (your level +" + std::to_wstring(bonus) + L")"; }
+					text(dc, 14, y, t, BAD, g_bodyFont);
+					y += 24;
+				}
 				if ( g_state.values.count("lvlchecks") )
 				{
 					// Level checks: done / total, and the next level that sends one.

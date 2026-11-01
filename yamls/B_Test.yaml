@@ -40,7 +40,9 @@ Barony:
   enemy_randomizer_secret_areas: false
   extra_monsters: 0
   enemy_level_scaling: off
+  enemy_level_bonus: 0
   boss_level_scaling: off
+  boss_level_bonus: 0
   difficulty_scaling: true
   difficulty: normal
 

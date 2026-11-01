@@ -101,6 +101,8 @@ namespace
 		int lantern_darkness = 2;
 		int wanted_time_limit = 5;    // minutes until Wanted (shopkeepers hostile) wears off, 0 = never (5 for older seeds)
 		int wanted_clears_on_new_floor = 0;
+		int enemy_level_bonus = 0;    // Level Scaling: this many levels above yours
+		int boss_level_bonus = 0;
 		int floor_themes = 0;         // some floors get a theme (a twist for the whole floor)
 		int floor_theme_chance = 30;
 		int floor_theme_mask = 0;     // which themes (bit per theme, 0 = all)
@@ -642,6 +644,8 @@ namespace
 		registerSlotInt("lantern_darkness", &SlotOptions::lantern_darkness);
 		registerSlotInt("wanted_time_limit", &SlotOptions::wanted_time_limit);
 		registerSlotInt("wanted_clears_on_new_floor", &SlotOptions::wanted_clears_on_new_floor);
+		registerSlotInt("enemy_level_bonus", &SlotOptions::enemy_level_bonus);
+		registerSlotInt("boss_level_bonus", &SlotOptions::boss_level_bonus);
 		registerSlotInt("floor_themes", &SlotOptions::floor_themes);
 		registerSlotInt("floor_theme_chance", &SlotOptions::floor_theme_chance);
 		registerSlotInt("floor_theme_mask", &SlotOptions::floor_theme_mask);
@@ -3538,6 +3542,12 @@ namespace
 				if ( isChecked(ap_ids::BASE_ID + ap_ids::LEVEL_OFFSET + lv) ) { ++done; }
 				else if ( !next ) { next = lv; }
 			}
+			if ( g_slot.enemy_level_scaling > 0 )
+			{
+				// Enemy Level Scaling: the level enemies are scaled to (yours plus Enemy Level Bonus).
+				out << "enemyscale=" << g_slot.enemy_level_scaling << "\t" << (int)stats[clientnum]->LVL + g_slot.enemy_level_bonus
+					<< "\t" << g_slot.enemy_level_bonus << "\n";
+			}
 			out << "charlvl=" << (int)stats[clientnum]->LVL << "\nlvlchecks=" << done << "\t" << total << "\t" << next << "\n";
 			// Skill checks: each skill's level now and the next value that sends a check.
 			std::string skills;
@@ -4463,6 +4473,7 @@ void onMonsterInit(Entity* my, Stat* myStats)
 	{
 		int playerLevel = 1;
 		for ( int p : activePlayers() ) { playerLevel = std::max<int>(playerLevel, stats[p]->LVL); }
+		playerLevel += std::max(0, std::min(5, isBoss ? g_slot.boss_level_bonus : g_slot.enemy_level_bonus));
 		int monsterLevel = std::max<int>(1, myStats->LVL);
 		if ( playerLevel > monsterLevel || scaling == 2 )
 		{

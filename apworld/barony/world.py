@@ -468,6 +468,8 @@ class BaronyWorld(World):
             "checkpoint_interval": o.checkpoint_interval.value,
             "layout_seed": o.layout_seed.value,
             "enemy_level_scaling": o.enemy_level_scaling.value,
+            "enemy_level_bonus": o.enemy_level_bonus.value,
+            "boss_level_bonus": o.boss_level_bonus.value,
             "death_link": int(bool(o.death_link)),
             "players": o.players.value,
         }
