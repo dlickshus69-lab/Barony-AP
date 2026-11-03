@@ -3424,6 +3424,19 @@ namespace
 	LootCounts g_loot;
 	int g_lootToggles = 0; // F4 presses; the tracker flips between full and short when this changes
 
+	// An item a player dropped (picked up before, so already yours) isn't loot left to find.
+	bool droppedByPlayer(Entity* e)
+	{
+		Uint32 owner = (Uint32)e->itemOriginalOwner;
+		if ( !owner ) { return false; }
+		for ( int p = 0; p < MAXPLAYERS; ++p )
+		{
+			if ( players[p] && players[p]->entity && players[p]->entity->getUID() == owner ) { return true; }
+		}
+		Entity* o = uidToEntity(owner);
+		return o && o->behavior == &actPlayer;
+	}
+
 	LootCounts countLoot()
 	{
 		LootCounts c;
@@ -3434,6 +3447,7 @@ namespace
 			if ( !e ) { continue; }
 			if ( e->behavior == &actItem && e->skill[10] != AP_ITEM_TYPE && !isFloorKeyEntity(e) )
 			{
+				if ( droppedByPlayer(e) ) { continue; }
 				int type = e->skill[10];
 				if ( type >= 0 && type < NUMITEMS )
 				{

@@ -1,4 +1,4 @@
-From 3587b55f40f6ba57665a412ef54458dab8f87132 Mon Sep 17 00:00:00 2001
+From 9c8815563847f2c8c3ef70a39db7b1ec5b17b2fd Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -12,7 +12,7 @@ Subject: [PATCH] Archipelago client hooks
  src/actladder.cpp                 |   25 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |   10 +-
- src/archipelago_barony.cpp        | 5740 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 5754 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |  129 +
  src/archipelago_ids.hpp           |  248 ++
  src/charclass.cpp                 |    4 +
@@ -31,7 +31,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   20 +
  src/ui/MainMenu.cpp               |    5 +-
- 27 files changed, 8077 insertions(+), 4 deletions(-)
+ 27 files changed, 8091 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -1954,10 +1954,10 @@ index 0872ea6..aee34f8 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..737df5c
+index 0000000..eede58c
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,5740 @@
+@@ -0,0 +1,5754 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -5384,6 +5384,19 @@ index 0000000..737df5c
 +	LootCounts g_loot;
 +	int g_lootToggles = 0; // F4 presses; the tracker flips between full and short when this changes
 +
++	// An item a player dropped (picked up before, so already yours) isn't loot left to find.
++	bool droppedByPlayer(Entity* e)
++	{
++		Uint32 owner = (Uint32)e->itemOriginalOwner;
++		if ( !owner ) { return false; }
++		for ( int p = 0; p < MAXPLAYERS; ++p )
++		{
++			if ( players[p] && players[p]->entity && players[p]->entity->getUID() == owner ) { return true; }
++		}
++		Entity* o = uidToEntity(owner);
++		return o && o->behavior == &actPlayer;
++	}
++
 +	LootCounts countLoot()
 +	{
 +		LootCounts c;
@@ -5394,6 +5407,7 @@ index 0000000..737df5c
 +			if ( !e ) { continue; }
 +			if ( e->behavior == &actItem && e->skill[10] != AP_ITEM_TYPE && !isFloorKeyEntity(e) )
 +			{
++				if ( droppedByPlayer(e) ) { continue; }
 +				int type = e->skill[10];
 +				if ( type >= 0 && type < NUMITEMS )
 +				{
