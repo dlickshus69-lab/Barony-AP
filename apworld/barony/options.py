@@ -750,6 +750,55 @@ class WantedClearsOnNewFloor(Toggle):
     display_name = "Wanted Clears on New Floor"
 
 
+class FloorChallenges(Toggle):
+    """
+    Sometimes a floor dares you: a challenge shown when you arrive, on screen and on the tracker.
+    Finish the floor while keeping the dare and you get some gold, and the first few (Challenge Checks)
+    are checks. Break it and nothing bad happens; it just turns red.
+    Speedrun: take the stairs down within the time shown.
+    Pacifist: leave without killing anything.
+    Untouched: leave without taking any damage.
+    No Potions: leave without drinking a potion.
+    Barehanded: kill at least one enemy, and only with no weapon in your hands.
+    Exterminator: kill every enemy on the floor before you leave.
+    A restarted floor gives the same dare again. Never on the starting floor, boss, town or Sanctum
+    floors, or in secret areas.
+    """
+    display_name = "Floor Challenges"
+
+
+class ChallengeChance(Range):
+    """
+    Only used with Floor Challenges on.
+    The chance, in percent, that a floor has a dare.
+    """
+    display_name = "Challenge Chance"
+    range_start = 10
+    range_end = 100
+    default = 30
+
+
+class ChallengeChecks(Range):
+    """
+    Only used with Floor Challenges on.
+    The first this many dares you complete (counted across runs) are checks. 0 = dares only give gold.
+    """
+    display_name = "Challenge Checks"
+    range_start = 0
+    range_end = 20
+    default = 5
+
+
+class ChallengeList(OptionSet):
+    """
+    Only used with Floor Challenges on.
+    Which dares can show up. Leave it empty for all of them.
+    """
+    display_name = "Challenge List"
+    valid_keys = ["Speedrun", "Pacifist", "Untouched", "No Potions", "Barehanded", "Exterminator"]
+    default = frozenset(valid_keys)
+
+
 class RandomizeLoot(Choice):
     """
     Rerolls the ordinary loot: what's in chests, what shopkeepers sell, and items lying on the floor.
@@ -1039,6 +1088,56 @@ class SkillChecks(Choice):
     default = option_off
 
 
+class SkillCheckStyle(Choice):
+    """
+    Only used with Skill Checks on.
+    Ranks: a check when a skill reaches a rank (20, 40, 60, 80, 100), as set by Skill Check Max Rank.
+    Gains: a check each time you raise one of your class's own skills by Gain Step points, counted from
+    where your class starts it. A Mesmer with Gain Step 20 gets checks at Leadership 80 and 100,
+    Sorcery 45 and 65, and so on. Every class gets about the same number, and the skills it starts
+    strong in still give checks. Lore, Trading and Stealth only count with Gains: Include Lore, Trading
+    and Stealth (or with Skill Checks: Any Class).
+    """
+    display_name = "Skill Check Style"
+    option_ranks = 0
+    option_gains = 1
+    default = option_ranks
+
+
+class GainStep(Range):
+    """
+    Only used with Skill Check Style: Gains.
+    How many skill points each Gains check needs. 10 is a check every 10 points, 20 every 20.
+    """
+    display_name = "Gain Step"
+    range_start = 5
+    range_end = 25
+    default = 10
+
+
+class GainsPerSkill(Range):
+    """
+    Only used with Skill Check Style: Gains.
+    How many Gains checks each skill gives (a skill stops at 100). Lowered to fit your run: a fresh
+    character gains roughly 25 skill points in a skill it uses every 10 floors, so short runs get
+    fewer (and with no lives and no checkpoints, fewer still).
+    Recommended with Gain Step 10: short run 2, medium 3, normal length 4, long 5.
+    """
+    display_name = "Gains Per Skill"
+    range_start = 1
+    range_end = 5
+    default = 3
+
+
+class GainsIncludeUniversal(Toggle):
+    """
+    Only used with Skill Check Style: Gains.
+    Also counts Lore, Trading and Stealth, the skills every class can raise (from where your class
+    starts them). Off: only your class's own main skills.
+    """
+    display_name = "Gains: Include Lore, Trading and Stealth"
+
+
 class LockClass(DefaultOnToggle):
     """
     Only used with Skill Checks set to a class.
@@ -1089,7 +1188,7 @@ class SpellSanityDLCSpells(Toggle):
 
 class SkillCheckMaxRank(Choice):
     """
-    Only used with Skill Checks on.
+    Only used with Skill Checks on and Skill Check Style: Ranks.
     How high the skill checks go. A rank is the skill's level, the number shown next to it in the game,
     not points on top of what you have: Basic means the skill is at 20 or more, Skilled 40, Expert 60,
     Master 80, Legendary 100. Ranks your class already starts at aren't checks: a Ninja starts with
@@ -1327,6 +1426,10 @@ class BaronyOptions(PerGameCommonOptions):
     floor_keys: FloorKeys
     skill_checks: SkillChecks
     skill_check_max_rank: SkillCheckMaxRank
+    skill_check_style: SkillCheckStyle
+    gain_step: GainStep
+    gains_per_skill: GainsPerSkill
+    gains_include_universal: GainsIncludeUniversal
     lock_class: LockClass
     spell_sanity: SpellSanity
     spell_upgrades: SpellUpgrades
@@ -1356,6 +1459,10 @@ class BaronyOptions(PerGameCommonOptions):
     bounty_enemies: BountyEnemies
     bounty_chance: BountyChance
     bounty_checks: BountyChecks
+    floor_challenges: FloorChallenges
+    challenge_chance: ChallengeChance
+    challenge_checks: ChallengeChecks
+    challenge_list: ChallengeList
     wanted_time_limit: WantedTimeLimit
     wanted_clears_on_new_floor: WantedClearsOnNewFloor
     floor_themes: FloorThemes
@@ -1419,7 +1526,8 @@ option_groups = [
                            SpecialAreaChecks]),
     OptionGroup("Enemy Checks", [EnemySanity, EnemySanityChecks, EnemySanityKillsPerCheck, EnemySanityPerFloor,
                                  BestiaryChecks]),
-    OptionGroup("Class, Skills & Spells", [SkillChecks, SkillCheckMaxRank, LockClass, SpellSanity, SpellUpgrades,
+    OptionGroup("Class, Skills & Spells", [SkillChecks, SkillCheckStyle, SkillCheckMaxRank, GainStep, GainsPerSkill,
+                                           GainsIncludeUniversal, LockClass, SpellSanity, SpellUpgrades,
                                            SpellSanityDLCSpells, SpellbookChecks]),
     # Dying.
     OptionGroup("Lives & Checkpoints", [Lives, ExtraLivesInPool, CheckpointInterval, DeathPenalty, DeathItems,
@@ -1433,7 +1541,8 @@ option_groups = [
     # Optional twists.
     OptionGroup("Extras", [ProgressiveLantern, LanternDarkness, BountyEnemies, BountyChance, BountyChecks,
                            MerchantCaravan, CaravanChance, CaravanChecks, CaravanHints]),
-    OptionGroup("Challenges", [ChampionFloors, ChampionLocksStairs, ChampionChecks]),
+    OptionGroup("Challenges", [ChampionFloors, ChampionLocksStairs, ChampionChecks, FloorChallenges, ChallengeChance,
+                               ChallengeChecks, ChallengeList]),
     OptionGroup("Floor Themes", [FloorThemes, FloorThemeChance, FloorThemeList]),
     OptionGroup("Music", [MusicShuffle, MusicSeed, MusicMods]),
     OptionGroup("Quality of Life", [FloorKeyOnTrackerMap, WantedTimeLimit, WantedClearsOnNewFloor]),

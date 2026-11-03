@@ -1121,6 +1121,23 @@ namespace
 						y += 22;
 					}
 				}
+				if ( !g_state.values["dare"].empty() )
+				{
+					// Floor Challenges: the dare, and whether it's still kept.
+					std::string v = g_state.values["dare"];
+					std::vector<std::string> f;
+					size_t pos = 0;
+					while ( true ) { size_t t = v.find('\t', pos); f.push_back(v.substr(pos, t == std::string::npos ? std::string::npos : t - pos)); if ( t == std::string::npos ) { break; } pos = t + 1; }
+					if ( f.size() >= 4 )
+					{
+						bool broken = f[1] == "1";
+						int left = atoi(f[3].c_str());
+						std::wstring t = (broken ? L"Dare broken: " : L"Dare: ") + widen(f[0]) + L" (" + widen(f[2]) + L")";
+						if ( left >= 0 && !broken ) { wchar_t tb[32]; swprintf(tb, 32, L"  %d:%02d left", left / 60, left % 60); t += tb; }
+						text(dc, 14, y, t, broken ? BAD : GOLD, g_bodyFont);
+						y += 24;
+					}
+				}
 				if ( !g_state.values["theme"].empty() )
 				{
 					text(dc, 14, y, L"Floor theme: " + widen(g_state.values["theme"]), SECRET, g_bodyFont);

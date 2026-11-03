@@ -1,20 +1,20 @@
-From 9c8815563847f2c8c3ef70a39db7b1ec5b17b2fd Mon Sep 17 00:00:00 2001
+From 1bff6b5a6c683fcc3d3ec1956b2061dc20a0aed2 Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
 
 ---
  CMakeLists.txt                    |   32 +
- src/BaronyAPTracker.cpp           | 1667 +++++++++
+ src/BaronyAPTracker.cpp           | 1684 ++++++++
  src/CMakeLists.txt                |    1 +
  src/actchest.cpp                  |    7 +
  src/actgeneral.cpp                |    2 +
  src/actladder.cpp                 |   25 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |   10 +-
- src/archipelago_barony.cpp        | 5754 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 5998 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |  129 +
- src/archipelago_ids.hpp           |  248 ++
+ src/archipelago_ids.hpp           |  279 ++
  src/charclass.cpp                 |    4 +
  src/engine/audio/music.cpp        |    4 +
  src/engine/audio/sound_game.cpp   |    2 +
@@ -31,7 +31,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   20 +
  src/ui/MainMenu.cpp               |    5 +-
- 27 files changed, 8091 insertions(+), 4 deletions(-)
+ 27 files changed, 8383 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -82,10 +82,10 @@ index 4e9ed8f..b417834 100644
      # Only for MinGW...
 diff --git a/src/BaronyAPTracker.cpp b/src/BaronyAPTracker.cpp
 new file mode 100644
-index 0000000..982ee36
+index 0000000..e955018
 --- /dev/null
 +++ b/src/BaronyAPTracker.cpp
-@@ -0,0 +1,1667 @@
+@@ -0,0 +1,1684 @@
 +// Barony Archipelago tracker window.
 +//
 +// Barony (the Archipelago build) starts this with the game, and writes
@@ -1209,6 +1209,23 @@ index 0000000..982ee36
 +						y += 22;
 +					}
 +				}
++				if ( !g_state.values["dare"].empty() )
++				{
++					// Floor Challenges: the dare, and whether it's still kept.
++					std::string v = g_state.values["dare"];
++					std::vector<std::string> f;
++					size_t pos = 0;
++					while ( true ) { size_t t = v.find('\t', pos); f.push_back(v.substr(pos, t == std::string::npos ? std::string::npos : t - pos)); if ( t == std::string::npos ) { break; } pos = t + 1; }
++					if ( f.size() >= 4 )
++					{
++						bool broken = f[1] == "1";
++						int left = atoi(f[3].c_str());
++						std::wstring t = (broken ? L"Dare broken: " : L"Dare: ") + widen(f[0]) + L" (" + widen(f[2]) + L")";
++						if ( left >= 0 && !broken ) { wchar_t tb[32]; swprintf(tb, 32, L"  %d:%02d left", left / 60, left % 60); t += tb; }
++						text(dc, 14, y, t, broken ? BAD : GOLD, g_bodyFont);
++						y += 24;
++					}
++				}
 +				if ( !g_state.values["theme"].empty() )
 +				{
 +					text(dc, 14, y, L"Floor theme: " + widen(g_state.values["theme"]), SECRET, g_bodyFont);
@@ -1954,10 +1971,10 @@ index 0872ea6..aee34f8 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..eede58c
+index 0000000..44f3d79
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,5754 @@
+@@ -0,0 +1,5998 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -2062,6 +2079,14 @@ index 0000000..eede58c
 +		int wanted_time_limit = 5;    // minutes until Wanted (shopkeepers hostile) wears off, 0 = never (5 for older seeds)
 +		int wanted_clears_on_new_floor = 0;
 +		int random_pickups_per_floor = 0; // each floor gets 1 up to pickups_per_floor
++		int floor_challenges = 0;     // dares on some floors
++		int challenge_chance = 30;
++		int challenge_checks = 0;
++		int challenge_mask = 0;       // which dares (bit per dare, 0 = all)
++		int skill_check_style = 0;    // 0 ranks, 1 gains
++		int gain_step = 10;
++		int gains_per_skill = 3;
++		int gains_universal = 0;
 +		int enemy_level_bonus = 0;    // Level Scaling: this many levels above yours
 +		int boss_level_bonus = 0;
 +		int floor_themes = 0;         // some floors get a theme (a twist for the whole floor)
@@ -2130,6 +2155,7 @@ index 0000000..eede58c
 +		bool goalSent = false;
 +		long bountyKills = 0;         // bounty enemies defeated (all runs)
 +		long championKills = 0;       // Champions defeated (all runs)
++		long daresDone = 0;           // Floor Challenges completed (all runs)
 +		struct Grave { int floor; long gold; bool claimed; };
 +		std::vector<Grave> graves;    // Death Markers
 +		std::set<int64_t> hinted;     // Caravan Hints already bought
@@ -2387,7 +2413,8 @@ index 0000000..eede58c
 +		out << "darknessQueue=" << g_save.darknessQueue << "\n";
 +		out << "goalBossesKilled=" << g_save.goalBossesKilled << "\n";
 +		out << "goalSent=" << (g_save.goalSent ? 1 : 0) << "\n";
-+		out << "bountyKills=" << g_save.bountyKills << "\nchampionKills=" << g_save.championKills << "\n";
++		out << "bountyKills=" << g_save.bountyKills << "\nchampionKills=" << g_save.championKills
++			<< "\ndaresDone=" << g_save.daresDone << "\n";
 +		out << "runActive=" << (g_save.runActive ? 1 : 0) << "\nrunDeepest=" << g_save.runDeepest << "\nrunKills=" << g_save.runKills
 +			<< "\nrunLivesLost=" << g_save.runLivesLost << "\nrunGoldMax=" << g_save.runGoldMax << "\nrunStartPlay=" << g_save.runStartPlay << "\n";
 +		for ( auto& r : g_save.runs ) { out << "run:" << r << "\n"; }
@@ -2440,6 +2467,7 @@ index 0000000..eede58c
 +			else if ( key == "playSeconds" ) { g_save.playSeconds = (long)value; }
 +			else if ( key == "bountyKills" ) { g_save.bountyKills = (long)value; }
 +			else if ( key == "championKills" ) { g_save.championKills = (long)value; }
++			else if ( key == "daresDone" ) { g_save.daresDone = (long)value; }
 +			else if ( key == "runActive" ) { g_save.runActive = value != 0; }
 +			else if ( key == "runDeepest" ) { g_save.runDeepest = (int)value; }
 +			else if ( key == "runKills" ) { g_save.runKills = (int)value; }
@@ -2606,6 +2634,14 @@ index 0000000..eede58c
 +		registerSlotInt("wanted_time_limit", &SlotOptions::wanted_time_limit);
 +		registerSlotInt("wanted_clears_on_new_floor", &SlotOptions::wanted_clears_on_new_floor);
 +		registerSlotInt("random_pickups_per_floor", &SlotOptions::random_pickups_per_floor);
++		registerSlotInt("floor_challenges", &SlotOptions::floor_challenges);
++		registerSlotInt("challenge_chance", &SlotOptions::challenge_chance);
++		registerSlotInt("challenge_checks", &SlotOptions::challenge_checks);
++		registerSlotInt("challenge_mask", &SlotOptions::challenge_mask);
++		registerSlotInt("skill_check_style", &SlotOptions::skill_check_style);
++		registerSlotInt("gain_step", &SlotOptions::gain_step);
++		registerSlotInt("gains_per_skill", &SlotOptions::gains_per_skill);
++		registerSlotInt("gains_universal", &SlotOptions::gains_universal);
 +		registerSlotInt("enemy_level_bonus", &SlotOptions::enemy_level_bonus);
 +		registerSlotInt("boss_level_bonus", &SlotOptions::boss_level_bonus);
 +		registerSlotInt("floor_themes", &SlotOptions::floor_themes);
@@ -3208,9 +3244,51 @@ index 0000000..eede58c
 +		return start;
 +	}
 +
++	// Gains: where a skill's Gains count from (the class's starting value), or -1 if it doesn't count.
++	int gainStart(int skill)
++	{
++		int sc = g_slot.skill_checks;
++		if ( sc <= 0 || skill < 0 || skill >= ap_ids::NUM_SKILLS ) { return -1; }
++		bool anyClass = sc == 1;
++		int value = (!anyClass && sc - 2 < ap_ids::NUM_SKILL_CLASSES) ? ap_ids::CLASS_SKILL_VALUE[sc - 2][skill] : 0;
++		if ( !anyClass && value >= 20 ) { return value; }
++		if ( ap_ids::SKILL_UNIVERSAL[skill] && (anyClass || g_slot.gains_universal) ) { return value; }
++		return -1;
++	}
++
++	// The k-th Gains target for a skill (0 when it would pass 100 or k is past Gains Per Skill).
++	int gainTarget(int skill, int k)
++	{
++		int start = gainStart(skill);
++		if ( start < 0 || k < 1 || k > std::min(5, g_slot.gains_per_skill) ) { return 0; }
++		int target = start + k * std::max(1, g_slot.gain_step);
++		return target <= 100 ? target : 0;
++	}
++
++	void sendGainChecks()
++	{
++		for ( int skill = 0; skill < ap_ids::NUM_SKILLS; ++skill )
++		{
++			int have = stats[clientnum]->getProficiency(skill);
++			for ( int k = 1; k <= 5; ++k )
++			{
++				int target = gainTarget(skill, k);
++				if ( !target ) { break; }
++				if ( have < target ) { break; }
++				int64_t loc = ap_ids::BASE_ID + ap_ids::GAIN_OFFSET + skill * 5 + k;
++				if ( !isChecked(loc) )
++				{
++					sendLocation(loc);
++					say(COLOR_AP, "Skill check: %s reached %d!", ap_ids::SKILL_NAMES[skill], target);
++				}
++			}
++		}
++	}
++
 +	void sendSkillChecks()
 +	{
 +		if ( g_slot.skill_checks <= 0 || !stats[clientnum] ) { return; }
++		if ( g_slot.skill_check_style == 1 ) { sendGainChecks(); return; }
 +		for ( int skill = 0; skill < ap_ids::NUM_SKILLS; ++skill )
 +		{
 +			int start = skillStart(skill);
@@ -5003,6 +5081,146 @@ index 0000000..eede58c
 +		}
 +	}
 +
++	// ------------------------------------------------------- Floor Challenges
++	// Some floors dare you to play a certain way. Keep the dare until you take the stairs for gold
++	// and (the first few times) a check. Breaking it costs nothing.
++	enum Dare { DARE_NONE, DARE_SPEEDRUN, DARE_PACIFIST, DARE_UNTOUCHED, DARE_NO_POTIONS, DARE_BAREHANDED,
++		DARE_EXTERMINATOR, DARE_COUNT };
++	const char* const DARE_NAMES[DARE_COUNT] = { "", "Speedrun", "Pacifist", "Untouched", "No Potions", "Barehanded",
++		"Exterminator" };
++	const char* const DARE_TEXT[DARE_COUNT] = { "", "take the stairs down in time", "kill nothing on this floor",
++		"take no damage on this floor", "drink no potions on this floor", "kill with no weapon in your hands",
++		"kill every enemy before you leave" };
++	int g_dare = DARE_NONE, g_dareLevel = -1;
++	Uint32 g_dareRunKey = 0;
++	bool g_dareFailed = false, g_dareCleared = false;
++	int g_dareKills = 0, g_dareBareKills = 0;
++	Sint32 g_dareLastHP = 0;
++	Uint32 g_dareTicks = 0;      // dungeon ticks on this floor (not paused)
++	int g_dareSeconds = 0;       // Speedrun: the time limit
++
++	bool dareActive() { return g_dare != DARE_NONE && g_dareLevel == currentlevel && g_dareRunKey == uniqueGameKey && !secretlevel; }
++
++	void failDare(const char* why)
++	{
++		if ( g_dareFailed || !dareActive() ) { return; }
++		g_dareFailed = true;
++		say(COLOR_TRAP, "Dare broken (%s): %s.", DARE_NAMES[g_dare], why);
++	}
++
++	void resetDareProgress()
++	{
++		g_dareFailed = false;
++		g_dareCleared = false;
++		g_dareKills = 0;
++		g_dareBareKills = 0;
++		g_dareTicks = 0;
++		g_dareLastHP = stats[clientnum] ? stats[clientnum]->HP : 0;
++	}
++
++	// Called as you arrive on a new floor: was the last floor's dare kept?
++	void finishDare()
++	{
++		if ( g_dare == DARE_NONE || g_dareRunKey != uniqueGameKey ) { g_dare = DARE_NONE; return; }
++		bool kept = !g_dareFailed;
++		switch ( g_dare )
++		{
++			case DARE_SPEEDRUN: kept = kept && g_dareTicks <= (Uint32)g_dareSeconds * TICKS_PER_SECOND; break;
++			case DARE_PACIFIST: kept = kept && g_dareKills == 0; break;
++			case DARE_BAREHANDED: kept = kept && g_dareBareKills > 0; break;
++			case DARE_EXTERMINATOR: kept = kept && g_dareCleared; break;
++			default: break;
++		}
++		int dare = g_dare;
++		g_dare = DARE_NONE;
++		if ( !kept )
++		{
++			say(COLOR_TRAP, "Dare not kept: %s.", DARE_NAMES[dare]);
++			return;
++		}
++		++g_save.daresDone;
++		int gold = 30 + 10 * std::max(1, g_dareLevel);
++		if ( stats[clientnum] ) { stats[clientnum]->GOLD += gold; }
++		say(COLOR_AP, "Dare kept: %s! +%d gold.", DARE_NAMES[dare], gold);
++		if ( g_slot.challenge_checks > 0 && g_save.daresDone <= g_slot.challenge_checks )
++		{
++			sendLocation(ap_ids::BASE_ID + ap_ids::CHALLENGE_OFFSET + g_save.daresDone);
++			say(COLOR_AP, "Floor Challenge check %ld of %d sent.", g_save.daresDone, g_slot.challenge_checks);
++		}
++		writeSave();
++	}
++
++	void pickDare(bool restarted)
++	{
++		if ( restarted && g_dareLevel == currentlevel && g_dareRunKey == uniqueGameKey && g_dare != DARE_NONE )
++		{
++			resetDareProgress(); // the same dare again
++			say(COLOR_AP, "Dare: %s (%s).", DARE_NAMES[g_dare], DARE_TEXT[g_dare]);
++			return;
++		}
++		g_dare = DARE_NONE;
++		g_dareLevel = currentlevel;
++		g_dareRunKey = uniqueGameKey;
++		if ( !g_slot.floor_challenges || currentlevel < 1 || secretlevel || isSpecialMap() ) { return; }
++		if ( (int)(local_rng.rand() % 100) >= g_slot.challenge_chance ) { return; }
++		int mask = g_slot.challenge_mask ? g_slot.challenge_mask : (1 << (DARE_COUNT - 1)) - 1;
++		std::vector<int> pool;
++		for ( int d = 1; d < DARE_COUNT; ++d )
++		{
++			if ( !(mask & (1 << (d - 1))) ) { continue; }
++			// Pacifist can't work where the stairs need every enemy dead, or a Champion guards them.
++			if ( d == DARE_PACIFIST && (g_slot.floor_key_requirement == 2 || (g_slot.champion_locks_stairs && g_championUid)) ) { continue; }
++			pool.push_back(d);
++		}
++		if ( pool.empty() ) { return; }
++		g_dare = pool[local_rng.rand() % pool.size()];
++		g_dareSeconds = 180 + 15 * currentlevel;
++		resetDareProgress();
++		if ( g_dare == DARE_SPEEDRUN )
++		{
++			say(COLOR_AP, "Dare: Speedrun! Take the stairs down within %d:%02d.", g_dareSeconds / 60, g_dareSeconds % 60);
++		}
++		else
++		{
++			say(COLOR_AP, "Dare: %s (%s).", DARE_NAMES[g_dare], DARE_TEXT[g_dare]);
++		}
++	}
++
++	void updateDare()
++	{
++		if ( !dareActive() || !stats[clientnum] ) { return; }
++		if ( !gamePaused && !loading ) { ++g_dareTicks; }
++		Stat* s = stats[clientnum];
++		if ( g_dare == DARE_UNTOUCHED && s->HP < g_dareLastHP && !graceActive() ) { failDare("you took damage"); }
++		g_dareLastHP = s->HP;
++		if ( g_dare == DARE_SPEEDRUN && g_dareTicks > (Uint32)g_dareSeconds * TICKS_PER_SECOND ) { failDare("out of time"); }
++		if ( g_dare == DARE_EXTERMINATOR && !g_dareCleared && ticks % TICKS_PER_SECOND == 0 && map.creatures )
++		{
++			bool any = false;
++			for ( node_t* node = map.creatures->first; node && !any; node = node->next )
++			{
++				Entity* e = (Entity*)node->element;
++				Stat* st = e ? e->getStats() : nullptr;
++				if ( st && st->HP > 0 && isRemovableEnemy(e) ) { any = true; }
++			}
++			if ( !any ) { g_dareCleared = true; say(COLOR_AP, "Every enemy here is down. Dare done: take the stairs!"); }
++		}
++	}
++
++	void dareOnKill()
++	{
++		if ( !dareActive() ) { return; }
++		++g_dareKills;
++		if ( g_dare == DARE_PACIFIST ) { failDare("something died"); }
++		if ( g_dare == DARE_BAREHANDED )
++		{
++			if ( stats[clientnum] && stats[clientnum]->weapon ) { failDare("a kill with a weapon in hand"); }
++			else { ++g_dareBareKills; }
++		}
++	}
++
++	void dareOnPotion() { if ( dareActive() && g_dare == DARE_NO_POTIONS ) { failDare("you drank a potion"); } }
++
 +	// ------------------------------------------------------- Floor Themes
 +	// Some floors get a theme: a downside and an upside for the whole floor.
 +	enum Theme { THEME_NONE, THEME_DARK, THEME_HAUNTED, THEME_RICH, THEME_SWARM, THEME_ELITE, THEME_CURSED,
@@ -5260,6 +5478,7 @@ index 0000000..eede58c
 +		}
 +		spawnExtraMonsters(); // before the kill removal, so extra monsters you killed stay dead too
 +		applyTheme(restarted);
++		if ( !restarted ) { finishDare(); }
 +		if ( !restarted && g_slot.wanted_clears_on_new_floor ) { clearWanted("A new floor, a clean slate: you're no longer Wanted."); }
 +		if ( restarted ) { removeKilledEnemies(); }
 +		else { g_floorKills = 0; }
@@ -5295,6 +5514,7 @@ index 0000000..eede58c
 +		pickMarkedEnemies();
 +		pickBounty(restarted);
 +		pickChampion(restarted);
++		pickDare(restarted);
 +		if ( restarted ) { startGrace(); }
 +		if ( !g_routeNote.empty() ) { say(COLOR_AP, "%s", g_routeNote.c_str()); g_routeNote.clear(); }
 +		spawnGraves();
@@ -5531,7 +5751,21 @@ index 0000000..eede58c
 +			out << "charlvl=" << (int)stats[clientnum]->LVL << "\nlvlchecks=" << done << "\t" << total << "\t" << next << "\n";
 +			// Skill checks: each skill's level now and the next value that sends a check.
 +			std::string skills;
-+			for ( int skill = 0; skill < ap_ids::NUM_SKILLS && g_slot.skill_checks > 0; ++skill )
++			for ( int skill = 0; skill < ap_ids::NUM_SKILLS && g_slot.skill_checks > 0 && g_slot.skill_check_style == 1; ++skill )
++			{
++				for ( int k = 1; k <= 5; ++k )
++				{
++					int target = gainTarget(skill, k);
++					if ( !target ) { break; }
++					if ( isChecked(ap_ids::BASE_ID + ap_ids::GAIN_OFFSET + skill * 5 + k) ) { continue; }
++					char buf[96];
++					snprintf(buf, sizeof(buf), "%s|%d|%d|gain %d of %d;", ap_ids::SKILL_NAMES[skill],
++						(int)stats[clientnum]->getProficiency(skill), target, k, std::min(5, g_slot.gains_per_skill));
++					skills += buf;
++					break;
++				}
++			}
++			for ( int skill = 0; skill < ap_ids::NUM_SKILLS && g_slot.skill_checks > 0 && g_slot.skill_check_style == 0; ++skill )
 +			{
 +				int start = skillStart(skill);
 +				if ( start < 0 ) { continue; }
@@ -5568,6 +5802,12 @@ index 0000000..eede58c
 +			out << "champion=" << (cs && cs->HP > 0 ? getMonsterLocalizedName((Monster)cs->type) : std::string()) << "\n";
 +			out << "caravan=" << (caravanAlive() ? 1 : 0) << "\ngraves=" << g_graveEntities.size() << "\n";
 +			out << "theme=" << (g_theme != THEME_NONE && g_themeLevel == currentlevel ? THEME_NAMES[g_theme] : "") << "\n";
++			if ( dareActive() )
++			{
++				int left = g_dare == DARE_SPEEDRUN ? std::max(0, g_dareSeconds - (int)(g_dareTicks / TICKS_PER_SECOND)) : -1;
++				out << "dare=" << DARE_NAMES[g_dare] << "\t" << (g_dareFailed ? 1 : 0) << "\t" << DARE_TEXT[g_dare] << "\t" << left << "\n";
++			}
++			else { out << "dare=\n"; }
 +			if ( g_slot.progressive_lantern ) { out << "lantern=" << std::min(3, countReceived(ap_ids::ITEM_LANTERN)) << "\n"; }
 +		}
 +		out << "secretexit=" << (g_floorHasSecretExit && !secretlevel ? 1 : 0) << "\n";
@@ -6209,6 +6449,7 @@ index 0000000..eede58c
 +	updateChampion();
 +	updateTheme();
 +	updateWanted();
++	updateDare();
 +	updateGrace();
 +	updateGraves();
 +	if ( stats[clientnum] && stats[clientnum]->GOLD > g_save.runGoldMax ) { g_save.runGoldMax = stats[clientnum]->GOLD; }
@@ -6517,6 +6758,7 @@ index 0000000..eede58c
 +	if ( g_bountyUid && my->getUID() == g_bountyUid ) { claimBounty(my); }
 +	if ( g_championUid && my->getUID() == g_championUid ) { claimChampion(my); }
 +	themeOnKill(my);
++	dareOnKill();
 +	if ( type != MINOTAUR && type != LICH && type != DEVIL && type != LICH_ICE && type != LICH_FIRE )
 +	{
 +		++g_floorKills;
@@ -6912,7 +7154,11 @@ index 0000000..eede58c
 +}
 +
 +bool isCompassItem(const Item* item) { return isCompassItemPrivate(item); }
-+bool useCompassItem(Item* item, int player) { return useCompassPrivate(item, player); }
++bool useCompassItem(Item* item, int player)
++{
++	if ( item && player == clientnum && itemCategory(item) == POTION ) { dareOnPotion(); } // Floor Challenges: No Potions
++	return useCompassPrivate(item, player);
++}
 +
 +bool isFloorKey(const Item* item)
 +{
@@ -7377,6 +7623,21 @@ index 0000000..eede58c
 +			char tb[64];
 +			snprintf(tb, sizeof(tb), "Floor theme: %s", THEME_NAMES[g_theme]);
 +			drawText(tb, BIG_FONT, makeColorRGB(190, 140, 255), 38, row);
++			row += 22;
++		}
++		if ( dareActive() )
++		{
++			char db[128];
++			if ( g_dare == DARE_SPEEDRUN && !g_dareFailed )
++			{
++				int left = std::max(0, g_dareSeconds - (int)(g_dareTicks / TICKS_PER_SECOND));
++				snprintf(db, sizeof(db), "Dare: Speedrun, %d:%02d left", left / 60, left % 60);
++			}
++			else
++			{
++				snprintf(db, sizeof(db), "%s: %s (%s)", g_dareFailed ? "Dare broken" : "Dare", DARE_NAMES[g_dare], DARE_TEXT[g_dare]);
++			}
++			drawText(db, BIG_FONT, g_dareFailed ? makeColorRGB(200, 90, 80) : makeColorRGB(255, 210, 90), 38, row);
 +			row += 22;
 +		}
 +		if ( wantedSecondsLeft() >= 0 )
@@ -7849,10 +8110,10 @@ index 0000000..fd52f0b
 +}
 diff --git a/src/archipelago_ids.hpp b/src/archipelago_ids.hpp
 new file mode 100644
-index 0000000..8883f58
+index 0000000..9f2d8f1
 --- /dev/null
 +++ b/src/archipelago_ids.hpp
-@@ -0,0 +1,248 @@
+@@ -0,0 +1,279 @@
 +// GENERATED by tools/gen_cpp_ids.py from apworld/barony/data.py. Do not edit by hand.
 +#pragma once
 +#include <cstdint>
@@ -7872,6 +8133,8 @@ index 0000000..8883f58
 +constexpr int64_t SPELL_ITEM_OFFSET = 100;
 +constexpr int64_t BOUNTY_OFFSET = 1200;
 +constexpr int64_t CHAMPION_OFFSET = 1300;
++constexpr int64_t GAIN_OFFSET = 1500;
++constexpr int64_t CHALLENGE_OFFSET = 1600;
 +constexpr int64_t CARAVAN_OFFSET = 1400;
 +constexpr int MAX_FLOOR = 45;
 +constexpr int FLOORS_PER_SECTION = 5;
@@ -8099,6 +8362,35 @@ index 0000000..8883f58
 +    { -1, -1, -1, -1, 40, -1, 40, 40, -1, -1, -1, -1, -1, -1, -1, -1 }, // Scion
 +    { -1, 25, -1, -1, -1, -1, 40, -1, -1, -1, 25, -1, -1, -1, -1, -1 }, // Hermit
 +    { -1, -1, -1, 25, 25, -1, -1, -1, -1, 50, -1, -1, -1, -1, -1, -1 }, // Paladin
++};
++// Every skill each class starts with (0 if none), for Gains.
++static const int CLASS_SKILL_VALUE[NUM_SKILL_CLASSES][NUM_SKILLS] = {
++    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 25, 50, 0, 25, 20, 10 }, // Barbarian
++    { 0, 0, 0, 0, 0, 40, 0, 0, 25, 25, 0, 0, 50, 25, 10, 0 }, // Warrior
++    { 0, 0, 0, 10, 50, 0, 25, 0, 0, 0, 0, 0, 25, 10, 0, 30 }, // Healer
++    { 40, 50, 0, 25, 0, 0, 0, 0, 25, 25, 0, 0, 0, 0, 0, 20 }, // Rogue
++    { 0, 25, 25, 0, 0, 0, 0, 0, 25, 0, 0, 0, 25, 0, 10, 30 }, // Wanderer
++    { 0, 0, 0, 0, 40, 20, 0, 0, 0, 0, 25, 0, 0, 10, 0, 20 }, // Cleric
++    { 10, 0, 50, 50, 0, 20, 0, 0, 0, 0, 0, 25, 0, 0, 0, 10 }, // Merchant
++    { 0, 0, 0, 10, 15, 0, 0, 50, 0, 0, 0, 0, 25, 0, 0, 10 }, // Wizard
++    { 25, 25, 0, 0, 0, 0, 0, 30, 25, 0, 0, 0, 0, 0, 0, 0 }, // Arcanist
++    { 25, 10, 25, 0, 0, 20, 25, 10, 20, 0, 0, 0, 0, 0, 0, 10 }, // Joker
++    { 0, 40, 0, 0, 0, 0, 40, 0, 20, 0, 10, 0, 0, 10, 0, 20 }, // Sexton
++    { 0, 60, 0, 0, 0, 0, 0, 0, 40, 60, 0, 0, 0, 0, 0, 0 }, // Ninja
++    { 0, 0, 0, 0, 25, 10, 0, 0, 0, 0, 0, 0, 0, 40, 50, 20 }, // Monk
++    { 0, 20, 0, 0, 15, 40, 40, 0, 20, 0, 0, 0, 0, 0, 0, 20 }, // Conjurer
++    { 0, 40, 0, 20, 0, 0, 20, 60, 0, 0, 0, 0, 0, 0, 40, 0 }, // Accursed
++    { 0, 0, 0, 0, 0, 60, 60, 25, 0, 0, 0, 0, 20, 0, 0, 0 }, // Mesmer
++    { 0, 0, 10, 10, 0, 25, 0, 0, 0, 0, 0, 10, 0, 0, 25, 50 }, // Brewer
++    { 40, 0, 10, 0, 0, 0, 0, 0, 10, 0, 0, 0, 0, 0, 0, 10 }, // Machinist
++    { 0, 0, 0, 0, 0, 0, 20, 20, 25, 0, 0, 25, 0, 0, 0, 0 }, // Punisher
++    { 0, 10, 0, 0, 0, 0, 40, 0, 0, 0, 0, 0, 0, 0, 10, 10 }, // Shaman
++    { 10, 25, 0, 20, 0, 0, 0, 0, 50, 0, 0, 0, 0, 0, 0, 0 }, // Hunter
++    { 0, 15, 15, 50, 0, 15, 15, 0, 0, 25, 0, 0, 0, 0, 0, 0 }, // Bard
++    { 0, 25, 0, 0, 0, 0, 0, 15, 15, 0, 50, 0, 0, 0, 0, 25 }, // Sapper
++    { 0, 0, 0, 10, 40, 0, 40, 40, 0, 0, 0, 0, 0, 0, 0, 10 }, // Scion
++    { 0, 25, 0, 0, 0, 0, 40, 15, 0, 0, 25, 0, 0, 0, 0, 10 }, // Hermit
++    { 0, 0, 0, 25, 25, 10, 0, 0, 0, 50, 0, 0, 0, 10, 0, 0 }, // Paladin
 +};
 +} // namespace ap_ids
 diff --git a/src/charclass.cpp b/src/charclass.cpp

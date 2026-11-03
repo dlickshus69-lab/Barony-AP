@@ -210,6 +210,42 @@ CLASS_SKILLS: dict[str, dict[int, int]] = {
 }
 
 
+CHALLENGE_OFFSET = 1600   # + k (1..20): the k-th Floor Challenge completed
+MAX_CHALLENGE_CHECKS = 20
+CHALLENGES = ["Speedrun", "Pacifist", "Untouched", "No Potions", "Barehanded", "Exterminator"]
+
+
+def challenge_location(k: int) -> str:
+    return f"Floor Challenge {k}"
+
+
+GAIN_OFFSET = 1500        # + skill * 5 + k (k 1..5): Gains skill checks
+MAX_GAINS_PER_SKILL = 5
+GAIN_FLOORS_PER_POINT = 0.4  # about how many floors of play each skill point takes
+
+
+def gain_location(skill: int, k: int) -> str:
+    return f"Skill Gain: {SKILLS[skill]} {k}"
+
+
+def gain_checks_for(class_name: str | None, step: int, per_skill: int, universal: bool) -> list[tuple[int, int, int]]:
+    """Gains: (skill, k, target) for raising the class's main skills (and, if asked, Lore, Trading
+    and Stealth) by step points k times from where the class starts. Any Class: the universal ones."""
+    starts = {} if class_name is None else CLASS_SKILLS[class_name]
+    skills = {s: v for s, v in starts.items() if v >= 20}
+    if universal or class_name is None:
+        for s in UNIVERSAL_SKILLS:
+            skills.setdefault(s, starts.get(s, 0))
+    out = []
+    for skill in sorted(skills):
+        for k in range(1, per_skill + 1):
+            target = skills[skill] + k * step
+            if target > 100:
+                break
+            out.append((skill, k, target))
+    return out
+
+
 def skill_location(skill: int, rank: int) -> str:
     return f"Skill: {SKILL_RANKS[rank - 1][1]} {SKILLS[skill]}"
 
@@ -354,6 +390,11 @@ for _bk in range(1, MAX_BOUNTY_CHECKS + 1):
     LOCATION_NAME_TO_ID[bounty_location(_bk)] = BASE_ID + BOUNTY_OFFSET + _bk
 for _ck in range(1, MAX_CHAMPION_CHECKS + 1):
     LOCATION_NAME_TO_ID[champion_location(_ck)] = BASE_ID + CHAMPION_OFFSET + _ck
+for _ch in range(1, MAX_CHALLENGE_CHECKS + 1):
+    LOCATION_NAME_TO_ID[challenge_location(_ch)] = BASE_ID + CHALLENGE_OFFSET + _ch
+for _gs in range(len(SKILLS)):
+    for _gk in range(1, MAX_GAINS_PER_SKILL + 1):
+        LOCATION_NAME_TO_ID[gain_location(_gs, _gk)] = BASE_ID + GAIN_OFFSET + _gs * 5 + _gk
 for _cv in range(1, MAX_CARAVAN_CHECKS + 1):
     LOCATION_NAME_TO_ID[caravan_location(_cv)] = BASE_ID + CARAVAN_OFFSET + _cv
 

@@ -65,7 +65,11 @@ Barony:
 
   # Class, Skills & Spells
   skill_checks: off
+  skill_check_style: ranks
   skill_check_max_rank: expert
+  gain_step: 10
+  gains_per_skill: 3
+  gains_include_universal: false
   lock_class: true
   spell_sanity: false
   spell_upgrades: 0
@@ -123,6 +127,16 @@ Barony:
   champion_floors: 0
   champion_locks_stairs: true
   champion_checks: 5
+  floor_challenges: false
+  challenge_chance: 30
+  challenge_checks: 5
+  challenge_list:
+  - Barehanded
+  - Exterminator
+  - No Potions
+  - Pacifist
+  - Speedrun
+  - Untouched
 
   # Floor Themes
   floor_themes: false

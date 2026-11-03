@@ -38,6 +38,8 @@ lines = [
     f"constexpr int64_t SPELL_ITEM_OFFSET = {data.SPELL_ITEM_OFFSET};",
     f"constexpr int64_t BOUNTY_OFFSET = {data.BOUNTY_OFFSET};",
     f"constexpr int64_t CHAMPION_OFFSET = {data.CHAMPION_OFFSET};",
+    f"constexpr int64_t GAIN_OFFSET = {data.GAIN_OFFSET};",
+    f"constexpr int64_t CHALLENGE_OFFSET = {data.CHALLENGE_OFFSET};",
     f"constexpr int64_t CARAVAN_OFFSET = {data.CARAVAN_OFFSET};",
     f"constexpr int MAX_FLOOR = {data.MAX_FLOOR};",
     f"constexpr int FLOORS_PER_SECTION = {data.FLOORS_PER_SECTION};",
@@ -82,6 +84,12 @@ lines.append("// Main skills only (start >= 20), as data.skill_checks_for uses t
 lines.append("static const int CLASS_SKILL_START[NUM_SKILL_CLASSES][NUM_SKILLS] = {")
 for c in data.CLASSES:
     row = [str(v) if v >= 20 else "-1" for v in (data.CLASS_SKILLS[c].get(i, -1) for i in range(len(data.SKILLS)))]
+    lines.append(f"    {{ {', '.join(row)} }}, // {c}")
+lines.append("};")
+lines.append("// Every skill each class starts with (0 if none), for Gains.")
+lines.append("static const int CLASS_SKILL_VALUE[NUM_SKILL_CLASSES][NUM_SKILLS] = {")
+for c in data.CLASSES:
+    row = [str(data.CLASS_SKILLS[c].get(i, 0)) for i in range(len(data.SKILLS))]
     lines.append(f"    {{ {', '.join(row)} }}, // {c}")
 lines += ["};", "} // namespace ap_ids", ""]
 

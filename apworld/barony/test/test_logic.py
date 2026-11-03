@@ -369,6 +369,55 @@ class TestSkillRankFitsRun(BaronyTestBase):
         self.assertEqual(self.world.fill_slot_data()["skill_check_max_rank"], 2)
 
 
+class TestIgnoredSettingsNote(BaronyTestBase):
+    """Settings changed from default that don't apply are listed at generation."""
+    options = {"goal": "herx", "dungeon_floors": 20, "bounty_chance": 80, "compass": "start_with_it",
+               "compass_mode": "always_on", "compass_recharge": 30}
+
+    def test_note(self) -> None:
+        with self.assertLogs("Barony", level="INFO") as logs:
+            self.world.note_ignored_settings()
+        text = " ".join(logs.output)
+        self.assertIn("Dungeon Floors (Custom Dungeon Length is off)", text)
+        self.assertIn("Bounty Chance (Bounty Enemies is off)", text)
+        self.assertIn("Compass Recharge (Compass Mode is Always On)", text)
+        self.assertNotIn("Compass Mode (", text)
+
+
+class TestGainsMesmer(BaronyTestBase):
+    """Gains, Mesmer, step 20, 2 per skill: Leadership 80/100, Mysticism 80/100, Sorcery 45/65, Polearm 40/60."""
+    options = {"goal": "sanctum", "skill_checks": "mesmer", "skill_check_style": "gains", "gain_step": 20,
+               "gains_per_skill": 2}
+
+    def test_gains(self) -> None:
+        names = sorted(loc.name for loc in self.multiworld.get_locations(self.player) if loc.name.startswith("Skill Gain: "))
+        self.assertEqual(len(names), 8)
+        self.assertIn("Skill Gain: Sorcery 2", names)
+        self.assertNotIn("Skill Gain: Lore 1", names)
+        self.assertFalse(any(loc.name.startswith("Skill: ") for loc in self.multiworld.get_locations(self.player)))
+
+
+class TestGainsShortRun(BaronyTestBase):
+    """A 10-floor run fits 2 gains of 10 points (10 * 0.4 = 4 floors each)."""
+    options = {"goal": "floors_only", "dungeon_floors": 10, "skill_checks": "ninja", "skill_check_style": "gains",
+               "gain_step": 10, "gains_per_skill": 5, "gains_include_universal": True}
+
+    def test_cap(self) -> None:
+        self.assertEqual(self.world.fill_slot_data()["gains_per_skill"], 2)
+
+
+class TestFloorChallenges(BaronyTestBase):
+    options = {"floor_challenges": True, "challenge_chance": 50, "challenge_checks": 4,
+               "challenge_list": ["Speedrun", "Exterminator"]}
+
+    def test_dares(self) -> None:
+        names = {loc.name for loc in self.multiworld.get_locations(self.player)}
+        self.assertIn("Floor Challenge 4", names)
+        self.assertNotIn("Floor Challenge 5", names)
+        sd = self.world.fill_slot_data()
+        self.assertEqual((sd["challenge_checks"], sd["challenge_mask"]), (4, 1 | 32))
+
+
 class TestShortHerx(BaronyTestBase):
     """Dungeon Floors with a normal goal: 8 floors, then Baron Herx."""
     options = {"goal": "herx", "custom_dungeon_length": True, "dungeon_floors": 12, "boss_checks": True}

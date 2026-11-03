@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import logging
 from collections.abc import Mapping
 from typing import Any
@@ -117,6 +119,15 @@ class BaronyWorld(World):
             )
             self.level_check_max = cap
 
+        # Gains: as many per skill as the run's length allows.
+        self.gains_per_skill = self.options.gains_per_skill.value
+        while self.gains_per_skill > 1 and self.gain_floor(self.gains_per_skill) > self.goal_floor:
+            self.gains_per_skill -= 1
+        if self.gains_per_skill < self.options.gains_per_skill.value:
+            logger.warning(f"Barony ({self.player_name}): gains_per_skill lowered to {self.gains_per_skill} "
+                           f"to fit a {self.goal_floor}-floor run.")
+        self.note_ignored_settings()
+
         # Skill ranks: the highest one has to fit the run's length (Master needs about 16 floors of play).
         self.skill_max_rank = self.options.skill_check_max_rank.value
         fits = max(r for r, floor in data.SKILL_RANK_FLOOR.items() if floor <= self.goal_floor)
@@ -133,6 +144,102 @@ class BaronyWorld(World):
 
         # Roughly half of floors have a shop; expect at most one AP shop item per 2 floors.
         self.shop_count = min(self.options.shop_checks.value, (self.goal_floor - 1) // 2)
+
+    def gain_floor(self, k: int) -> int:
+        """The floor by which a fresh character can be expected to have its k-th Gains check."""
+        floors = k * self.options.gain_step.value * data.GAIN_FLOORS_PER_POINT
+        if self.options.lives.value == 0 and self.options.checkpoint_interval.value == 0:
+            floors *= 4 / 3  # no lives, no checkpoints: every death starts over
+        return max(1, math.ceil(floors))
+
+    def note_ignored_settings(self) -> None:
+        """Lists the settings you changed that don't do anything with the rest of your setup."""
+        o = self.options
+        ignored: list[str] = []
+
+        def check(option, reason: str) -> None:
+            default = type(option).default
+            value = option.value
+            if isinstance(value, (set, frozenset)):
+                changed = set(value) != set(default)
+            else:
+                changed = value != default
+            if changed:
+                ignored.append(f"{option.display_name} ({reason})")
+
+        goal = o.goal.value
+        if goal not in (data.GOAL_BOSS_RUSH, data.GOAL_CHOSEN_BOSSES):
+            check(o.boss_rush_bosses, "only for Chosen Bosses or Boss Rush")
+        if goal != data.GOAL_BOSS_RUSH and not (goal == data.GOAL_CHOSEN_BOSSES and self.short_dungeon):
+            check(o.boss_rush_order, "only for Boss Rush, or Chosen Bosses with Custom Dungeon Length")
+        if goal != data.GOAL_BOSS_RUSH:
+            check(o.boss_rush_rest_town, "only for Boss Rush")
+        if not self.short_dungeon:
+            check(o.dungeon_floors, "Custom Dungeon Length is off")
+        if o.enemy_sanity.value == o.enemy_sanity.option_off:
+            for opt in (o.enemy_sanity_checks, o.enemy_sanity_kills_per_check, o.enemy_sanity_per_floor):
+                check(opt, "Enemy Sanity is off")
+        elif o.enemy_sanity.value != o.enemy_sanity.option_kill_count:
+            check(o.enemy_sanity_kills_per_check, "only for Enemy Sanity: Kill Count")
+        if o.archipelago_pickups.value == 0:
+            check(o.pickups_per_floor, "Archipelago Pickups is 0")
+            check(o.random_pickups_per_floor, "Archipelago Pickups is 0")
+        if not o.floor_keys:
+            for opt in (o.floor_key_requirement, o.key_compass_time, o.compass):
+                check(opt, "Floor Keys is off")
+        if o.compass.value == o.compass.option_off or not o.floor_keys:
+            for opt in (o.compass_mode, o.compass_ping_time, o.compass_recharge):
+                check(opt, "no Compass")
+        elif o.compass_mode.value == o.compass_mode.option_always_on:
+            check(o.compass_ping_time, "Compass Mode is Always On")
+            check(o.compass_recharge, "Compass Mode is Always On")
+        if o.enemy_randomizer.value == o.enemy_randomizer.option_off:
+            for opt in (o.enemy_seed, o.enemy_pool, o.enemy_randomizer_secret_areas):
+                check(opt, "Enemy Randomizer is off")
+        if o.enemy_level_scaling.value == 0:
+            check(o.enemy_level_bonus, "Enemy Level Scaling is off")
+        if o.boss_level_scaling.value == 0:
+            check(o.boss_level_bonus, "Boss Level Scaling is off")
+        if o.music_shuffle.value == 0:
+            check(o.music_seed, "Music Shuffle is off")
+        if o.skill_checks.value == o.skill_checks.option_off:
+            for opt in (o.skill_check_style, o.skill_check_max_rank, o.gain_step, o.gains_per_skill,
+                        o.gains_include_universal, o.lock_class):
+                check(opt, "Skill Checks is off")
+        elif o.skill_check_style.value == o.skill_check_style.option_gains:
+            check(o.skill_check_max_rank, "only for Skill Check Style: Ranks")
+        else:
+            for opt in (o.gain_step, o.gains_per_skill, o.gains_include_universal):
+                check(opt, "only for Skill Check Style: Gains")
+        if not o.spell_sanity:
+            check(o.spell_upgrades, "Spell Sanity is off")
+            check(o.spell_sanity_dlc_spells, "Spell Sanity is off")
+        if not o.death_link:
+            check(o.death_link_mode, "Death Link is off")
+        if not o.death_markers:
+            check(o.death_marker_gold, "Death Markers is off")
+        if not o.progressive_lantern:
+            check(o.lantern_darkness, "Progressive Lantern is off")
+        if not o.bounty_enemies:
+            check(o.bounty_chance, "Bounty Enemies is off")
+            check(o.bounty_checks, "Bounty Enemies is off")
+        if not o.merchant_caravan:
+            for opt in (o.caravan_chance, o.caravan_checks, o.caravan_hints):
+                check(opt, "Merchant Caravan is off")
+        if o.champion_floors.value == 0:
+            check(o.champion_locks_stairs, "Champion Floors is 0")
+            check(o.champion_checks, "Champion Floors is 0")
+        if not o.floor_challenges:
+            for opt in (o.challenge_chance, o.challenge_checks, o.challenge_list):
+                check(opt, "Floor Challenges is off")
+        if not o.floor_themes:
+            check(o.floor_theme_chance, "Floor Themes is off")
+            check(o.floor_theme_list, "Floor Themes is off")
+        for extra in getattr(self, "_extra_ignored", []):
+            ignored.append(extra)
+        if ignored:
+            logger.info(f"Barony ({self.player_name}): these settings don't apply to your setup and are ignored: "
+                        + "; ".join(ignored))
 
     # ------------------------------------------------------------------ helpers
     def chosen_bosses(self) -> list:
@@ -234,9 +341,15 @@ class BaronyWorld(World):
         sc = o.skill_checks.value
         if sc != o.skill_checks.option_off:
             class_name = None if sc == o.skill_checks.option_any_class else data.CLASSES[sc - 2]
-            for skill, rank in data.skill_checks_for(class_name, self.skill_max_rank):
-                planned.append((data.skill_location(skill, rank),
-                                self._floor_needed(min(data.SKILL_RANK_FLOOR[rank], self.goal_floor))))
+            if o.skill_check_style.value == o.skill_check_style.option_gains:
+                step = o.gain_step.value
+                for skill, k, _ in data.gain_checks_for(class_name, step, self.gains_per_skill,
+                                                         bool(o.gains_include_universal)):
+                    planned.append((data.gain_location(skill, k), self._floor_needed(self.gain_floor(k))))
+            else:
+                for skill, rank in data.skill_checks_for(class_name, self.skill_max_rank):
+                    planned.append((data.skill_location(skill, rank),
+                                    self._floor_needed(min(data.SKILL_RANK_FLOOR[rank], self.goal_floor))))
 
         for k, floor in enumerate(self.champion_floors(), 1):
             planned.append((data.champion_location(k), self._floor_needed(floor)))
@@ -247,6 +360,13 @@ class BaronyWorld(World):
             chance = max(10, o.bounty_chance.value)
             for k in range(1, o.bounty_checks.value + 1):
                 planned.append((data.bounty_location(k), self._floor_needed(-(-k * 100 // chance))))
+
+        if o.floor_challenges and o.challenge_checks.value > 0:
+            # Dares come on some floors and not every one is kept (counted across runs): the k-th
+            # one expects about twice k * 100 / chance floors of play.
+            chance = max(10, o.challenge_chance.value)
+            for k in range(1, o.challenge_checks.value + 1):
+                planned.append((data.challenge_location(k), self._floor_needed(-(-k * 200 // chance))))
 
         if o.merchant_caravan and o.caravan_checks.value > 0:
             # Caravans stop on some floors (counted across runs), two Archipelago items each: the
@@ -417,12 +537,21 @@ class BaronyWorld(World):
             "skill_checks": o.skill_checks.value,
             "enemy_randomizer_secret": int(bool(o.enemy_randomizer_secret_areas)),
             "skill_check_max_rank": self.skill_max_rank,
+            "skill_check_style": o.skill_check_style.value,
+            "gain_step": o.gain_step.value,
+            "gains_per_skill": self.gains_per_skill,
+            "gains_universal": int(bool(o.gains_include_universal)),
             "lock_class": int(bool(o.lock_class)),
             "champion_floors": o.champion_floors.value,
             "champion_locks_stairs": int(bool(o.champion_locks_stairs)),
             "champion_checks": len(self.champion_floors()),
             "progressive_lantern": int(bool(o.progressive_lantern)),
             "lantern_darkness": o.lantern_darkness.value,
+            "floor_challenges": int(bool(o.floor_challenges)),
+            "challenge_chance": o.challenge_chance.value,
+            "challenge_checks": o.challenge_checks.value if o.floor_challenges else 0,
+            "challenge_mask": sum(1 << i for i, k in enumerate(o.challenge_list.valid_keys)
+                                  if k in o.challenge_list.value),
             "wanted_time_limit": o.wanted_time_limit.value,
             "wanted_clears_on_new_floor": int(bool(o.wanted_clears_on_new_floor)),
             "floor_themes": int(bool(o.floor_themes)),

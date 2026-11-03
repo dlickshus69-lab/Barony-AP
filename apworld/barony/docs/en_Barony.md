@@ -57,6 +57,13 @@ shopkeeper is hostile. In normal Barony that lasts the whole run; Wanted Time Li
 after a few minutes in the dungeon (5 by default, with a countdown on screen), and Wanted Clears on New
 Floor ends it when you reach the next floor.
 
+Floor Challenges (Challenges): some floors dare you: Speedrun, Pacifist, Untouched, No Potions,
+Barehanded or Exterminator. Keep the dare until you take the stairs for gold, and the first few are
+checks. Breaking one costs nothing.
+
+Skill Check Style (Class, Skills & Spells): Ranks gives checks at 20, 40, 60, 80 and 100; Gains gives a
+check each time one of your class's own skills goes up by Gain Step points from where the class starts.
+
 The Hall of Fame (F5 in game, and shown by itself in the starting area) keeps every run on this seed:
 runs and wins, deepest floor, fastest win, fewest lives lost in a win, most kills and gold, and your
 last five runs.
