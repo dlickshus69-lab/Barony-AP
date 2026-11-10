@@ -214,6 +214,7 @@ constexpr int NUM_SKILLS = 16;
 constexpr int NUM_SKILL_CLASSES = 26;
 static const char* const SKILL_NAMES[NUM_SKILLS] = { "Tinkering", "Stealth", "Trading", "Lore", "Thaumaturgy", "Leadership", "Mysticism", "Sorcery", "Ranged", "Sword", "Mace", "Axe", "Polearm", "Shield", "Unarmed", "Alchemy" };
 static const char* const SKILL_RANK_NAMES[6] = { "", "Basic", "Skilled", "Expert", "Master", "Legendary" };
+static const int SECRET_EXIT_FLOORS[] = { 2, 3, 5, 7, 8, 11, 13, 16, 18, 23, 28, 33 };
 static const int SKILL_RANK_VALUES[6] = { 0, 20, 40, 60, 80, 100 };
 static const bool SKILL_UNIVERSAL[NUM_SKILLS] = { false, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false };
 static const char* const CLASS_NAMES[NUM_SKILL_CLASSES] = { "Barbarian", "Warrior", "Healer", "Rogue", "Wanderer", "Cleric", "Merchant", "Wizard", "Arcanist", "Joker", "Sexton", "Ninja", "Monk", "Conjurer", "Accursed", "Mesmer", "Brewer", "Machinist", "Punisher", "Shaman", "Hunter", "Bard", "Sapper", "Scion", "Hermit", "Paladin" };

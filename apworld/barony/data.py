@@ -355,6 +355,9 @@ def caravan_location(k: int) -> str:
     return f"Caravan Purchase {k}"
 
 
+# Floors with a secret area's entrance (one floor above the area): a spread boss arena never goes here.
+SECRET_EXIT_FLOORS = {2, 3, 5, 7, 8, 11, 13, 16, 18, 23, 28, 33}
+
 # Boss, town and Sanctum floors: no Champion there.
 NO_CHAMPION_FLOORS = {20, 24, 25, 35}
 

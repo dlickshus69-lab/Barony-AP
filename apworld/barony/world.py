@@ -123,7 +123,8 @@ class BaronyWorld(World):
         self.gains_per_skill = self.options.gains_per_skill.value
         while self.gains_per_skill > 1 and self.gain_floor(self.gains_per_skill) > self.goal_floor:
             self.gains_per_skill -= 1
-        if self.gains_per_skill < self.options.gains_per_skill.value:
+        if self.gains_per_skill < self.options.gains_per_skill.value and self.options.skill_checks.value != 0 \
+                and self.options.skill_check_style.value == self.options.skill_check_style.option_gains:
             logger.warning(f"Barony ({self.player_name}): gains_per_skill lowered to {self.gains_per_skill} "
                            f"to fit a {self.goal_floor}-floor run.")
         self.note_ignored_settings()
@@ -133,7 +134,8 @@ class BaronyWorld(World):
         fits = max(r for r, floor in data.SKILL_RANK_FLOOR.items() if floor <= self.goal_floor)
         if self.options.lives.value == 0 and self.options.checkpoint_interval.value == 0:
             fits = max(1, fits - 1)  # no lives and no checkpoints: one step lower
-        if self.skill_max_rank > fits:
+        if self.skill_max_rank > fits and self.options.skill_checks.value != 0 \
+                and self.options.skill_check_style.value == self.options.skill_check_style.option_ranks:
             logger.warning(f"Barony ({self.player_name}): skill_check_max_rank lowered to fit a "
                            f"{self.goal_floor}-floor run.")
             self.skill_max_rank = fits
@@ -144,6 +146,23 @@ class BaronyWorld(World):
 
         # Roughly half of floors have a shop; expect at most one AP shop item per 2 floors.
         self.shop_count = min(self.options.shop_checks.value, (self.goal_floor - 1) // 2)
+
+    def enemy_seed_value(self) -> int:
+        """Bestiary checks with the Enemy Randomizer need every kind of monster to be able to show up,
+        so the enemies are rolled again each run (a locked swap table can leave a kind out for good)."""
+        o = self.options
+        if (o.bestiary_checks.value != o.bestiary_checks.option_off
+                and o.enemy_randomizer.value != o.enemy_randomizer.option_off):
+            return o.enemy_seed.option_reroll
+        return o.enemy_seed.value
+
+    def dares_possible(self) -> bool:
+        """Some dare in Challenge List can show up (Pacifist never does where the stairs need every enemy dead)."""
+        o = self.options
+        picked = set(o.challenge_list.value) or set(o.challenge_list.valid_keys)
+        if picked - {"Pacifist"}:
+            return True
+        return not (o.floor_keys and o.floor_key_requirement.value == o.floor_key_requirement.option_enemies_only)
 
     def gain_floor(self, k: int) -> int:
         """The floor by which a fresh character can be expected to have its k-th Gains check."""
@@ -253,7 +272,14 @@ class BaronyWorld(World):
         if self.options.goal.value != data.GOAL_CHOSEN_BOSSES or not self.short_dungeon:
             return []
         n, k = self.goal_floor, len(self.chosen_bosses())
-        return [n * i // k + i for i in range(1, k + 1)]
+        levels, shift = [], 0
+        for i in range(1, k + 1):
+            level = n * i // k + i + shift
+            while i < k and level in data.SECRET_EXIT_FLOORS:
+                level += 1  # never on a floor with a secret area's entrance (the client does the same)
+                shift += 1
+            levels.append(level)
+        return levels
 
     def champion_floors(self) -> list:
         """The floors the Champion checks come from: every Champion Floors floors before the goal,
@@ -299,8 +325,11 @@ class BaronyWorld(World):
             planned.append((data.level_location(level), self._floor_needed(level)))
 
         if o.enemy_sanity.value == o.enemy_sanity.option_kill_count:
+            # Only Per Floor enemies are green on each floor: check k needs k * Kills Per Check of them.
+            per_floor = max(1, o.enemy_sanity_per_floor.value)
+            kpc = o.enemy_sanity_kills_per_check.value
             for k in range(1, o.enemy_sanity_checks.value + 1):
-                planned.append((data.kill_location(k), 1))
+                planned.append((data.kill_location(k), self._floor_needed(-(-k * kpc // per_floor))))
         elif o.enemy_sanity.value == o.enemy_sanity.option_marked_enemies:
             per_floor = o.enemy_sanity_per_floor.value
             for k in range(1, o.enemy_sanity_checks.value + 1):
@@ -361,7 +390,10 @@ class BaronyWorld(World):
             for k in range(1, o.bounty_checks.value + 1):
                 planned.append((data.bounty_location(k), self._floor_needed(-(-k * 100 // chance))))
 
-        if o.floor_challenges and o.challenge_checks.value > 0:
+        if o.floor_challenges and o.challenge_checks.value > 0 and not self.dares_possible():
+            logger.warning(f"Barony ({self.player_name}): no Floor Challenge can show up with these settings "
+                           f"(Pacifist only, but the stairs need every enemy dead); no challenge checks.")
+        elif o.floor_challenges and o.challenge_checks.value > 0:
             # Dares come on some floors and not every one is kept (counted across runs): the k-th
             # one expects about twice k * 100 / chance floors of play.
             chance = max(10, o.challenge_chance.value)
@@ -549,7 +581,7 @@ class BaronyWorld(World):
             "lantern_darkness": o.lantern_darkness.value,
             "floor_challenges": int(bool(o.floor_challenges)),
             "challenge_chance": o.challenge_chance.value,
-            "challenge_checks": o.challenge_checks.value if o.floor_challenges else 0,
+            "challenge_checks": o.challenge_checks.value if o.floor_challenges and self.dares_possible() else 0,
             "challenge_mask": sum(1 << i for i, k in enumerate(o.challenge_list.valid_keys)
                                   if k in o.challenge_list.value),
             "wanted_time_limit": o.wanted_time_limit.value,
@@ -593,7 +625,7 @@ class BaronyWorld(World):
             "blindness_trap_duration": o.blindness_trap_duration.value,
             "enemy_randomizer": o.enemy_randomizer.value,
             "enemy_pool": o.enemy_pool.value,
-            "enemy_seed": o.enemy_seed.value,
+            "enemy_seed": self.enemy_seed_value(),
             "music_shuffle": o.music_shuffle.value,
             "music_seed": o.music_seed.value,
             "checkpoint_interval": o.checkpoint_interval.value,

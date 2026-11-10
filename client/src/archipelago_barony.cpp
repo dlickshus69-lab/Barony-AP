@@ -3192,7 +3192,8 @@ namespace
 		{
 			if ( !(mask & (1 << (d - 1))) ) { continue; }
 			// Pacifist can't work where the stairs need every enemy dead, or a Champion guards them.
-			if ( d == DARE_PACIFIST && (g_slot.floor_key_requirement == 2 || (g_slot.champion_locks_stairs && g_championUid)) ) { continue; }
+			if ( d == DARE_PACIFIST && ((g_slot.floor_keys && g_slot.floor_key_requirement == 2)
+				|| (g_slot.champion_locks_stairs && g_championUid)) ) { continue; }
 			pool.push_back(d);
 		}
 		if ( pool.empty() ) { return; }
@@ -3968,8 +3969,21 @@ namespace
 	// The floor number of the i-th boss (1-based): Dungeon Floors split evenly, plus the arenas before it.
 	int spreadBossLevel(int i)
 	{
+		// Same as the apworld's spread_boss_levels: never on a floor with a secret area's entrance
+		// (except the last arena), shifting the later ones along.
 		int n = std::max(1, g_slot.dungeon_floors), k = std::max(1, spreadBossCount());
-		return n * i / k + i;
+		int shift = 0, level = 0;
+		for ( int j = 1; j <= i; ++j )
+		{
+			level = n * j / k + j + shift;
+			while ( j < k && std::find(std::begin(ap_ids::SECRET_EXIT_FLOORS), std::end(ap_ids::SECRET_EXIT_FLOORS), level)
+				!= std::end(ap_ids::SECRET_EXIT_FLOORS) )
+			{
+				++level;
+				++shift;
+			}
+		}
+		return level;
 	}
 
 	int bossBit(const std::string& map)
@@ -4046,9 +4060,19 @@ namespace
 			currentlevel = g_lastFloorLevel + 1; // a boss's portal skips ahead; here the floors just go on
 			return;
 		}
+		if ( g_ready && g_slot.goal == 2 && !bossRushOn() && multiplayer != CLIENT && fromHerx && currentlevel > 21
+			&& g_slot.boss_checks && !isChecked(ap_ids::BASE_ID + ap_ids::BOSS_OFFSET + 3) )
+		{
+			// Sanctum goal: the Devil's boss check is still to get, so Herx's portal leads through Hell.
+			currentlevel = 21;
+			g_routeNote = "Through Herx's portal and down into Hell, for the Devil. The Sanctum is beyond.";
+			return;
+		}
 		if ( !allBossesRoute() ) { return; }
 		int m = bossRushGoalMask(), killed = g_save.goalBossesKilled;
-		bool wantDevil = (m & 2) && !(killed & 2), wantHerxFirst = (m & 1) && !(killed & 1);
+		// Into Hell after Herx when the Devil is a goal boss, or when his boss check is still to get.
+		bool devilCheck = g_slot.boss_checks && !isChecked(ap_ids::BASE_ID + ap_ids::BOSS_OFFSET + 3);
+		bool wantDevil = ((m & 2) && !(killed & 2)) || devilCheck, wantHerxFirst = (m & 1) && !(killed & 1);
 		if ( fromHerx && currentlevel > 21 && wantDevil )
 		{
 			currentlevel = 21;
@@ -4472,6 +4496,15 @@ void tick()
 	updateChampion();
 	updateTheme();
 	updateWanted();
+	{
+		static bool warnedOnline = false;
+		if ( !warnedOnline && g_ready && multiplayer == SERVER && (g_slot.goal == 3 || g_slot.goal == 5 || g_slot.dungeon_floors > 0) )
+		{
+			warnedOnline = true;
+			say(COLOR_TRAP, "This seed uses Custom Dungeon Length / Boss Rush / Floors Only, which only work in single "
+				"player or split-screen co-op, not online. Play it split-screen.");
+		}
+	}
 	updateDare();
 	updateGrace();
 	updateGraves();

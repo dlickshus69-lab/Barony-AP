@@ -418,6 +418,40 @@ class TestFloorChallenges(BaronyTestBase):
         self.assertEqual((sd["challenge_checks"], sd["challenge_mask"]), (4, 1 | 32))
 
 
+class TestSpreadAvoidsSecretExits(BaronyTestBase):
+    """10 floors, 3 bosses: 4, 8 -> 9 (floor 8 has the Temple's entrance), then 14."""
+    options = {"goal": "chosen_bosses", "custom_dungeon_length": True, "dungeon_floors": 10}
+
+    def test_levels(self) -> None:
+        self.assertEqual(self.world.spread_boss_levels(), [4, 9, 14])
+
+
+class TestPacifistOnlyWithEnemyStairs(BaronyTestBase):
+    options = {"floor_challenges": True, "challenge_checks": 5, "challenge_list": ["Pacifist"],
+               "floor_keys": True, "floor_key_requirement": "enemies_only"}
+
+    def test_none(self) -> None:
+        names = {loc.name for loc in self.multiworld.get_locations(self.player)}
+        self.assertNotIn("Floor Challenge 1", names)
+        self.assertEqual(self.world.fill_slot_data()["challenge_checks"], 0)
+
+
+class TestBestiaryRerollsEnemies(BaronyTestBase):
+    options = {"bestiary_checks": "all", "enemy_randomizer": "per_floor", "enemy_seed": "locked"}
+
+    def test_reroll(self) -> None:
+        self.assertEqual(self.world.fill_slot_data()["enemy_seed"], 1)
+
+
+class TestKillCountPace(BaronyTestBase):
+    options = {"enemy_sanity": "kill_count", "enemy_sanity_checks": 10, "enemy_sanity_kills_per_check": 3,
+               "enemy_sanity_per_floor": 2}
+
+    def test_pace(self) -> None:
+        floors = dict(self.world._planned_locations())
+        self.assertEqual(floors["Enemy Sanity 10"], self.world._floor_needed(15))
+
+
 class TestShortHerx(BaronyTestBase):
     """Dungeon Floors with a normal goal: 8 floors, then Baron Herx."""
     options = {"goal": "herx", "custom_dungeon_length": True, "dungeon_floors": 12, "boss_checks": True}

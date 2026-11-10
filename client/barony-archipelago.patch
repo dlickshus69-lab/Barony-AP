@@ -1,4 +1,4 @@
-From 1bff6b5a6c683fcc3d3ec1956b2061dc20a0aed2 Mon Sep 17 00:00:00 2001
+From 3aac3ec5a511437d765661c9cf3d8d7a90962a7d Mon Sep 17 00:00:00 2001
 From: Barony AP <noreply@example.com>
 Date: Mon, 26 Oct 2026 14:13:24 -0700
 Subject: [PATCH] Archipelago client hooks
@@ -12,9 +12,9 @@ Subject: [PATCH] Archipelago client hooks
  src/actladder.cpp                 |   25 +
  src/actmonster.cpp                |    3 +
  src/actplayer.cpp                 |   10 +-
- src/archipelago_barony.cpp        | 5998 +++++++++++++++++++++++++++++
+ src/archipelago_barony.cpp        | 6031 +++++++++++++++++++++++++++++
  src/archipelago_barony.hpp        |  129 +
- src/archipelago_ids.hpp           |  279 ++
+ src/archipelago_ids.hpp           |  280 ++
  src/charclass.cpp                 |    4 +
  src/engine/audio/music.cpp        |    4 +
  src/engine/audio/sound_game.cpp   |    2 +
@@ -31,7 +31,7 @@ Subject: [PATCH] Archipelago client hooks
  src/monster_minotaur.cpp          |    3 +-
  src/opengl.cpp                    |   20 +
  src/ui/MainMenu.cpp               |    5 +-
- 27 files changed, 8383 insertions(+), 4 deletions(-)
+ 27 files changed, 8417 insertions(+), 4 deletions(-)
  create mode 100644 src/BaronyAPTracker.cpp
  create mode 100644 src/archipelago_barony.cpp
  create mode 100644 src/archipelago_barony.hpp
@@ -1971,10 +1971,10 @@ index 0872ea6..aee34f8 100644
  						if ( stats[PLAYER_NUM]->type == MYCONID )
 diff --git a/src/archipelago_barony.cpp b/src/archipelago_barony.cpp
 new file mode 100644
-index 0000000..44f3d79
+index 0000000..b8fc949
 --- /dev/null
 +++ b/src/archipelago_barony.cpp
-@@ -0,0 +1,5998 @@
+@@ -0,0 +1,6031 @@
 +/*-------------------------------------------------------------------------------
 +
 +	Barony Archipelago client. See archipelago_barony.hpp for the hooks and
@@ -5169,7 +5169,8 @@ index 0000000..44f3d79
 +		{
 +			if ( !(mask & (1 << (d - 1))) ) { continue; }
 +			// Pacifist can't work where the stairs need every enemy dead, or a Champion guards them.
-+			if ( d == DARE_PACIFIST && (g_slot.floor_key_requirement == 2 || (g_slot.champion_locks_stairs && g_championUid)) ) { continue; }
++			if ( d == DARE_PACIFIST && ((g_slot.floor_keys && g_slot.floor_key_requirement == 2)
++				|| (g_slot.champion_locks_stairs && g_championUid)) ) { continue; }
 +			pool.push_back(d);
 +		}
 +		if ( pool.empty() ) { return; }
@@ -5945,8 +5946,21 @@ index 0000000..44f3d79
 +	// The floor number of the i-th boss (1-based): Dungeon Floors split evenly, plus the arenas before it.
 +	int spreadBossLevel(int i)
 +	{
++		// Same as the apworld's spread_boss_levels: never on a floor with a secret area's entrance
++		// (except the last arena), shifting the later ones along.
 +		int n = std::max(1, g_slot.dungeon_floors), k = std::max(1, spreadBossCount());
-+		return n * i / k + i;
++		int shift = 0, level = 0;
++		for ( int j = 1; j <= i; ++j )
++		{
++			level = n * j / k + j + shift;
++			while ( j < k && std::find(std::begin(ap_ids::SECRET_EXIT_FLOORS), std::end(ap_ids::SECRET_EXIT_FLOORS), level)
++				!= std::end(ap_ids::SECRET_EXIT_FLOORS) )
++			{
++				++level;
++				++shift;
++			}
++		}
++		return level;
 +	}
 +
 +	int bossBit(const std::string& map)
@@ -6023,9 +6037,19 @@ index 0000000..44f3d79
 +			currentlevel = g_lastFloorLevel + 1; // a boss's portal skips ahead; here the floors just go on
 +			return;
 +		}
++		if ( g_ready && g_slot.goal == 2 && !bossRushOn() && multiplayer != CLIENT && fromHerx && currentlevel > 21
++			&& g_slot.boss_checks && !isChecked(ap_ids::BASE_ID + ap_ids::BOSS_OFFSET + 3) )
++		{
++			// Sanctum goal: the Devil's boss check is still to get, so Herx's portal leads through Hell.
++			currentlevel = 21;
++			g_routeNote = "Through Herx's portal and down into Hell, for the Devil. The Sanctum is beyond.";
++			return;
++		}
 +		if ( !allBossesRoute() ) { return; }
 +		int m = bossRushGoalMask(), killed = g_save.goalBossesKilled;
-+		bool wantDevil = (m & 2) && !(killed & 2), wantHerxFirst = (m & 1) && !(killed & 1);
++		// Into Hell after Herx when the Devil is a goal boss, or when his boss check is still to get.
++		bool devilCheck = g_slot.boss_checks && !isChecked(ap_ids::BASE_ID + ap_ids::BOSS_OFFSET + 3);
++		bool wantDevil = ((m & 2) && !(killed & 2)) || devilCheck, wantHerxFirst = (m & 1) && !(killed & 1);
 +		if ( fromHerx && currentlevel > 21 && wantDevil )
 +		{
 +			currentlevel = 21;
@@ -6449,6 +6473,15 @@ index 0000000..44f3d79
 +	updateChampion();
 +	updateTheme();
 +	updateWanted();
++	{
++		static bool warnedOnline = false;
++		if ( !warnedOnline && g_ready && multiplayer == SERVER && (g_slot.goal == 3 || g_slot.goal == 5 || g_slot.dungeon_floors > 0) )
++		{
++			warnedOnline = true;
++			say(COLOR_TRAP, "This seed uses Custom Dungeon Length / Boss Rush / Floors Only, which only work in single "
++				"player or split-screen co-op, not online. Play it split-screen.");
++		}
++	}
 +	updateDare();
 +	updateGrace();
 +	updateGraves();
@@ -8110,10 +8143,10 @@ index 0000000..fd52f0b
 +}
 diff --git a/src/archipelago_ids.hpp b/src/archipelago_ids.hpp
 new file mode 100644
-index 0000000..9f2d8f1
+index 0000000..6f4f97d
 --- /dev/null
 +++ b/src/archipelago_ids.hpp
-@@ -0,0 +1,279 @@
+@@ -0,0 +1,280 @@
 +// GENERATED by tools/gen_cpp_ids.py from apworld/barony/data.py. Do not edit by hand.
 +#pragma once
 +#include <cstdint>
@@ -8330,6 +8363,7 @@ index 0000000..9f2d8f1
 +constexpr int NUM_SKILL_CLASSES = 26;
 +static const char* const SKILL_NAMES[NUM_SKILLS] = { "Tinkering", "Stealth", "Trading", "Lore", "Thaumaturgy", "Leadership", "Mysticism", "Sorcery", "Ranged", "Sword", "Mace", "Axe", "Polearm", "Shield", "Unarmed", "Alchemy" };
 +static const char* const SKILL_RANK_NAMES[6] = { "", "Basic", "Skilled", "Expert", "Master", "Legendary" };
++static const int SECRET_EXIT_FLOORS[] = { 2, 3, 5, 7, 8, 11, 13, 16, 18, 23, 28, 33 };
 +static const int SKILL_RANK_VALUES[6] = { 0, 20, 40, 60, 80, 100 };
 +static const bool SKILL_UNIVERSAL[NUM_SKILLS] = { false, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false };
 +static const char* const CLASS_NAMES[NUM_SKILL_CLASSES] = { "Barbarian", "Warrior", "Healer", "Rogue", "Wanderer", "Cleric", "Merchant", "Wizard", "Arcanist", "Joker", "Sexton", "Ninja", "Monk", "Conjurer", "Accursed", "Mesmer", "Brewer", "Machinist", "Punisher", "Shaman", "Hunter", "Bard", "Sapper", "Scion", "Hermit", "Paladin" };
